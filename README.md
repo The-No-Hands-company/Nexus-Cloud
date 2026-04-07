@@ -15,6 +15,7 @@ This repository is the starting point for building a cloud layer that can be run
 - `src/storage/` holds storage classes and volume models
 - `src/observability/` holds metrics, logs, traces, and audit boundaries
 - `src/api/` defines the initial API surface
+- `src/systems-api/` defines the shared platform contract for tools and services
 - `docs/architecture.md` describes the first implementation cut
 
 ## Next steps
@@ -23,3 +24,4 @@ This repository is the starting point for building a cloud layer that can be run
 - Add a scheduler stub
 - Define workload and deployment models
 - Add a runnable API server skeleton
+- Expand the Systems API into tool discovery, status, auth, and exposure contracts

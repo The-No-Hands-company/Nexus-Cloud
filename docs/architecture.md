@@ -26,6 +26,10 @@ Provides object, block, and snapshot storage with replication and retention poli
 
 Tracks metrics, logs, traces, and audit trails for operators.
 
+### Systems API
+
+Provides the canonical contract for tools, services, shared status, exposure, and platform-level integration.
+
 ## Initial API surface
 
 - `GET /health`

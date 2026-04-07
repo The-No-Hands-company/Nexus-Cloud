@@ -6,6 +6,7 @@ import { federation } from "./federation";
 import { observability } from "./observability";
 import { server, port } from "./server";
 import { storage } from "./storage";
+import { systemsApiService } from "./systems-api";
 
 console.log(`${architecture.project} listening on ${port}`);
 console.log(architecture.mission);
@@ -22,6 +23,7 @@ for (const route of apiRoutes) {
 console.log("Surface modules:");
 console.log(Object.keys(apiSurface).join(", "));
 console.log("State snapshot:", JSON.stringify(controlPlaneService.snapshot()));
+console.log("Systems API:", systemsApiService.describeSystemsApi());
 console.log("Modules:", {
   controlPlane: controlPlane.services,
   dataPlane: dataPlane.runtimes,

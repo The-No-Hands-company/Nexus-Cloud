@@ -30,7 +30,23 @@ Make the HTTP entrypoint thin:
 - endpoint behavior is unchanged after the refactor
 - API and domain logic are independently testable
 
-## Phase 3: Federation trust
+## Phase 3: Systems API foundation
+Introduce a canonical platform contract that tools and services can share:
+
+- tool discovery
+- normalized status
+- session and identity introspection
+- public URL exposure
+- capability catalog
+- alerts and events
+- webhook delivery
+
+### Exit criteria
+- `src/systems-api/` exists as a real module boundary
+- the roadmap names the Systems API as a first-class platform layer
+- the contract is ready for future SDK extraction
+
+## Phase 4: Federation trust
 Add first-class peer trust handling:
 
 - peer records
@@ -38,7 +54,7 @@ Add first-class peer trust handling:
 - trust renewal and expiry
 - future routing hooks
 
-## Phase 4: Observability and state
+## Phase 5: Observability and state
 Expand the operator surface:
 
 - health checks
@@ -46,7 +62,7 @@ Expand the operator surface:
 - placement visibility
 - workload and peer snapshots
 
-## Phase 5: Storage and runtime expansion
+## Phase 6: Storage and runtime expansion
 Add the rest of the substrate:
 
 - storage classes and attachments

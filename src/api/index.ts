@@ -5,13 +5,10 @@ import { federationService } from "../federation";
 import { observabilityService } from "../observability";
 import { storage } from "../storage";
 
-export type ApiRoute = {
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  path: string;
-  description: string;
-};
+export type { ApiRoute } from "./dto";
+export * from "./dto";
 
-export const apiRoutes: ApiRoute[] = [
+export const apiRoutes = [
   { method: "GET", path: "/health", description: "Basic service health" },
   { method: "GET", path: "/v1/architecture", description: "Project architecture summary" },
   { method: "GET", path: "/v1/state", description: "Read current scaffold state" },
@@ -19,7 +16,7 @@ export const apiRoutes: ApiRoute[] = [
   { method: "POST", path: "/v1/workloads/plan", description: "Produce a placement plan for a workload" },
   { method: "GET", path: "/v1/federation/peers", description: "List known federation peers" },
   { method: "POST", path: "/v1/federation/peers/:domain/trust", description: "Upsert a trust record for a peer" },
-];
+] as const;
 
 export const apiSurface = {
   architecture,
