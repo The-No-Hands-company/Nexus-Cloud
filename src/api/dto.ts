@@ -9,6 +9,8 @@ import type { ObservabilityEvent } from "../observability";
 import type { ObservabilitySummary } from "../observability/service";
 import type { StorageVolume } from "../storage";
 import type {
+  SystemsApiAddress,
+  SystemsApiAddressKind,
   SystemsApiCapability,
   SystemsApiDomainBinding,
   SystemsApiDomainVerificationChallenge,
@@ -16,6 +18,7 @@ import type {
   SystemsApiExposureRecord,
   SystemsApiMode,
   SystemsApiPublicUrl,
+  SystemsApiRegistryMetadata,
   SystemsApiStatus,
   SystemsApiSummary,
   SystemsApiTool,
@@ -23,11 +26,8 @@ import type {
   SystemsApiToolHistoryEntry,
 } from "../systems-api";
 import type {
-  SystemsApiDomainResponseDTO as CanonicalSystemsApiDomainResponseDTO,
-  SystemsApiDomainsResponseDTO as CanonicalSystemsApiDomainsResponseDTO,
   SystemsApiExposureResourceDTO,
   SystemsApiExposureStatusResponseDTO as CanonicalSystemsApiExposureStatusResponseDTO,
-  SystemsApiExposureTargetDTO,
 } from "./exposure-dto";
 
 export type ApiRoute = {
@@ -129,8 +129,28 @@ export type SystemsApiToolHistoryResponseDTO = {
   history: readonly SystemsApiToolHistoryEntry[];
 };
 
+export type SystemsApiAddressesResponseDTO = {
+  addresses: readonly SystemsApiAddress[];
+};
+
+export type SystemsApiAddressResponseDTO = {
+  address: SystemsApiAddress;
+};
+
+export type SystemsApiAddressRequestDTO = {
+  toolId: string;
+  kind: SystemsApiAddressKind;
+  subject?: string;
+  desiredHost?: string;
+};
+
+export type SystemsApiAddressRevokeRequestDTO = {
+  toolId: string;
+  kind?: SystemsApiAddressKind;
+};
+
 export type SystemsApiExposuresResponseDTO = {
-  exposures: readonly SystemsApiExposureResourceDTO[];
+  exposures: readonly SystemsApiExposureRecord[];
 };
 
 export type SystemsApiExposureResponseDTO = {
@@ -266,6 +286,20 @@ export function isSystemsApiPublicUrlRequest(value: unknown): value is SystemsAp
     && isString(value.toolId)
     && (value.desiredHost === undefined || isString(value.desiredHost))
     && (value.refresh === undefined || typeof value.refresh === "boolean");
+}
+
+export function isSystemsApiAddressRequest(value: unknown): value is SystemsApiAddressRequestDTO {
+  return isRecord(value)
+    && isString(value.toolId)
+    && (value.kind === "website" || value.kind === "email" || value.kind === "server" || value.kind === "custom")
+    && (value.subject === undefined || isString(value.subject))
+    && (value.desiredHost === undefined || isString(value.desiredHost));
+}
+
+export function isSystemsApiAddressRevokeRequest(value: unknown): value is SystemsApiAddressRevokeRequestDTO {
+  return isRecord(value)
+    && isString(value.toolId)
+    && (value.kind === undefined || value.kind === "website" || value.kind === "email" || value.kind === "server" || value.kind === "custom");
 }
 
 export function isSystemsApiExposureRequest(value: unknown): value is SystemsApiExposureRequestDTO {

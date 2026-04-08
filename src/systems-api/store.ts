@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { SystemsApiDomainBinding, SystemsApiDomainBindingStatus, SystemsApiExposureRecord, SystemsApiExposureStatus, SystemsApiMode, SystemsApiPublicUrl, SystemsApiPublicUrlStatus, SystemsApiTool, SystemsApiToolExposure, SystemsApiToolHealth, SystemsApiToolHistoryEntry } from "./types";
+import type { SystemsApiAddress, SystemsApiAddressKind, SystemsApiAddressStatus, SystemsApiDomainBinding, SystemsApiDomainBindingStatus, SystemsApiExposureRecord, SystemsApiExposureStatus, SystemsApiMode, SystemsApiPublicUrl, SystemsApiPublicUrlStatus, SystemsApiTool, SystemsApiToolExposure, SystemsApiToolHealth, SystemsApiToolHistoryEntry } from "./types";
 
 export type SystemsApiRegistryData = {
   tools: SystemsApiTool[];
   publicUrls: SystemsApiPublicUrl[];
+  addresses: SystemsApiAddress[];
   history: SystemsApiToolHistoryEntry[];
   exposures: SystemsApiExposureRecord[];
   domains: SystemsApiDomainBinding[];
@@ -23,6 +24,7 @@ const REGISTRY_PATH = join(process.cwd(), "data", "systems-api-registry.json");
 const EMPTY_REGISTRY: SystemsApiRegistryData = {
   tools: [],
   publicUrls: [],
+  addresses: [],
   history: [],
   exposures: [],
   domains: [],
@@ -52,8 +54,8 @@ function sanitizeExposureStatus(value: unknown): SystemsApiExposureStatus | unde
   return value === "requested" || value === "active" || value === "suspended" || value === "revoked" ? value : undefined;
 }
 
-function sanitizeDomainStatus(value: unknown): SystemsApiDomainBindingStatus | undefined {
-  return value === "pending" || value === "verified" || value === "revoked" || value === "expired" ? value : undefined;
+function sanitizeAddressStatus(value: unknown): SystemsApiAddressStatus | undefined {
+  return value === "requested" || value === "active" || value === "revoked" ? value : undefined;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -97,10 +99,37 @@ function sanitizePublicUrl(value: unknown): SystemsApiPublicUrl | null {
   return { toolId, url, status: sanitizePublicUrlStatus(value.status) ?? "active", issuedAt, expiresAt };
 }
 
+function sanitizeAddress(value: unknown): SystemsApiAddress | null {
+  if (!isObject(value)) return null;
+  const id = typeof value.id === "string" ? value.id : "";
+  const toolId = typeof value.toolId === "string" ? value.toolId : "";
+  const kind = value.kind === "website" || value.kind === "email" || value.kind === "server" || value.kind === "custom" ? value.kind : null;
+  const subject = typeof value.subject === "string" ? value.subject : "";
+  const canonicalTarget = typeof value.canonicalTarget === "string" ? value.canonicalTarget : "";
+  const publicAddress = typeof value.publicAddress === "string" ? value.publicAddress : "";
+  const requestedAt = typeof value.requestedAt === "string" ? value.requestedAt : new Date().toISOString();
+  const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : requestedAt;
+  if (!id || !toolId || !kind || !subject || !canonicalTarget || !publicAddress) return null;
+  return {
+    id,
+    toolId,
+    kind,
+    subject,
+    canonicalTarget,
+    publicAddress,
+    desiredHost: typeof value.desiredHost === "string" ? value.desiredHost : undefined,
+    status: sanitizeAddressStatus(value.status) ?? "requested",
+    requestedAt,
+    activatedAt: typeof value.activatedAt === "string" ? value.activatedAt : undefined,
+    revokedAt: typeof value.revokedAt === "string" ? value.revokedAt : undefined,
+    updatedAt,
+  };
+}
+
 function sanitizeHistoryEntry(value: unknown): SystemsApiToolHistoryEntry | null {
   if (!isObject(value)) return null;
   const toolId = typeof value.toolId === "string" ? value.toolId : "";
-  const action = value.action === "registered" || value.action === "updated" || value.action === "enabled" || value.action === "disabled" || value.action === "public-url-issued" || value.action === "domain-bound" || value.action === "domain-verified" || value.action === "domain-revoked" ? value.action : "updated";
+  const action = value.action === "registered" || value.action === "updated" || value.action === "enabled" || value.action === "disabled" || value.action === "public-url-issued" || value.action === "address-issued" || value.action === "domain-bound" || value.action === "domain-verified" || value.action === "domain-revoked" || value.action === "exposure-requested" || value.action === "exposure-activated" || value.action === "exposure-revoked" ? value.action : "updated";
   const summary = typeof value.summary === "string" ? value.summary : "";
   const at = typeof value.at === "string" ? value.at : new Date().toISOString();
   if (!toolId || !summary) return null;
@@ -150,7 +179,7 @@ function sanitizeDomainBinding(value: unknown): SystemsApiDomainBinding | null {
     verificationToken,
     verificationIssuedAt,
     verificationExpiresAt,
-    status: sanitizeDomainStatus(value.status) ?? "pending",
+    status: value.status === "pending" || value.status === "verified" || value.status === "revoked" || value.status === "expired" ? value.status : "pending",
     requestedAt,
     verifiedAt: typeof value.verifiedAt === "string" ? value.verifiedAt : undefined,
     revokedAt: typeof value.revokedAt === "string" ? value.revokedAt : undefined,
@@ -162,10 +191,11 @@ function sanitizeRegistry(value: unknown): SystemsApiRegistryData {
   if (!isObject(value)) return EMPTY_REGISTRY;
   const tools = Array.isArray(value.tools) ? value.tools.map(sanitizeTool).filter((item): item is SystemsApiTool => item !== null) : [];
   const publicUrls = Array.isArray(value.publicUrls) ? value.publicUrls.map(sanitizePublicUrl).filter((item): item is SystemsApiPublicUrl => item !== null) : [];
+  const addresses = Array.isArray(value.addresses) ? value.addresses.map(sanitizeAddress).filter((item): item is SystemsApiAddress => item !== null) : [];
   const history = Array.isArray(value.history) ? value.history.map(sanitizeHistoryEntry).filter((item): item is SystemsApiToolHistoryEntry => item !== null) : [];
   const exposures = Array.isArray(value.exposures) ? value.exposures.map(sanitizeExposureRecord).filter((item): item is SystemsApiExposureRecord => item !== null) : [];
   const domains = Array.isArray(value.domains) ? value.domains.map(sanitizeDomainBinding).filter((item): item is SystemsApiDomainBinding => item !== null) : [];
-  return { tools, publicUrls, history, exposures, domains };
+  return { tools, publicUrls, addresses, history, exposures, domains };
 }
 
 export function loadSystemsApiRegistry(): SystemsApiRegistryData {

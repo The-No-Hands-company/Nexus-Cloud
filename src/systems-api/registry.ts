@@ -1,7 +1,25 @@
+import { buildPublicAddress, createAddressRecord, revokeAddressRecord } from "./address";
 import { buildPublicUrl, createExposureRecord, revokeExposureRecord, transitionExposureRecord } from "./exposure";
 import { createDomainBinding, issueDomainVerificationChallenge as buildDomainVerificationChallenge, revokeDomainBinding as revokeDomainRecord, verifyDomainBinding as verifyDomainRecord } from "./domains";
 import { getSystemsApiRegistryMetadata, loadSystemsApiRegistry, saveSystemsApiRegistry, type SystemsApiRegistryData } from "./store";
-import type { SystemsApiDomainBinding, SystemsApiDomainVerificationChallenge, SystemsApiExposureRecord, SystemsApiExposureStatus, SystemsApiMode, SystemsApiPublicUrl, SystemsApiPublicUrlStatus, SystemsApiStatus, SystemsApiTool, SystemsApiToolExposure, SystemsApiToolHealth, SystemsApiToolHistoryAction, SystemsApiToolHistoryEntry } from "./types";
+import type {
+  SystemsApiAddress,
+  SystemsApiAddressKind,
+  SystemsApiAddressStatus,
+  SystemsApiDomainBinding,
+  SystemsApiDomainVerificationChallenge,
+  SystemsApiExposureRecord,
+  SystemsApiExposureStatus,
+  SystemsApiMode,
+  SystemsApiPublicUrl,
+  SystemsApiPublicUrlStatus,
+  SystemsApiStatus,
+  SystemsApiTool,
+  SystemsApiToolExposure,
+  SystemsApiToolHealth,
+  SystemsApiToolHistoryAction,
+  SystemsApiToolHistoryEntry,
+} from "./types";
 
 export type SystemsApiToolRegistrationInput = {
   id: string;
@@ -29,6 +47,13 @@ export type SystemsApiPublicUrlRequest = {
   refresh?: boolean;
 };
 
+export type SystemsApiAddressRequest = {
+  toolId: string;
+  kind: SystemsApiAddressKind;
+  subject?: string;
+  desiredHost?: string;
+};
+
 export type SystemsApiExposureRequest = {
   toolId: string;
   desiredHost?: string;
@@ -49,6 +74,28 @@ const registry: SystemsApiRegistryData = loadSystemsApiRegistry();
 
 function persist(): void {
   saveSystemsApiRegistry(registry);
+}
+
+function cloneRegistryData(data: SystemsApiRegistryData): SystemsApiRegistryData {
+  return {
+    tools: data.tools.map((item) => ({ ...item })),
+    publicUrls: data.publicUrls.map((item) => ({ ...item })),
+    addresses: data.addresses.map((item) => ({ ...item })),
+    history: data.history.map((item) => ({ ...item })),
+    exposures: data.exposures.map((item) => ({ ...item })),
+    domains: data.domains.map((item) => ({ ...item })),
+  };
+}
+
+export function resetSystemsApiRegistryForTests(next: SystemsApiRegistryData = { tools: [], publicUrls: [], addresses: [], history: [], exposures: [], domains: [] }): void {
+  const snapshot = cloneRegistryData(next);
+  registry.tools = snapshot.tools;
+  registry.publicUrls = snapshot.publicUrls;
+  registry.addresses = snapshot.addresses;
+  registry.history = snapshot.history;
+  registry.exposures = snapshot.exposures;
+  registry.domains = snapshot.domains;
+  persist();
 }
 
 function now(): string {
@@ -116,11 +163,38 @@ function upsertPublicUrlRecord(record: SystemsApiPublicUrl): SystemsApiPublicUrl
   return record;
 }
 
+function upsertAddressRecord(record: SystemsApiAddress): SystemsApiAddress {
+  const existingIndex = registry.addresses.findIndex((item) => item.toolId === record.toolId && item.kind === record.kind && item.subject === record.subject);
+  if (existingIndex >= 0) registry.addresses[existingIndex] = record;
+  else registry.addresses.push(record);
+  return record;
+}
+
 function upsertDomainRecord(record: SystemsApiDomainBinding): SystemsApiDomainBinding {
   const existingIndex = registry.domains.findIndex((item) => item.domain === record.domain);
   if (existingIndex >= 0) registry.domains[existingIndex] = record;
   else registry.domains.push(record);
   return record;
+}
+
+function hasActiveWebsiteAddress(toolId: string): boolean {
+  return registry.addresses.some((item) => item.toolId === toolId && item.kind === "website" && item.status === "active");
+}
+
+function hasActiveAddress(toolId: string): boolean {
+  return registry.addresses.some((item) => item.toolId === toolId && item.status === "active");
+}
+
+function revokePublicUrlRecord(toolId: string): SystemsApiPublicUrl | null {
+  const publicUrl = getPublicUrl(toolId);
+  if (!publicUrl) return null;
+  const revoked: SystemsApiPublicUrl = {
+    ...publicUrl,
+    status: "revoked",
+  };
+  upsertPublicUrlRecord(revoked);
+  pushHistory(toolId, "public-url-revoked", `Revoked public URL for ${toolId}`, now());
+  return revoked;
 }
 
 export function listTools(): readonly SystemsApiTool[] {
@@ -200,6 +274,69 @@ export function disableSystemsApiTool(toolId: string): SystemsApiTool | null {
   return tool;
 }
 
+export function requestSystemsApiAddress(input: SystemsApiAddressRequest): SystemsApiAddress | null {
+  const tool = getTool(input.toolId);
+  if (!tool) return null;
+
+  const publicAddress = buildPublicAddress(input);
+  const record = createAddressRecord(input, publicAddress, "active");
+  upsertAddressRecord(record);
+
+  updateToolRecord(tool.id, (current) => ({
+    ...current,
+    exposed: true,
+    exposure: "public",
+    publicUrl: input.kind === "website" ? publicAddress : current.publicUrl,
+    updatedAt: now(),
+  }));
+
+  if (input.kind === "website") {
+    const publicUrl: SystemsApiPublicUrl = {
+      toolId: tool.id,
+      url: publicAddress,
+      status: "active",
+      issuedAt: record.requestedAt,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+    };
+    upsertPublicUrlRecord(publicUrl);
+    pushHistory(tool.id, "public-url-issued", `Issued public URL for ${tool.name}`, record.requestedAt);
+  }
+
+  pushHistory(tool.id, "address-issued", `Issued ${input.kind} address ${publicAddress}`, record.requestedAt);
+  persist();
+  return record;
+}
+
+export function revokeSystemsApiAddress(input: { toolId: string; kind?: SystemsApiAddressKind }): readonly SystemsApiAddress[] {
+  const matches = registry.addresses.filter((item) => item.toolId === input.toolId && (input.kind === undefined || item.kind === input.kind));
+  if (!matches.length) return [];
+
+  const revoked = matches.map((address) => {
+    const next = revokeAddressRecord(address);
+    upsertAddressRecord(next);
+    pushHistory(input.toolId, "address-revoked", `Revoked ${next.kind} address ${next.publicAddress}`, next.revokedAt ?? next.updatedAt);
+    return next;
+  });
+
+  const needsPublicUrlRevoke = revoked.some((item) => item.kind === "website");
+  if (needsPublicUrlRevoke) {
+    revokePublicUrlRecord(input.toolId);
+  }
+
+  if (!hasActiveAddress(input.toolId)) {
+    updateToolRecord(input.toolId, (current) => ({
+      ...current,
+      exposed: false,
+      exposure: "private",
+      publicUrl: undefined,
+      updatedAt: now(),
+    }));
+  }
+
+  persist();
+  return revoked;
+}
+
 export function requestExposure(input: SystemsApiExposureRequest): SystemsApiExposureRecord | null {
   const tool = getTool(input.toolId);
   if (!tool) return null;
@@ -223,6 +360,45 @@ export function requestExposure(input: SystemsApiExposureRequest): SystemsApiExp
   return record;
 }
 
+export function requestPublicUrl(input: SystemsApiPublicUrlRequest): SystemsApiPublicUrl | null {
+  const tool = getTool(input.toolId);
+  if (!tool) return null;
+
+  const requestedAddress = requestSystemsApiAddress({
+    toolId: tool.id,
+    kind: "website",
+    subject: input.desiredHost?.replace(/^https?:\/\//, "") || tool.id,
+    desiredHost: input.desiredHost,
+  });
+  if (!requestedAddress) return null;
+
+  return getPublicUrl(tool.id);
+}
+
+export function listPublicUrls(): readonly SystemsApiPublicUrl[] {
+  return registry.publicUrls;
+}
+
+export function getPublicUrl(toolId: string): SystemsApiPublicUrl | null {
+  return registry.publicUrls.find((item) => item.toolId === toolId) ?? null;
+}
+
+export function listAddresses(): readonly SystemsApiAddress[] {
+  return registry.addresses;
+}
+
+export function getAddress(toolId: string, kind?: SystemsApiAddressKind): SystemsApiAddress | null {
+  return registry.addresses.find((item) => item.toolId === toolId && (kind === undefined || item.kind === kind)) ?? null;
+}
+
+export function listExposures(): readonly SystemsApiExposureRecord[] {
+  return registry.exposures;
+}
+
+export function getExposure(toolId: string): SystemsApiExposureRecord | null {
+  return registry.exposures.find((item) => item.toolId === toolId) ?? null;
+}
+
 export function revokeSystemsApiExposure(toolId: string): SystemsApiExposureRecord | null {
   const exposure = getExposure(toolId);
   const tool = getTool(toolId);
@@ -236,53 +412,32 @@ export function revokeSystemsApiExposure(toolId: string): SystemsApiExposureReco
     registry.publicUrls[publicUrlIndex] = {
       ...registry.publicUrls[publicUrlIndex],
       status: "revoked",
-      issuedAt: registry.publicUrls[publicUrlIndex].issuedAt,
-      expiresAt: registry.publicUrls[publicUrlIndex].expiresAt,
     };
+  }
+
+  for (const address of registry.addresses.filter((item) => item.toolId === toolId)) {
+    const revokedAddress = revokeAddressRecord(address);
+    upsertAddressRecord(revokedAddress);
+    pushHistory(toolId, "address-revoked", `Revoked ${revokedAddress.kind} address ${revokedAddress.publicAddress}`, revokedAddress.revokedAt ?? revokedAddress.updatedAt);
+  }
+
+  for (const domain of registry.domains.filter((item) => item.toolId === toolId)) {
+    const revokedDomain = revokeDomainRecord(domain);
+    upsertDomainRecord(revokedDomain);
+    pushHistory(toolId, "domain-revoked", `Revoked ${revokedDomain.domain}`, revokedDomain.revokedAt ?? revokedDomain.updatedAt);
   }
 
   updateToolRecord(toolId, (current) => ({
     ...current,
     exposed: false,
     exposure: "private",
+    publicUrl: undefined,
     updatedAt: now(),
   }));
 
   pushHistory(toolId, "exposure-revoked", `Revoked exposure for ${tool?.name ?? toolId}`, revoked.revokedAt ?? revoked.updatedAt);
   persist();
   return revoked;
-}
-
-export function requestPublicUrl(input: SystemsApiPublicUrlRequest): SystemsApiPublicUrl | null {
-  const tool = getTool(input.toolId);
-  if (!tool) return null;
-
-  const publicUrl = buildPublicUrl(tool.id, input.desiredHost);
-  const record: SystemsApiPublicUrl = {
-    toolId: tool.id,
-    url: publicUrl,
-    status: "active",
-    issuedAt: now(),
-    expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-  };
-
-  upsertPublicUrlRecord(record);
-  requestExposure({ toolId: tool.id, desiredHost: input.desiredHost });
-  pushHistory(tool.id, "public-url-issued", `Issued public URL for ${tool.name}`, record.issuedAt);
-  persist();
-  return record;
-}
-
-export function listPublicUrls(): readonly SystemsApiPublicUrl[] {
-  return registry.publicUrls;
-}
-
-export function listExposures(): readonly SystemsApiExposureRecord[] {
-  return registry.exposures;
-}
-
-export function getExposure(toolId: string): SystemsApiExposureRecord | null {
-  return registry.exposures.find((item) => item.toolId === toolId) ?? null;
 }
 
 export function listDomainBindings(): readonly SystemsApiDomainBinding[] {
@@ -294,11 +449,11 @@ export function getDomainBinding(domain: string): SystemsApiDomainBinding | null
 }
 
 export function requestDomainBinding(input: SystemsApiDomainBindingRequest): SystemsApiDomainBinding | null {
-  const exposure = getExposure(input.toolId) ?? requestExposure({ toolId: input.toolId, desiredHost: input.desiredHost });
-  if (!exposure) return null;
+  const publicUrl = getPublicUrl(input.toolId);
+  if (!publicUrl || publicUrl.status !== "active") return null;
 
   const existing = getDomainBinding(input.domain);
-  const binding = createDomainBinding({ toolId: input.toolId, domain: input.domain, desiredHost: input.desiredHost }, exposure.publicUrl, existing?.status ?? "pending");
+  const binding = createDomainBinding({ toolId: input.toolId, domain: input.domain, desiredHost: input.desiredHost }, publicUrl.url, existing?.status ?? "pending");
   upsertDomainRecord(binding);
   pushHistory(input.toolId, "domain-bound", `Bound ${input.domain} to ${input.toolId}`, binding.requestedAt);
   persist();
@@ -346,6 +501,7 @@ export function describeStatus(): SystemsApiStatus {
     exposedToolCount,
     healthyToolCount,
     publicUrlCount: registry.publicUrls.length,
+    addressCount: registry.addresses.length,
     activeExposureCount,
     domainCount: registry.domains.length,
     verifiedDomainCount,

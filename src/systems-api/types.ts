@@ -37,6 +37,9 @@ export type SystemsApiToolHistoryAction =
   | "enabled"
   | "disabled"
   | "public-url-issued"
+  | "public-url-revoked"
+  | "address-issued"
+  | "address-revoked"
   | "exposure-requested"
   | "exposure-activated"
   | "exposure-revoked"
@@ -74,6 +77,30 @@ export type SystemsApiPublicUrl = {
   status: SystemsApiPublicUrlStatus;
   issuedAt: string;
   expiresAt: string;
+};
+
+export type SystemsApiAddressKind = "website" | "email" | "server" | "custom";
+
+export type SystemsApiAddressStatus = "requested" | "active" | "revoked";
+
+export type SystemsApiAddress = {
+  id: string;
+  toolId: string;
+  kind: SystemsApiAddressKind;
+  subject: string;
+  canonicalTarget: string;
+  publicAddress: string;
+  desiredHost?: string;
+  status: SystemsApiAddressStatus;
+  requestedAt: string;
+  activatedAt?: string;
+  revokedAt?: string;
+  updatedAt: string;
+};
+
+export type SystemsApiAddressRevokeRequest = {
+  toolId: string;
+  kind?: SystemsApiAddressKind;
 };
 
 export type SystemsApiDomainBindingStatus = "pending" | "verified" | "revoked" | "expired";
@@ -116,6 +143,7 @@ export type SystemsApiStatus = {
   exposedToolCount: number;
   healthyToolCount: number;
   publicUrlCount: number;
+  addressCount: number;
   activeExposureCount: number;
   domainCount: number;
   verifiedDomainCount: number;
