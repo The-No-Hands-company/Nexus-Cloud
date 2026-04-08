@@ -31,13 +31,39 @@ export type SystemsApiTool = {
   updatedAt: string;
 };
 
-export type SystemsApiToolHistoryAction = "registered" | "updated" | "enabled" | "disabled" | "public-url-issued";
+export type SystemsApiToolHistoryAction =
+  | "registered"
+  | "updated"
+  | "enabled"
+  | "disabled"
+  | "public-url-issued"
+  | "exposure-requested"
+  | "exposure-activated"
+  | "exposure-revoked"
+  | "domain-bound"
+  | "domain-verified"
+  | "domain-revoked";
 
 export type SystemsApiToolHistoryEntry = {
   toolId: string;
   action: SystemsApiToolHistoryAction;
   summary: string;
   at: string;
+};
+
+export type SystemsApiExposureStatus = "requested" | "active" | "suspended" | "revoked";
+
+export type SystemsApiExposureRecord = {
+  id: string;
+  toolId: string;
+  canonicalUrl: string;
+  publicUrl: string;
+  desiredHost?: string;
+  status: SystemsApiExposureStatus;
+  requestedAt: string;
+  activatedAt?: string;
+  revokedAt?: string;
+  updatedAt: string;
 };
 
 export type SystemsApiPublicUrlStatus = "active" | "pending" | "revoked";
@@ -48,6 +74,31 @@ export type SystemsApiPublicUrl = {
   status: SystemsApiPublicUrlStatus;
   issuedAt: string;
   expiresAt: string;
+};
+
+export type SystemsApiDomainBindingStatus = "pending" | "verified" | "revoked" | "expired";
+
+export type SystemsApiDomainBinding = {
+  domain: string;
+  toolId: string;
+  canonicalUrl: string;
+  publicUrl: string;
+  verificationToken: string;
+  verificationIssuedAt: string;
+  verificationExpiresAt: string;
+  status: SystemsApiDomainBindingStatus;
+  requestedAt: string;
+  verifiedAt?: string;
+  revokedAt?: string;
+  updatedAt: string;
+};
+
+export type SystemsApiDomainVerificationChallenge = {
+  domain: string;
+  token: string;
+  issuedAt: string;
+  expiresAt: string;
+  status: "pending" | "verified" | "expired" | "revoked";
 };
 
 export type SystemsApiRegistryMetadata = {
@@ -65,6 +116,9 @@ export type SystemsApiStatus = {
   exposedToolCount: number;
   healthyToolCount: number;
   publicUrlCount: number;
+  activeExposureCount: number;
+  domainCount: number;
+  verifiedDomainCount: number;
   registry: SystemsApiRegistryMetadata;
   updatedAt: string;
 };
