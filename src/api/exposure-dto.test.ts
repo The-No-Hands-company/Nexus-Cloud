@@ -79,6 +79,8 @@ const status: SystemsApiStatus = {
   exposedToolCount: 1,
   healthyToolCount: 1,
   publicUrlCount: 1,
+  addressCount: 0,
+  addressKinds: ["website", "email", "server", "custom"],
   activeExposureCount: 1,
   domainCount: 2,
   verifiedDomainCount: 1,

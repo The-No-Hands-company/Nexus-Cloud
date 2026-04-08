@@ -502,6 +502,7 @@ export function describeStatus(): SystemsApiStatus {
     healthyToolCount,
     publicUrlCount: registry.publicUrls.length,
     addressCount: registry.addresses.length,
+    addressKinds: ["website", "email", "server", "custom"],
     activeExposureCount,
     domainCount: registry.domains.length,
     verifiedDomainCount,

@@ -144,6 +144,7 @@ export type SystemsApiStatus = {
   healthyToolCount: number;
   publicUrlCount: number;
   addressCount: number;
+  addressKinds: readonly SystemsApiAddressKind[];
   activeExposureCount: number;
   domainCount: number;
   verifiedDomainCount: number;
@@ -158,4 +159,5 @@ export type SystemsApiSummary = {
   capabilities: readonly SystemsApiCapability[];
   toolCount: number;
   status: SystemsApiStatus;
+  addressKinds: readonly SystemsApiAddressKind[];
 };

@@ -40,6 +40,8 @@ import type {
   SystemsApiToolHistoryEntry,
 } from "./types";
 
+const addressKinds: readonly SystemsApiAddressKind[] = ["website", "email", "server", "custom"];
+
 export type SystemsApiPublicUrlRequest = {
   toolId: string;
   desiredHost?: string;
@@ -253,6 +255,7 @@ export function describeSystemsApi(): SystemsApiSummary {
     capabilities,
     toolCount: status.toolCount,
     status,
+    addressKinds: status.addressKinds,
   };
 }
 

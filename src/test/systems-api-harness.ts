@@ -7,6 +7,7 @@ import type { SystemsApiRegistryData } from "../systems-api/store";
 export const emptySystemsApiRegistry: SystemsApiRegistryData = {
   tools: [],
   publicUrls: [],
+  addresses: [],
   history: [],
   exposures: [],
   domains: [],
@@ -28,6 +29,7 @@ export async function createSystemsApiTestHarness(registry: SystemsApiRegistryDa
   try {
     const routerModule = await import("../api/router");
     const systemsApiModule = await import("../systems-api");
+    systemsApiModule.resetSystemsApiRegistryForTests(registry);
 
     return {
       handleRequest: routerModule.handleRequest,
