@@ -4,6 +4,7 @@ import { dataPlane } from "../data-plane";
 import { federationService } from "../federation";
 import { observabilityService } from "../observability";
 import { storage } from "../storage";
+import { systemsApiService } from "../systems-api";
 import { apiRoutes } from "./index";
 import {
   type ArchitectureResponse,
@@ -14,9 +15,14 @@ import {
   type PlanWorkloadSuccessResponse,
   type RegisterNodeResponse,
   type StateResponse,
+  type SystemsApiPublicUrlResponseDTO,
+  type SystemsApiStatusResponseDTO,
+  type SystemsApiToolResponseDTO,
+  type SystemsApiToolsResponseDTO,
   type TrustPeerResponse,
   type WorkloadListResponse,
   isRegisterNodeRequest,
+  isSystemsApiPublicUrlRequest,
   isTrustPeerRequest,
   isWorkloadPlanRequest,
 } from "./dto";
@@ -138,6 +144,96 @@ async function handlePeerTrust(request: Request, pathname: string): Promise<Resp
   return json(response, 201);
 }
 
+function handleSystemsTools(): Response {
+  const body: SystemsApiToolsResponseDTO = {
+    tools: systemsApiService.listSystemsApiTools(),
+  };
+  return json(body);
+}
+
+function handleSystemsTool(toolId: string): Response {
+  const tool = systemsApiService.getSystemsApiTool(toolId);
+  if (!tool) {
+    return notFound();
+  }
+
+  const body: SystemsApiToolResponseDTO = { tool };
+  return json(body);
+}
+
+function handleSystemsToolEnable(toolId: string): Response {
+  const tool = systemsApiService.enableSystemsApiTool(toolId);
+  if (!tool) {
+    return notFound();
+  }
+
+  const body: SystemsApiToolResponseDTO = { tool };
+  return json(body);
+}
+
+function handleSystemsToolDisable(toolId: string): Response {
+  const tool = systemsApiService.disableSystemsApiTool(toolId);
+  if (!tool) {
+    return notFound();
+  }
+
+  const body: SystemsApiToolResponseDTO = { tool };
+  return json(body);
+}
+
+function handleSystemsStatus(): Response {
+  const body: SystemsApiStatusResponseDTO = {
+    status: systemsApiService.describeSystemsApiStatus(),
+    tools: systemsApiService.listSystemsApiTools(),
+    publicUrls: systemsApiService.listSystemsApiPublicUrls(),
+  };
+  return json(body);
+}
+
+async function handleSystemsPublicUrl(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (!isSystemsApiPublicUrlRequest(body)) {
+    return badRequest("Missing public URL fields");
+  }
+
+  const publicUrl = systemsApiService.issueSystemsApiPublicUrl(body);
+  if (!publicUrl) {
+    return json({ error: "Tool not found" }, 404);
+  }
+
+  const tool = systemsApiService.getSystemsApiTool(body.toolId);
+  if (!tool) {
+    return json({ error: "Tool not found" }, 404);
+  }
+
+  const response: SystemsApiPublicUrlResponseDTO = { publicUrl, tool };
+  return json(response, 201);
+}
+
+function handleSystemsToolRoute(request: Request, pathname: string): Response {
+  const prefix = "/api/v1/tools/";
+  const suffix = pathname.slice(prefix.length);
+  if (!suffix) {
+    return notFound();
+  }
+
+  if (request.method === "GET" && !suffix.includes("/")) {
+    return handleSystemsTool(decodeURIComponent(suffix));
+  }
+
+  if (request.method === "POST" && suffix.endsWith("/enable")) {
+    const toolId = decodeURIComponent(suffix.slice(0, -"/enable".length));
+    return toolId ? handleSystemsToolEnable(toolId) : badRequest("Missing tool id");
+  }
+
+  if (request.method === "POST" && suffix.endsWith("/disable")) {
+    const toolId = decodeURIComponent(suffix.slice(0, -"/disable".length));
+    return toolId ? handleSystemsToolDisable(toolId) : badRequest("Missing tool id");
+  }
+
+  return notFound();
+}
+
 export async function handleApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
@@ -152,6 +248,12 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/v1/federation/peers") return handlePeersList();
   if (request.method === "POST" && pathname.startsWith("/v1/federation/peers/") && pathname.endsWith("/trust")) {
     return handlePeerTrust(request, pathname);
+  }
+  if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools();
+  if (request.method === "GET" && pathname === "/api/v1/status") return handleSystemsStatus();
+  if (request.method === "POST" && pathname === "/api/v1/public-url") return handleSystemsPublicUrl(request);
+  if (pathname.startsWith("/api/v1/tools/")) {
+    return handleSystemsToolRoute(request, pathname);
   }
 
   return notFound();

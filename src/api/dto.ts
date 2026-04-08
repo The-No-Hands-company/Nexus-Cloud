@@ -8,6 +8,7 @@ import type { FederationSummary } from "../federation/service";
 import type { ObservabilityEvent } from "../observability";
 import type { ObservabilitySummary } from "../observability/service";
 import type { StorageVolume } from "../storage";
+import type { SystemsApiPublicUrl, SystemsApiStatus, SystemsApiTool } from "../systems-api";
 
 export type ApiRoute = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -83,6 +84,31 @@ export type RegisterNodeRequestDTO = NodeRegistrationRequest;
 export type WorkloadPlanRequestDTO = WorkloadSpec;
 export type TrustPeerRequestDTO = FederationSignedRequest;
 
+export type SystemsApiToolsResponseDTO = {
+  tools: readonly SystemsApiTool[];
+};
+
+export type SystemsApiToolResponseDTO = {
+  tool: SystemsApiTool;
+};
+
+export type SystemsApiStatusResponseDTO = {
+  status: SystemsApiStatus;
+  tools: readonly SystemsApiTool[];
+  publicUrls: readonly SystemsApiPublicUrl[];
+};
+
+export type SystemsApiPublicUrlRequestDTO = {
+  toolId: string;
+  desiredHost?: string;
+  refresh?: boolean;
+};
+
+export type SystemsApiPublicUrlResponseDTO = {
+  publicUrl: SystemsApiPublicUrl;
+  tool: SystemsApiTool;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -130,4 +156,11 @@ export function isTrustPeerRequest(value: unknown): value is TrustPeerRequestDTO
     && isString(value.nonce)
     && isString(value.keyId)
     && isString(value.signature);
+}
+
+export function isSystemsApiPublicUrlRequest(value: unknown): value is SystemsApiPublicUrlRequestDTO {
+  return isRecord(value)
+    && isString(value.toolId)
+    && (value.desiredHost === undefined || isString(value.desiredHost))
+    && (value.refresh === undefined || typeof value.refresh === "boolean");
 }
