@@ -9,6 +9,7 @@ import { systemsApiService, heartbeatSystemsApiTool, listSystemsApiRoutes, getCl
 import { describeSystemsApiDeployIntegration, systemsApiDeployIntegration } from "../systems-api/deploy";
 import { bootstrapDns, hasCloudflareDns } from "../cloudflare-dns";
 import { generateZoneFile } from "../dns-zone";
+import { getNodeIdentity } from "../identity";
 import { apiRoutes } from "./index";
 import {
   type ArchitectureResponse,
@@ -431,11 +432,28 @@ function handleSystemsRoutesCaddy(): Response {
   return json({ routes: caddyRoutes });
 }
 
+function handleFederationIdentity(): Response {
+  const id = getNodeIdentity();
+  return json({
+    did: id.did,
+    shortId: id.shortId,
+    publicKey: id.publicKey,
+    namingScheme: "@user:shortId",
+    exampleAddress: `@alice:${id.shortId}`,
+    addressNote:
+      "Addresses are scoped to this node. Only the holder of this node's private key can issue credentials in this namespace — no registrar, no cost, no squatting possible.",
+  });
+}
+
 function handleWellKnown(): Response {
   const domain = getCloudDomain();
   const cloudUrl = cloudConfig.cloudUrl || `https://${domain}`;
+  const id = getNodeIdentity();
   return json({
     version: "v1",
+    nodeId: id.did,
+    shortId: id.shortId,
+    namingScheme: "@user:shortId",
     domain,
     apiBase: cloudUrl,
     capabilities: [
@@ -444,6 +462,7 @@ function handleWellKnown(): Response {
       "exposure-registry",
       "routing-manifest",
       "tool-registry",
+      "node-identity",
     ],
     endpoints: {
       register: "/api/v1/tools",
@@ -456,6 +475,7 @@ function handleWellKnown(): Response {
       routesCaddy: "/api/v1/routes/caddy",
       status: "/api/v1/status",
       topology: "/api/v1/topology",
+      identity: "/v1/federation/identity",
     },
   });
 }
@@ -666,6 +686,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "POST" && pathname === "/v1/workloads/plan") return handleWorkloadPlan(request);
   if (request.method === "GET" && pathname === "/v1/federation/peers") return handlePeersList();
   if (request.method === "POST" && pathname.startsWith("/v1/federation/peers/") && pathname.endsWith("/trust")) return handlePeerTrust(request, pathname);
+  if (request.method === "GET" && pathname === "/v1/federation/identity") return handleFederationIdentity();
   if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools();
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/endpoints") return handleSystemsEndpoints();

@@ -8,7 +8,13 @@ import { server, port } from "./server";
 import { storage } from "./storage";
 import { systemsApiService } from "./systems-api";
 import { generateZoneFile } from "./dns-zone";
+import { initNodeIdentity } from "./identity";
 import { mkdirSync, writeFileSync } from "fs";
+
+// ─── Node identity ────────────────────────────────────────────────────────────
+// Generate or load the Ed25519 keypair that gives this node its permanent DID.
+// Must resolve before the HTTP server starts accepting federation requests.
+const identity = await initNodeIdentity();
 
 console.log(`${architecture.project} listening on ${port}`);
 console.log(architecture.mission);
@@ -17,6 +23,8 @@ for (const principle of architecture.principles) {
   console.log(`- ${principle}`);
 }
 
+console.log(`Node identity: ${identity.did}`);
+console.log(`Short ID:      ${identity.shortId}  (NS address format: @<user>:${identity.shortId})`);
 console.log("API routes:");
 for (const route of apiRoutes) {
   console.log(`- ${route.method} ${route.path} — ${route.description}`);

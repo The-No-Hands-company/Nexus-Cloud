@@ -9,6 +9,7 @@ export const apiRouteManifest = [
   { method: "POST", path: "/v1/workloads/plan", description: "Produce a placement plan for a workload" },
   { method: "GET", path: "/v1/federation/peers", description: "List known federation peers" },
   { method: "POST", path: "/v1/federation/peers/:domain/trust", description: "Upsert a trust record for a peer" },
+  { method: "GET", path: "/v1/federation/identity", description: "This node's permanent DID, short ID, and NS address format" },
   { method: "GET", path: "/api/v1/tools", description: "List registered tools" },
   { method: "GET", path: "/api/v1/endpoints", description: "List Systems API endpoints" },
   { method: "GET", path: "/api/v1/capabilities", description: "List Systems API capabilities" },

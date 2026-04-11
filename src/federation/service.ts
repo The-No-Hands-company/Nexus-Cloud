@@ -1,4 +1,5 @@
 import type { FederationTrust } from "../architecture";
+import { getNodeIdentity } from "../identity";
 import { state } from "../state";
 import type { FederationPeer, FederationSignedRequest } from "./index";
 import { upsertPeer as persistPeer } from "./peers";
@@ -8,14 +9,29 @@ export type FederationSummary = {
   signedRequests: boolean;
   identityFormat: string;
   peerCount: number;
+  /** This node's permanent DID — set after initNodeIdentity() resolves on startup. */
+  nodeId?: string;
+  /** Human-compact 8-char short ID derived from the DID — used in @user:shortId addresses. */
+  shortId?: string;
 };
 
 export function describeFederation(): FederationSummary {
+  let nodeId: string | undefined;
+  let shortId: string | undefined;
+  try {
+    const id = getNodeIdentity();
+    nodeId = id.did;
+    shortId = id.shortId;
+  } catch {
+    // identity not yet initialized — safe to ignore, returns undefined fields
+  }
   return {
     protocol: "nexus-federation-v1",
     signedRequests: true,
-    identityFormat: "node@cluster",
+    identityFormat: "@user:shortId",
     peerCount: state.peers.length,
+    nodeId,
+    shortId,
   };
 }
 

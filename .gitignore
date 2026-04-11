@@ -1,4 +1,8 @@
 *
+# data/ is intentionally excluded — runtime-only files:
+#   data/node-identity.json  — Ed25519 private key seed for this node's DID (SECRET, never commit)
+#   data/dns/nexus.zone      — BIND zone file, regenerated on startup
+#   data/systems-api-registry.json — persistent tool registry
 !/.gitignore
 !/AGENTS.md
 !/README.md

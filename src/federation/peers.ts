@@ -16,9 +16,15 @@ export function createPeerTrust(domain: string, trust?: FederationSignedRequest 
   };
 }
 
-export function upsertPeer(peers: FederationPeer[], domain: string, trust?: FederationSignedRequest | Record<string, unknown>): FederationPeer {
+export function upsertPeer(
+  peers: FederationPeer[],
+  domain: string,
+  trust?: FederationSignedRequest | Record<string, unknown>,
+  did?: string,
+): FederationPeer {
   const peer: FederationPeer = {
     domain,
+    did,
     trust: createPeerTrust(domain, trust),
     status: "healthy",
     lastSeenAt: new Date().toISOString(),
