@@ -3,92 +3,718 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Nexus Cloud — Node Status</title>
+<title>Nexus Cloud</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0e0e0f; --bg2: #161618; --bg3: #1e1e21;
-    --border: rgba(255,255,255,0.07);
-    --text: #e8e8e8; --muted: #777;
-    --green: #1D9E75; --amber: #BA7517;
-  }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system,'Segoe UI',system-ui,sans-serif; font-size: 14px; line-height: 1.6; min-height: 100vh; }
-  .wrap { max-width: 680px; margin: 0 auto; padding: 48px 20px; }
-  .logo { font-size: 13px; font-weight: 600; color: var(--green); letter-spacing: -0.2px; margin-bottom: 32px; }
-  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.4px; margin-bottom: 6px; }
-  .sub { font-size: 13px; color: var(--muted); margin-bottom: 32px; }
-  .node-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 32px; }
-  .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .stat-value { font-size: 20px; font-weight: 600; color: var(--text); }
-  .stat-value.green { color: var(--green); }
-  .divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
-  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 12px; }
-  .footer { margin-top: 40px; font-size: 11px; color: var(--muted); }
-  .footer a { color: var(--muted); text-decoration: none; }
-  .footer a:hover { color: var(--text); }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:     #0b0b0d;
+  --bg2:    #111113;
+  --bg3:    #18181b;
+  --bg4:    #1f1f23;
+  --border: rgba(255,255,255,0.07);
+  --border2:rgba(255,255,255,0.12);
+  --text:   #e8e8ea;
+  --muted:  #666;
+  --muted2: #999;
+  --green:  #1aab78;
+  --green2: #0d6b4c;
+  --amber:  #c8831a;
+  --red:    #c0392b;
+  --blue:   #4a90d9;
+  --purple: #9b59b6;
+}
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── Layout ── */
+.shell { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.main { flex: 1; overflow-x: hidden; }
+
+/* ── Sidebar ── */
+.sidebar-logo {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo .wordmark {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: -0.3px;
+}
+.sidebar-logo .tagline {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.nav { padding: 10px 0; flex: 1; }
+.nav-section {
+  padding: 14px 18px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--muted);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 18px;
+  font-size: 13px;
+  color: var(--muted2);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: color 0.15s, background 0.15s;
+  text-decoration: none;
+}
+.nav-item:hover { color: var(--text); background: var(--bg3); }
+.nav-item.active { color: var(--text); border-left-color: var(--green); background: var(--bg3); }
+.nav-icon { width: 15px; text-align: center; font-style: normal; opacity: 0.7; }
+.sidebar-identity {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.sidebar-identity .did-short {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+  margin-bottom: 3px;
+}
+
+/* ── Top bar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  gap: 12px;
+}
+.topbar-title { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  color: var(--muted2);
+}
+.badge.green { background: rgba(26,171,120,0.12); border-color: rgba(26,171,120,0.3); color: var(--green); }
+.badge.amber { background: rgba(200,131,26,0.12); border-color: rgba(200,131,26,0.3); color: var(--amber); }
+.badge.red   { background: rgba(192,57,43,0.12);  border-color: rgba(192,57,43,0.3);  color: var(--red); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.refresh-btn {
+  padding: 5px 12px;
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--muted2);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.refresh-btn:hover { color: var(--text); border-color: var(--border2); background: var(--bg3); }
+
+/* ── Content sections ── */
+.page { display: none; padding: 28px; }
+.page.active { display: block; }
+
+/* ── Stat grid ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }
+.stat-value.green { color: var(--green); }
+.stat-value.amber { color: var(--amber); }
+.stat-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+/* ── Section headers ── */
+.section-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  margin-top: 28px;
+}
+.section-hd:first-child { margin-top: 0; }
+.section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted2); }
+
+/* ── Cards ── */
+.card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.card-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.card-title { font-size: 13px; font-weight: 600; }
+.card-body { padding: 14px 16px; }
+.card-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── Tool list ── */
+.tool-list { display: flex; flex-direction: column; gap: 8px; }
+.tool-row {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: start;
+}
+.tool-row:hover { border-color: var(--border2); }
+.tool-name { font-size: 13px; font-weight: 600; }
+.tool-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.tool-details { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--bg4);
+  color: var(--muted2);
+  border: 1px solid var(--border);
+}
+.chip.green { background: rgba(26,171,120,0.1); color: var(--green); border-color: rgba(26,171,120,0.2); }
+.chip.amber { background: rgba(200,131,26,0.1);  color: var(--amber); border-color: rgba(200,131,26,0.2); }
+.chip.red   { background: rgba(192,57,43,0.1);   color: var(--red);   border-color: rgba(192,57,43,0.2); }
+.chip.blue  { background: rgba(74,144,217,0.1);  color: var(--blue);  border-color: rgba(74,144,217,0.2); }
+.tool-url { font-size: 10px; color: var(--blue); margin-top: 4px; word-break: break-all; }
+.tool-ts  { font-size: 10px; color: var(--muted); text-align: right; white-space: nowrap; }
+
+/* ── Route table ── */
+.route-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.route-table th {
+  text-align: left;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  background: var(--bg2);
+}
+.route-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.route-table tr:last-child td { border-bottom: none; }
+.route-table tr:hover td { background: var(--bg4); }
+.method { font-weight: 700; font-size: 10px; padding: 1px 6px; border-radius: 4px; display: inline-block; }
+.method.GET    { background: rgba(26,171,120,0.15); color: var(--green); }
+.method.POST   { background: rgba(74,144,217,0.15); color: var(--blue); }
+.method.PATCH  { background: rgba(200,131,26,0.15); color: var(--amber); }
+.method.DELETE { background: rgba(192,57,43,0.15);  color: var(--red); }
+.path-cell { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: var(--text); }
+.desc-cell { color: var(--muted2); }
+
+/* ── User list ── */
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.user-row:last-child { border-bottom: none; }
+.user-address { font-family: monospace; font-size: 12px; color: var(--green); }
+.user-ts { font-size: 10px; color: var(--muted); }
+
+/* ── Identity card ── */
+.identity-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 12px; }
+.identity-key { color: var(--muted); font-weight: 500; }
+.identity-val { font-family: monospace; color: var(--text); word-break: break-all; }
+.identity-val.green { color: var(--green); }
+
+/* ── Peer list ── */
+.peer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.peer-row:last-child { border-bottom: none; }
+
+/* ── Empty & loading states ── */
+.empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.loading { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .sidebar { display: none; }
+  .topbar { padding: 12px 16px; }
+  .page { padding: 16px; }
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="logo">Nexus Cloud</div>
-  <h1>Node Status</h1>
-  <p class="sub">This node is part of the Nexus federation. Storage, sync, and file sharing services.</p>
+<div class="shell">
 
-  <div class="node-stats">
-    <div class="stat">
-      <div class="stat-label">Node status</div>
-      <div class="stat-value green" id="s-status">Online</div>
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="wordmark">Nexus Cloud</div>
+      <div class="tagline">Sovereign · Federated · Self-hosted</div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Storage used</div>
-      <div class="stat-value" id="s-storage">—</div>
+    <div class="nav">
+      <div class="nav-section">Overview</div>
+      <a class="nav-item active" data-page="overview" onclick="nav('overview')">
+        <i class="nav-icon">◈</i> Dashboard
+      </a>
+      <div class="nav-section">Registry</div>
+      <a class="nav-item" data-page="tools" onclick="nav('tools')">
+        <i class="nav-icon">⬡</i> Tools
+      </a>
+      <a class="nav-item" data-page="users" onclick="nav('users')">
+        <i class="nav-icon">◎</i> Users
+      </a>
+      <div class="nav-section">Network</div>
+      <a class="nav-item" data-page="federation" onclick="nav('federation')">
+        <i class="nav-icon">⬡</i> Federation
+      </a>
+      <a class="nav-item" data-page="routes" onclick="nav('routes')">
+        <i class="nav-icon">⇄</i> Routes
+      </a>
+      <div class="nav-section">System</div>
+      <a class="nav-item" data-page="identity" onclick="nav('identity')">
+        <i class="nav-icon">◉</i> Identity
+      </a>
+      <a class="nav-item" data-page="api" onclick="nav('api')">
+        <i class="nav-icon">≡</i> API Reference
+      </a>
     </div>
-    <div class="stat">
-      <div class="stat-label">Files stored</div>
-      <div class="stat-value" id="s-files">—</div>
+    <div class="sidebar-identity">
+      <div class="did-short" id="sid-short">—</div>
+      <div id="sid-did" style="word-break:break-all">loading…</div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Federation peers</div>
-      <div class="stat-value" id="s-peers">—</div>
+  </nav>
+
+  <!-- ── Main ── -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <span class="topbar-title" id="topbar-title">Dashboard</span>
+      <div class="topbar-right">
+        <span class="badge green" id="tb-status"><span class="dot"></span> Online</span>
+        <span class="badge" id="tb-tools">0 tools</span>
+        <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+      </div>
     </div>
-  </div>
 
-  <script>
-    fetch('/api/status').then(r => r.json()).then(d => {
-      if (d.storage_used_gb !== undefined)
-        document.getElementById('s-storage').textContent =
-          d.storage_used_gb >= 1024
-            ? (d.storage_used_gb / 1024).toFixed(1) + ' TB'
-            : Math.round(d.storage_used_gb) + ' GB';
-      if (d.files_count !== undefined)
-        document.getElementById('s-files').textContent = d.files_count.toLocaleString();
-      if (d.federation_peers !== undefined)
-        document.getElementById('s-peers').textContent = d.federation_peers;
-    }).catch(() => {});
-  </script>
+    <!-- ── PAGE: Overview ── -->
+    <div class="page active" id="page-overview">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Node status</div>
+          <div class="stat-value green" id="ov-status">Online</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Registered tools</div>
+          <div class="stat-value" id="ov-tools">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Healthy tools</div>
+          <div class="stat-value" id="ov-healthy">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Exposed tools</div>
+          <div class="stat-value" id="ov-exposed">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Federation peers</div>
+          <div class="stat-value" id="ov-peers">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Addresses issued</div>
+          <div class="stat-value" id="ov-addresses">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active domains</div>
+          <div class="stat-value" id="ov-domains">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Registered users</div>
+          <div class="stat-value" id="ov-users">—</div>
+        </div>
+      </div>
 
-  <hr class="divider" />
+      <div class="section-hd"><span class="section-title">Registered Tools</span></div>
+      <div class="tool-list" id="ov-tool-list">
+        <div class="empty loading">Loading tools…</div>
+      </div>
+    </div>
 
-  <div class="section-label">Nexus Network — Federation health</div>
-  <div id="nexus-network-widget"></div>
+    <!-- ── PAGE: Tools ── -->
+    <div class="page" id="page-tools">
+      <div class="section-hd"><span class="section-title">All Tools</span></div>
+      <div class="tool-list" id="tools-list">
+        <div class="empty loading">Loading…</div>
+      </div>
+    </div>
 
-  <div class="footer" style="margin-top: 24px;">
-    <a href="https://github.com/The-No-Hands-company/Nexus-cloud" target="_blank" rel="noopener">Nexus Cloud</a>
-    · <a href="https://github.com/The-No-Hands-company" target="_blank" rel="noopener">The No Hands Company</a>
-    · <a href="https://github.com/The-No-Hands-company/Nexus-Network" target="_blank" rel="noopener">Nexus Network</a>
-  </div>
-</div>
+    <!-- ── PAGE: Users ── -->
+    <div class="page" id="page-users">
+      <div class="stat-grid" style="margin-bottom:20px">
+        <div class="stat-card">
+          <div class="stat-label">Registered users</div>
+          <div class="stat-value" id="users-count">—</div>
+          <div class="stat-sub">@user:shortId addresses</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="card-title">User Address Registry</span></div>
+        <div id="users-body"><div class="empty loading">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- ── PAGE: Federation ── -->
+    <div class="page" id="page-federation">
+      <div class="section-hd"><span class="section-title">Known Peers</span></div>
+      <div class="card">
+        <div id="fed-peers-body"><div class="empty loading">Loading…</div></div>
+      </div>
+      <div class="section-hd" style="margin-top:24px"><span class="section-title">This Node's Gossip Announcement</span></div>
+      <div class="card">
+        <div class="card-body">
+          <div class="identity-grid" id="fed-announcement">
+            <span class="identity-key loading">loading…</span><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE: Routes ── -->
+    <div class="page" id="page-routes">
+      <div class="section-hd"><span class="section-title">Live Proxy Routing Table</span></div>
+      <div class="card">
+        <div id="routes-body"><div class="empty loading">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- ── PAGE: Identity ── -->
+    <div class="page" id="page-identity">
+      <div class="section-hd"><span class="section-title">Node Identity</span></div>
+      <div class="card">
+        <div class="card-body">
+          <div class="identity-grid" id="identity-grid">
+            <span class="identity-key loading">loading…</span><span></span>
+          </div>
+        </div>
+      </div>
+      <div class="section-hd" style="margin-top:24px"><span class="section-title">Discovery Document</span></div>
+      <div class="card">
+        <div class="card-body">
+          <pre id="discovery-doc" style="font-size:11px;color:var(--muted2);white-space:pre-wrap;word-break:break-all" class="loading">loading…</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE: API Reference ── -->
+    <div class="page" id="page-api">
+      <div class="section-hd"><span class="section-title">All API Endpoints</span></div>
+      <div class="card">
+        <table class="route-table" id="api-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Path</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody id="api-tbody">
+            <tr><td colspan="3"><div class="empty loading">Loading…</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /shell -->
 
 <script>
-(function(){
-  const s = document.createElement('script');
-  s.setAttribute('data-target', 'nexus-network-widget');
-  s.setAttribute('data-api', 'https://network.nexus.computer/api/stats');
-  s.setAttribute('data-theme', 'dark');
-  s.src = 'https://network.nexus.computer/widget.js';
-  document.head.appendChild(s);
-})();
+'use strict';
+// ── Navigation ─────────────────────────────────────────────────────────────
+const PAGES = {
+  overview:   'Dashboard',
+  tools:      'Tools',
+  users:      'Users',
+  federation: 'Federation',
+  routes:     'Routes',
+  identity:   'Identity',
+  api:        'API Reference',
+};
+
+function nav(page) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector('[data-page="' + page + '"]').classList.add('active');
+  document.getElementById('topbar-title').textContent = PAGES[page] || page;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000)  return Math.round(diff/1000) + 's ago';
+  if (diff < 3600000) return Math.round(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.round(diff/3600000) + 'h ago';
+  return d.toLocaleDateString();
+}
+
+function healthChip(h) {
+  if (h === 'healthy')  return '<span class="chip green">' + esc(h) + '</span>';
+  if (h === 'degraded') return '<span class="chip amber">' + esc(h) + '</span>';
+  if (h === 'offline')  return '<span class="chip red">'   + esc(h) + '</span>';
+  return '<span class="chip">' + esc(h || '?') + '</span>';
+}
+
+function toolCard(t) {
+  const caps = (t.capabilities || []).map(c => '<span class="chip">' + esc(c) + '</span>').join('');
+  const url  = t.upstreamUrl ? '<div class="tool-url">↗ ' + esc(t.upstreamUrl) + '</div>' : '';
+  const pubUrl = t.publicUrl ? '<div class="tool-url" style="color:var(--green)">⊕ ' + esc(t.publicUrl) + '</div>' : '';
+  return `
+    <div class="tool-row">
+      <div>
+        <div class="tool-name">${esc(t.name)} <span style="color:var(--muted);font-weight:400;font-size:11px">#${esc(t.id)}</span></div>
+        <div class="tool-desc">${esc(t.description || '')}</div>
+        <div class="tool-details">
+          ${healthChip(t.health)}
+          ${t.exposed ? '<span class="chip green">exposed</span>' : '<span class="chip">private</span>'}
+          ${t.mode ? '<span class="chip blue">' + esc(t.mode) + '</span>' : ''}
+          ${caps}
+        </div>
+        ${url}${pubUrl}
+      </div>
+      <div class="tool-ts">${fmtDate(t.registeredAt)}</div>
+    </div>`;
+}
+
+function setEl(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+// ── Data loaders ───────────────────────────────────────────────────────────
+async function loadStatus() {
+  const [legacy, status] = await Promise.all([
+    fetch('/api/status').then(r=>r.json()).catch(()=>({})),
+    fetch('/api/v1/status').then(r=>r.json()).catch(()=>({})),
+  ]);
+  // overview stats
+  setEl('ov-tools',     status.toolCount     ?? legacy.tools           ?? '0');
+  setEl('ov-healthy',   status.healthyToolCount ?? '—');
+  setEl('ov-exposed',   status.exposedToolCount ?? '—');
+  setEl('ov-peers',     legacy.federation_peers ?? '—');
+  setEl('ov-addresses', status.addressCount  ?? '—');
+  setEl('ov-domains',   status.verifiedDomainCount ?? '—');
+  document.getElementById('tb-tools').textContent = (status.toolCount ?? 0) + ' tools';
+}
+
+async function loadTools() {
+  const data = await fetch('/api/v1/tools').then(r=>r.json()).catch(()=>({}));
+  const tools = data.tools || data || [];
+  if (!Array.isArray(tools) || tools.length === 0) {
+    const msg = '<div class="empty">No tools registered yet. Start Nexus-Hosting or Nexus AI to see them appear here.</div>';
+    setEl('ov-tool-list', msg);
+    setEl('tools-list',   msg);
+    return;
+  }
+  const html = tools.map(toolCard).join('');
+  setEl('ov-tool-list', html);
+  setEl('tools-list',   html);
+  document.getElementById('tb-tools').textContent = tools.length + ' tool' + (tools.length !== 1 ? 's' : '');
+  setEl('ov-tools', tools.length);
+}
+
+async function loadUsers() {
+  const data = await fetch('/api/v1/users').then(r=>r.json()).catch(()=>({}));
+  const users = data.users || data || [];
+  setEl('ov-users', Array.isArray(users) ? users.length : '—');
+  setEl('users-count', Array.isArray(users) ? users.length : '—');
+  if (!Array.isArray(users) || users.length === 0) {
+    setEl('users-body', '<div class="empty">No users registered. POST /api/v1/users to register an address.</div>');
+    return;
+  }
+  const rows = users.map(u => `
+    <div class="user-row">
+      <div>
+        <div class="user-address">${esc(u.address || '@' + u.username + ':?')}</div>
+        <div style="font-size:11px;color:var(--muted)">${esc(u.username)}</div>
+      </div>
+      <div class="user-ts">${fmtDate(u.registeredAt)}</div>
+    </div>`).join('');
+  setEl('users-body', rows);
+}
+
+async function loadFederation() {
+  const [peers, ann] = await Promise.all([
+    fetch('/v1/federation/peers').then(r=>r.json()).catch(()=>({})),
+    fetch('/v1/federation/announcement').then(r=>r.json()).catch(()=>({})),
+  ]);
+  const peerList = peers.peers || [];
+  setEl('ov-peers', peerList.length);
+  if (peerList.length === 0) {
+    setEl('fed-peers-body', '<div class="empty">No peers known yet. Set BOOTSTRAP_PEERS in .env to connect to other nodes.</div>');
+  } else {
+    const rows = peerList.map(p => `
+      <div class="peer-row">
+        <div>
+          <div style="font-weight:600;font-size:12px">${esc(p.domain || p.url || p.did || JSON.stringify(p))}</div>
+          ${p.trust ? '<div style="font-size:10px;color:var(--muted)">trust: ' + esc(p.trust) + '</div>' : ''}
+        </div>
+        <span class="chip green">connected</span>
+      </div>`).join('');
+    setEl('fed-peers-body', rows);
+  }
+  // Announcement
+  if (ann && Object.keys(ann).length) {
+    const rows = Object.entries(ann).map(([k,v]) =>
+      `<span class="identity-key">${esc(k)}</span><span class="identity-val">${esc(String(v))}</span>`
+    ).join('');
+    setEl('fed-announcement', rows);
+  }
+}
+
+async function loadRoutes() {
+  const data = await fetch('/api/v1/routes').then(r=>r.json()).catch(()=>({}));
+  const routes = data.routes || data || [];
+  if (!Array.isArray(routes) || routes.length === 0) {
+    setEl('routes-body', '<div class="empty">No proxy routes active yet. Routes appear when tools are registered and exposed.</div>');
+    return;
+  }
+  const rows = routes.map(r => `
+    <div class="user-row">
+      <div>
+        <div style="font-family:monospace;font-size:12px">${esc(r.domain || r.host || '?')}</div>
+        <div class="tool-url">→ ${esc(r.upstream || r.upstreamUrl || '?')}</div>
+      </div>
+      <span class="chip ${r.status === 'active' ? 'green' : ''}">${esc(r.status || 'active')}</span>
+    </div>`).join('');
+  setEl('routes-body', rows);
+}
+
+async function loadIdentity() {
+  const [identity, discovery] = await Promise.all([
+    fetch('/v1/federation/identity').then(r=>r.json()).catch(()=>({})),
+    fetch('/.well-known/nexus-cloud').then(r=>r.json()).catch(()=>({})),
+  ]);
+  // Sidebar
+  if (identity.shortId) {
+    setEl('sid-short', '@user:' + esc(identity.shortId));
+    document.getElementById('sid-did').textContent = identity.did || '';
+  }
+  // Identity page
+  const fields = [
+    ['DID',        identity.did],
+    ['Short ID',   identity.shortId],
+    ['NS Address', identity.nsAddress || ('@user:' + (identity.shortId||'?'))],
+    ['Domain',     identity.domain],
+    ['Version',    identity.version],
+  ].filter(([,v]) => v);
+  const rows = fields.map(([k,v]) =>
+    `<span class="identity-key">${esc(k)}</span><span class="identity-val ${k==='DID'?'':'green'}">${esc(String(v))}</span>`
+  ).join('');
+  setEl('identity-grid', rows || '<span class="identity-key">—</span><span></span>');
+  setEl('discovery-doc', JSON.stringify(discovery, null, 2));
+}
+
+async function loadApiRoutes() {
+  const data = await fetch('/v1/architecture').then(r=>r.json()).catch(()=>({}));
+  const routes = data.routes || [];
+  if (!routes.length) { setEl('api-tbody','<tr><td colspan="3"><div class="empty">—</div></td></tr>'); return; }
+  const rows = routes.map(r => `
+    <tr>
+      <td><span class="method ${r.method}">${esc(r.method)}</span></td>
+      <td class="path-cell">${esc(r.path)}</td>
+      <td class="desc-cell">${esc(r.description)}</td>
+    </tr>`).join('');
+  setEl('api-tbody', rows);
+}
+
+async function loadAll() {
+  await Promise.allSettled([
+    loadStatus(),
+    loadTools(),
+    loadUsers(),
+    loadFederation(),
+    loadRoutes(),
+    loadIdentity(),
+    loadApiRoutes(),
+  ]);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+loadAll();
+setInterval(loadAll, 30000);
 </script>
 </body>
 </html>

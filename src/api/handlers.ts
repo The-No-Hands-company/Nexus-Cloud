@@ -114,6 +114,13 @@ async function readJson(request: Request): Promise<unknown | null> {
   }
 }
 
+function handleDashboard(): Response {
+  const html = Bun.file(new URL("../../public/status.html", import.meta.url));
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+  });
+}
+
 function handleHealth(): Response {
   const body: HealthResponse = {
     ok: true,
@@ -709,6 +716,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     if (authErr) return authErr;
   }
 
+  if (request.method === "GET" && (pathname === "/" || pathname === "/status")) return handleDashboard();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();
   if (request.method === "GET" && pathname === "/v1/architecture") return handleArchitecture();
