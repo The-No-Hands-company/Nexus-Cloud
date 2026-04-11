@@ -52,6 +52,8 @@ export const apiRouteManifest = [
   { method: "POST", path: "/api/v1/dns/bootstrap", description: "Bootstrap Cloudflare A records for the cloud domain" },
   { method: "POST", path: "/api/v1/deployments", description: "Request a managed Deploy deployment" },
   { method: "GET", path: "/api/v1/deployments/integration", description: "Inspect the Deploy backend integration" },
+  { method: "POST", path: "/api/v1/auth/login", description: "Authenticate with Cloud-level credentials and receive a portal session token" },
+  { method: "GET", path: "/api/v1/auth/me", description: "Validate a portal session token and return the authenticated user" },
 ] as const satisfies readonly ApiRoute[];
 
 export function getApiRoute(path: string): ApiRoute | null {

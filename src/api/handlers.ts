@@ -114,6 +114,61 @@ async function readJson(request: Request): Promise<unknown | null> {
   }
 }
 
+// ── Portal auth helpers ───────────────────────────────────────────────────────
+async function signToken(payload: Record<string, unknown>): Promise<string> {
+  const enc = new TextEncoder();
+  const secret = enc.encode(cloudConfig.apiKey || "nexus-cloud-dev-secret");
+  const data = enc.encode(JSON.stringify(payload));
+  const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, data);
+  return btoa(JSON.stringify(payload)) + "." + btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
+async function verifyToken(token: string): Promise<Record<string, unknown> | null> {
+  try {
+    const [payloadB64, sigB64] = token.split(".");
+    if (!payloadB64 || !sigB64) return null;
+    const enc = new TextEncoder();
+    const secret = enc.encode(cloudConfig.apiKey || "nexus-cloud-dev-secret");
+    const data = enc.encode(atob(payloadB64));
+    const sig = Uint8Array.from(atob(sigB64), (c) => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+    const valid = await crypto.subtle.verify("HMAC", key, sig, data);
+    if (!valid) return null;
+    const p = JSON.parse(atob(payloadB64)) as Record<string, unknown>;
+    if (typeof p.exp === "number" && p.exp < Math.floor(Date.now() / 1000)) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+async function handleAuthLogin(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (!body || typeof body !== "object") return badRequest("Missing credentials");
+  const { username, password } = body as { username?: string; password?: string };
+  const adminUser = process.env.CLOUD_ADMIN_USER || "admin";
+  const adminPass = process.env.CLOUD_ADMIN_PASSWORD || "";
+  if (!adminPass) {
+    return json({ error: "Portal auth not configured — set CLOUD_ADMIN_PASSWORD in .env" }, 503);
+  }
+  if (!username || !password || username !== adminUser || password !== adminPass) {
+    return json({ error: "Invalid credentials" }, 401);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const token = await signToken({ sub: username, role: "admin", iat: now, exp: now + 86400 * 7 });
+  return json({ token, user: { username, role: "admin" } });
+}
+
+async function handleAuthMe(request: Request): Promise<Response> {
+  const header = request.headers.get("authorization");
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return json({ error: "Unauthorized" }, 401);
+  const payload = await verifyToken(token);
+  if (!payload) return json({ error: "Invalid or expired token" }, 401);
+  return json({ user: payload });
+}
+
 function handleDashboard(): Response {
   const html = Bun.file(new URL("../../public/status.html", import.meta.url));
   return new Response(html, {
@@ -710,12 +765,14 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     });
   }
 
-  // Authenticate all mutating requests. /api/v1/deployments handles its own auth token.
-  if (["POST", "PATCH", "DELETE"].includes(request.method) && pathname !== "/api/v1/deployments") {
+  // Authenticate all mutating requests. /api/v1/deployments and /api/v1/auth/login handle their own auth.
+  if (["POST", "PATCH", "DELETE"].includes(request.method) && pathname !== "/api/v1/deployments" && pathname !== "/api/v1/auth/login") {
     const authErr = checkApiKey(request);
     if (authErr) return authErr;
   }
 
+  if (request.method === "POST" && pathname === "/api/v1/auth/login") return handleAuthLogin(request);
+  if (request.method === "GET" && pathname === "/api/v1/auth/me") return handleAuthMe(request);
   if (request.method === "GET" && (pathname === "/" || pathname === "/status")) return handleDashboard();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();

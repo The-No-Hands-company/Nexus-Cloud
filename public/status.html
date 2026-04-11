@@ -5,716 +5,937 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Nexus Cloud</title>
 <style>
+/* Reset & Base */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg:     #0b0b0d;
-  --bg2:    #111113;
-  --bg3:    #18181b;
-  --bg4:    #1f1f23;
-  --border: rgba(255,255,255,0.07);
-  --border2:rgba(255,255,255,0.12);
-  --text:   #e8e8ea;
-  --muted:  #666;
-  --muted2: #999;
-  --green:  #1aab78;
-  --green2: #0d6b4c;
-  --amber:  #c8831a;
-  --red:    #c0392b;
-  --blue:   #4a90d9;
-  --purple: #9b59b6;
-}
-html { scroll-behavior: smooth; }
+html, body { height: 100%; overflow: hidden; }
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
-  font-size: 13px;
-  line-height: 1.6;
-  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: #09090e; color: #e4e4f0; font-size: 14px; line-height: 1.5;
+}
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font: inherit; border: none; background: none; color: inherit; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+/* Variables */
+:root {
+  --bg: #09090e; --bg-layer: #0c0c14; --bg-card: #12121e;
+  --bg-hover: #18182a; --bg-active: #1e1e30;
+  --border: rgba(255,255,255,0.06); --border-md: rgba(255,255,255,0.10);
+  --text: #e4e4f0; --text-muted: #7878a0; --text-dim: #3d3d56;
+  --green: #22c55e; --green-dim: rgba(34,197,94,0.12);
+  --purple: #a78bfa; --purple-dim: rgba(167,139,250,0.12);
+  --blue: #60a5fa; --blue-dim: rgba(96,165,250,0.12);
+  --amber: #fbbf24; --amber-dim: rgba(251,191,36,0.12);
+  --red: #f87171; --red-dim: rgba(248,113,113,0.12);
+  --sidebar-w: 220px; --topbar-h: 52px; --radius: 8px; --radius-sm: 5px;
 }
 
-/* ── Layout ── */
-.shell { display: flex; min-height: 100vh; }
-.sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  background: var(--bg2);
+/* Login */
+#login-screen {
+  position: fixed; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  background: var(--bg); z-index: 100;
+}
+.login-bg-glow {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+}
+.login-bg-glow::before {
+  content: ""; position: absolute; width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,197,94,0.07) 0%, transparent 70%);
+  top: -200px; left: -100px;
+}
+.login-bg-glow::after {
+  content: ""; position: absolute; width: 500px; height: 500px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(96,165,250,0.05) 0%, transparent 70%);
+  bottom: -150px; right: -50px;
+}
+.login-card {
+  position: relative; width: 380px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-md);
+  border-radius: 14px; padding: 40px;
+}
+.login-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; }
+.login-logo-icon {
+  width: 36px; height: 36px; background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.25); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--green);
+}
+.login-logo-name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.login-logo-name span { color: var(--green); }
+.login-card h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
+.login-card > p { color: var(--text-muted); font-size: 13px; margin-bottom: 28px; }
+.form-field { margin-bottom: 14px; }
+.form-field label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--text-muted); margin-bottom: 6px;
+  letter-spacing: 0.02em; text-transform: uppercase;
+}
+.form-field input {
+  width: 100%; background: var(--bg-layer); border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm); color: var(--text);
+  font: inherit; font-size: 14px; padding: 9px 12px; outline: none;
+  transition: border-color 0.15s;
+}
+.form-field input:focus { border-color: rgba(34,197,94,0.4); }
+.form-field input::placeholder { color: var(--text-dim); }
+.btn-primary {
+  width: 100%; margin-top: 8px; background: var(--green); color: #071a0d;
+  font-weight: 600; font-size: 14px; padding: 10px; border-radius: var(--radius-sm);
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn-primary:hover { background: #16a34a; }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+#login-error {
+  margin-top: 14px; padding: 10px 12px;
+  background: var(--red-dim); border: 1px solid rgba(248,113,113,0.2);
+  border-radius: var(--radius-sm); color: var(--red); font-size: 13px; display: none;
+}
+
+/* App Shell */
+#app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+/* Sidebar */
+#sidebar {
+  width: var(--sidebar-w); background: var(--bg-layer);
   border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
+  display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
 }
-.main { flex: 1; overflow-x: hidden; }
-
-/* ── Sidebar ── */
-.sidebar-logo {
-  padding: 20px 18px 16px;
-  border-bottom: 1px solid var(--border);
+.sidebar-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border); }
+.sidebar-brand { display: flex; align-items: center; gap: 9px; }
+.sidebar-brand-icon {
+  width: 28px; height: 28px; background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.2); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--green); flex-shrink: 0;
 }
-.sidebar-logo .wordmark {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--green);
-  letter-spacing: -0.3px;
+.sidebar-brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.sidebar-brand-badge {
+  font-size: 9px; font-weight: 700; background: var(--green-dim);
+  color: var(--green); border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 3px; padding: 1px 4px; letter-spacing: 0.05em;
+  text-transform: uppercase; margin-left: auto;
 }
-.sidebar-logo .tagline {
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 2px;
-}
-.nav { padding: 10px 0; flex: 1; }
-.nav-section {
-  padding: 14px 18px 4px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
-  color: var(--muted);
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0; }
+.nav-section { padding: 0 10px; margin-bottom: 2px; }
+.nav-divider {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-dim); padding: 10px 18px 4px;
 }
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 18px;
-  font-size: 13px;
-  color: var(--muted2);
-  cursor: pointer;
-  border-left: 2px solid transparent;
-  transition: color 0.15s, background 0.15s;
-  text-decoration: none;
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer;
+  color: var(--text-muted); transition: background 0.1s, color 0.1s; margin: 1px 0;
 }
-.nav-item:hover { color: var(--text); background: var(--bg3); }
-.nav-item.active { color: var(--text); border-left-color: var(--green); background: var(--bg3); }
-.nav-icon { width: 15px; text-align: center; font-style: normal; opacity: 0.7; }
-.sidebar-identity {
-  padding: 14px 18px;
-  border-top: 1px solid var(--border);
-  font-size: 10px;
-  color: var(--muted);
-  word-break: break-all;
+.nav-item:hover { background: var(--bg-hover); color: var(--text); }
+.nav-item.active { background: var(--bg-active); color: var(--text); }
+.nav-item.active .nav-ico { color: var(--green); }
+.nav-ico { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.nav-label { font-size: 13px; }
+.nav-close-btn {
+  margin-left: auto; font-size: 11px; color: var(--text-dim);
+  opacity: 0; padding: 2px 4px; border-radius: 3px;
+  transition: opacity 0.1s, background 0.1s;
 }
-.sidebar-identity .did-short {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--green);
-  margin-bottom: 3px;
+.nav-item:hover .nav-close-btn { opacity: 1; }
+.nav-close-btn:hover { background: var(--bg-hover); color: var(--text-muted); }
+.sidebar-footer { border-top: 1px solid var(--border); padding: 12px; }
+.user-row { display: flex; align-items: center; gap: 9px; padding: 6px 4px; margin-bottom: 4px; }
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.3); display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 700;
+  color: var(--green); flex-shrink: 0;
+}
+.user-name { font-size: 13px; font-weight: 500; }
+.user-role { font-size: 11px; color: var(--text-muted); }
+.sign-out-btn {
+  width: 100%; background: var(--bg-hover); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-muted); font-size: 12px; padding: 7px;
+  transition: background 0.1s, color 0.1s;
+}
+.sign-out-btn:hover { background: var(--red-dim); border-color: rgba(248,113,113,0.2); color: var(--red); }
+
+/* Main */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+#topbar {
+  height: var(--topbar-h); background: var(--bg); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
+}
+.topbar-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); font-weight: 500; }
+.topbar-breadcrumb span { color: var(--text); }
+.topbar-sep { color: var(--text-dim); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.topbar-btn {
+  width: 30px; height: 30px; background: var(--bg-hover); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--text-muted); transition: background 0.1s, color 0.1s;
+}
+.topbar-btn:hover { background: var(--bg-active); color: var(--text); }
+.topbar-user-badge {
+  display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 5px;
+  background: var(--bg-hover); border: 1px solid var(--border); border-radius: 20px; font-size: 12px;
+}
+.topbar-avatar {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--green-dim);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: var(--green);
+}
+#content-area { flex: 1; overflow: hidden; position: relative; }
+
+/* Views */
+.view { position: absolute; inset: 0; overflow-y: auto; padding: 28px; display: none; }
+.view.active { display: block; }
+#view-app-frame { padding: 0; display: none; flex-direction: column; overflow: hidden; }
+#view-app-frame.active { display: flex; }
+
+/* Frame toolbar */
+#frame-toolbar {
+  height: 38px; background: var(--bg-layer); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 14px; gap: 10px; flex-shrink: 0;
+}
+.frame-app-name { font-size: 13px; font-weight: 500; flex: 1; }
+.frame-app-url {
+  font-size: 11px; color: var(--text-muted); font-family: monospace;
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.open-tab-btn {
+  font-size: 11px; color: var(--text-muted); background: var(--bg-hover);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 8px;
+  transition: color 0.1s, background 0.1s;
+}
+.open-tab-btn:hover { color: var(--text); background: var(--bg-active); }
+#app-iframe { flex: 1; border: none; background: #fff; }
+#frame-blocked { flex: 1; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--text-muted); }
+#frame-blocked .blocked-icon { font-size: 32px; color: var(--text-dim); }
+#frame-blocked p { font-size: 14px; }
+#frame-blocked a {
+  font-size: 13px; color: var(--blue); background: var(--blue-dim);
+  border: 1px solid rgba(96,165,250,0.2); border-radius: var(--radius-sm); padding: 7px 14px;
 }
 
-/* ── Top bar ── */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 28px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg2);
-  gap: 12px;
+/* Launcher */
+.launcher-hero { margin-bottom: 36px; }
+.launcher-hero h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.025em; margin-bottom: 4px; }
+.launcher-hero h2 .greet-name { color: var(--green); }
+.launcher-hero p { font-size: 14px; color: var(--text-muted); }
+.apps-section { margin-bottom: 36px; }
+.apps-section h3 {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 14px;
 }
-.topbar-title { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
-.topbar-right { display: flex; align-items: center; gap: 10px; }
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--bg4);
-  border: 1px solid var(--border2);
-  color: var(--muted2);
+.app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.app-tile {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
 }
-.badge.green { background: rgba(26,171,120,0.12); border-color: rgba(26,171,120,0.3); color: var(--green); }
-.badge.amber { background: rgba(200,131,26,0.12); border-color: rgba(200,131,26,0.3); color: var(--amber); }
-.badge.red   { background: rgba(192,57,43,0.12);  border-color: rgba(192,57,43,0.3);  color: var(--red); }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.refresh-btn {
-  padding: 5px 12px;
-  background: var(--bg4);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  color: var(--muted2);
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.15s;
+.app-tile:hover { border-color: var(--border-md); background: var(--bg-hover); transform: translateY(-1px); }
+.tile-icon {
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; margin-bottom: 12px;
 }
-.refresh-btn:hover { color: var(--text); border-color: var(--border2); background: var(--bg3); }
+.tile-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-desc {
+  font-size: 12px; color: var(--text-muted); margin-bottom: 10px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tile-footer { display: flex; align-items: center; gap: 6px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.status-dot.healthy { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+.status-dot.degraded { background: var(--amber); }
+.status-dot.offline  { background: var(--red); }
+.status-dot.unknown  { background: var(--text-dim); }
+.status-label { font-size: 11px; color: var(--text-muted); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+.empty-state .empty-icon { font-size: 28px; margin-bottom: 10px; }
+.empty-state p { color: var(--text-dim); margin-top: 4px; }
 
-/* ── Content sections ── */
-.page { display: none; padding: 28px; }
-.page.active { display: block; }
+/* View common */
+.view-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+.view-title-block h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 3px; }
+.view-title-block p { font-size: 13px; color: var(--text-muted); }
 
-/* ── Stat grid ── */
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-  margin-bottom: 28px;
-}
-.stat-card {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-.stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
-.stat-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }
-.stat-value.green { color: var(--green); }
-.stat-value.amber { color: var(--amber); }
-.stat-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+/* Stats */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.stat-val { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+.stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-sub { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
 
-/* ── Section headers ── */
-.section-hd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  margin-top: 28px;
-}
-.section-hd:first-child { margin-top: 0; }
-.section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted2); }
-
-/* ── Cards ── */
-.card {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
-.card-hd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  gap: 10px;
-}
+/* Card + table */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
+.card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
 .card-title { font-size: 13px; font-weight: 600; }
-.card-body { padding: 14px 16px; }
-.card-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.card-count { font-size: 11px; color: var(--text-muted); background: var(--bg-hover); border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; }
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); padding: 10px 18px; text-align: left; border-bottom: 1px solid var(--border); }
+td { padding: 12px 18px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr { transition: background 0.1s; }
+tr:hover td { background: var(--bg-hover); }
+.mono { font-family: "SF Mono", "Cascadia Code", monospace; font-size: 12px; }
+.cap-badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; margin-right: 4px; }
+.cap-chat    { background: var(--green-dim);  color: var(--green); }
+.cap-ai      { background: var(--purple-dim); color: var(--purple); }
+.cap-hosting { background: var(--blue-dim);   color: var(--blue); }
+.cap-default { background: var(--bg-hover);   color: var(--text-muted); }
+.open-app-btn { font-size: 11px; background: var(--bg-hover); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 10px; color: var(--text-muted); transition: background 0.1s, color 0.1s; }
+.open-app-btn:hover { background: var(--bg-active); color: var(--text); }
 
-/* ── Tool list ── */
-.tool-list { display: flex; flex-direction: column; gap: 8px; }
-.tool-row {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: start;
-}
-.tool-row:hover { border-color: var(--border2); }
-.tool-name { font-size: 13px; font-weight: 600; }
-.tool-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
-.tool-details { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.chip {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 500;
-  background: var(--bg4);
-  color: var(--muted2);
-  border: 1px solid var(--border);
-}
-.chip.green { background: rgba(26,171,120,0.1); color: var(--green); border-color: rgba(26,171,120,0.2); }
-.chip.amber { background: rgba(200,131,26,0.1);  color: var(--amber); border-color: rgba(200,131,26,0.2); }
-.chip.red   { background: rgba(192,57,43,0.1);   color: var(--red);   border-color: rgba(192,57,43,0.2); }
-.chip.blue  { background: rgba(74,144,217,0.1);  color: var(--blue);  border-color: rgba(74,144,217,0.2); }
-.tool-url { font-size: 10px; color: var(--blue); margin-top: 4px; word-break: break-all; }
-.tool-ts  { font-size: 10px; color: var(--muted); text-align: right; white-space: nowrap; }
+/* Identity */
+.identity-grid { display: grid; gap: 12px; margin-bottom: 20px; }
+.identity-field { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.identity-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 5px; }
+.identity-field .val { font-size: 13px; font-family: "SF Mono", "Cascadia Code", monospace; word-break: break-all; }
+.identity-field .address-val { font-size: 18px; font-weight: 600; font-family: inherit; color: var(--green); }
 
-/* ── Route table ── */
-.route-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.route-table th {
-  text-align: left;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--muted);
-  background: var(--bg2);
-}
-.route-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-.route-table tr:last-child td { border-bottom: none; }
-.route-table tr:hover td { background: var(--bg4); }
-.method { font-weight: 700; font-size: 10px; padding: 1px 6px; border-radius: 4px; display: inline-block; }
-.method.GET    { background: rgba(26,171,120,0.15); color: var(--green); }
-.method.POST   { background: rgba(74,144,217,0.15); color: var(--blue); }
-.method.PATCH  { background: rgba(200,131,26,0.15); color: var(--amber); }
-.method.DELETE { background: rgba(192,57,43,0.15);  color: var(--red); }
-.path-cell { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: var(--text); }
-.desc-cell { color: var(--muted2); }
+/* API routes */
+.route-group { margin-bottom: 24px; }
+.route-group h3 { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+.route-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 4px; }
+.method-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; min-width: 46px; text-align: center; flex-shrink: 0; }
+.method-GET    { background: var(--blue-dim);   color: var(--blue); }
+.method-POST   { background: var(--green-dim);  color: var(--green); }
+.method-PATCH  { background: var(--amber-dim);  color: var(--amber); }
+.method-DELETE { background: var(--red-dim);    color: var(--red); }
+.route-path { font-family: monospace; font-size: 12px; color: var(--text); flex: 1; }
+.route-desc { font-size: 12px; color: var(--text-muted); text-align: right; }
 
-/* ── User list ── */
-.user-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-.user-row:last-child { border-bottom: none; }
-.user-address { font-family: monospace; font-size: 12px; color: var(--green); }
-.user-ts { font-size: 10px; color: var(--muted); }
+/* Node card */
+.node-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+.node-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.node-icon { width: 40px; height: 40px; background: var(--green-dim); border: 1px solid rgba(34,197,94,0.2); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--green); }
+.node-name { font-size: 15px; font-weight: 600; }
+.node-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.node-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.node-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); display: block; margin-bottom: 3px; }
+.node-field .val { font-size: 12px; font-family: monospace; color: var(--text-muted); word-break: break-all; }
 
-/* ── Identity card ── */
-.identity-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 12px; }
-.identity-key { color: var(--muted); font-weight: 500; }
-.identity-val { font-family: monospace; color: var(--text); word-break: break-all; }
-.identity-val.green { color: var(--green); }
-
-/* ── Peer list ── */
-.peer-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-.peer-row:last-child { border-bottom: none; }
-
-/* ── Empty & loading states ── */
-.empty {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.loading { animation: pulse 1.4s ease-in-out infinite; }
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
-
-/* ── Responsive ── */
-@media (max-width: 640px) {
-  .sidebar { display: none; }
-  .topbar { padding: 12px 16px; }
-  .page { padding: 16px; }
-}
+/* Misc */
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border-md); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 40px auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-state { text-align: center; padding: 40px; color: var(--text-muted); }
+.error-state { padding: 16px; border-radius: var(--radius-sm); background: var(--red-dim); border: 1px solid rgba(248,113,113,0.15); color: var(--red); font-size: 13px; }
 </style>
 </head>
 <body>
-<div class="shell">
 
-  <!-- ── Sidebar ── -->
-  <nav class="sidebar">
-    <div class="sidebar-logo">
-      <div class="wordmark">Nexus Cloud</div>
-      <div class="tagline">Sovereign · Federated · Self-hosted</div>
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-bg-glow"></div>
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">&#x2B21;</div>
+      <div class="login-logo-name">Nexus <span>Cloud</span></div>
     </div>
-    <div class="nav">
-      <div class="nav-section">Overview</div>
-      <a class="nav-item active" data-page="overview" onclick="nav('overview')">
-        <i class="nav-icon">◈</i> Dashboard
-      </a>
-      <div class="nav-section">Registry</div>
-      <a class="nav-item" data-page="tools" onclick="nav('tools')">
-        <i class="nav-icon">⬡</i> Tools
-      </a>
-      <a class="nav-item" data-page="users" onclick="nav('users')">
-        <i class="nav-icon">◎</i> Users
-      </a>
-      <div class="nav-section">Network</div>
-      <a class="nav-item" data-page="federation" onclick="nav('federation')">
-        <i class="nav-icon">⬡</i> Federation
-      </a>
-      <a class="nav-item" data-page="routes" onclick="nav('routes')">
-        <i class="nav-icon">⇄</i> Routes
-      </a>
-      <div class="nav-section">System</div>
-      <a class="nav-item" data-page="identity" onclick="nav('identity')">
-        <i class="nav-icon">◉</i> Identity
-      </a>
-      <a class="nav-item" data-page="api" onclick="nav('api')">
-        <i class="nav-icon">≡</i> API Reference
-      </a>
-    </div>
-    <div class="sidebar-identity">
-      <div class="did-short" id="sid-short">—</div>
-      <div id="sid-did" style="word-break:break-all">loading…</div>
-    </div>
-  </nav>
+    <h1>Welcome back</h1>
+    <p>Sign in to your Nexus Cloud workspace</p>
+    <form id="login-form">
+      <div class="form-field">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" placeholder="admin" autocomplete="username" autofocus />
+      </div>
+      <div class="form-field">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary" id="login-btn">Sign in</button>
+    </form>
+    <div id="login-error"></div>
+  </div>
+</div>
 
-  <!-- ── Main ── -->
-  <div class="main">
+<!-- APP SHELL -->
+<div id="app-shell" style="display:none">
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">&#x2B21;</div>
+        <div class="sidebar-brand-name">Nexus Cloud</div>
+        <div class="sidebar-brand-badge">Alpha</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-item active" id="nav-launcher" onclick="navigate('launcher')">
+          <span class="nav-ico">&#x229E;</span>
+          <span class="nav-label">Launcher</span>
+        </div>
+      </div>
+      <div id="open-apps-nav" style="display:none">
+        <div class="nav-divider">Open Apps</div>
+        <div class="nav-section" id="open-apps-list"></div>
+      </div>
+      <div class="nav-divider">Cloud</div>
+      <div class="nav-section">
+        <div class="nav-item" id="nav-dashboard" onclick="navigate('dashboard')">
+          <span class="nav-ico">&#x25C8;</span><span class="nav-label">Dashboard</span>
+        </div>
+        <div class="nav-item" id="nav-tools" onclick="navigate('tools')">
+          <span class="nav-ico">&#x2699;</span><span class="nav-label">Tools</span>
+        </div>
+        <div class="nav-item" id="nav-users" onclick="navigate('users')">
+          <span class="nav-ico">&#x25C9;</span><span class="nav-label">Users</span>
+        </div>
+        <div class="nav-item" id="nav-federation" onclick="navigate('federation')">
+          <span class="nav-ico">&#x2B21;</span><span class="nav-label">Federation</span>
+        </div>
+        <div class="nav-item" id="nav-identity" onclick="navigate('identity')">
+          <span class="nav-ico">&#x25C7;</span><span class="nav-label">Identity</span>
+        </div>
+        <div class="nav-item" id="nav-api" onclick="navigate('api')">
+          <span class="nav-ico">&#x2263;</span><span class="nav-label">API</span>
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row">
+        <div class="user-avatar" id="sidebar-avatar">A</div>
+        <div>
+          <div class="user-name" id="sidebar-username">admin</div>
+          <div class="user-role">Cloud Admin</div>
+        </div>
+      </div>
+      <button class="sign-out-btn" onclick="logout()">Sign out</button>
+    </div>
+  </aside>
 
-    <!-- Top bar -->
-    <div class="topbar">
-      <span class="topbar-title" id="topbar-title">Dashboard</span>
+  <!-- Main -->
+  <div id="main">
+    <header id="topbar">
+      <div class="topbar-breadcrumb">
+        <span>Nexus Cloud</span>
+        <span class="topbar-sep">/</span>
+        <span id="topbar-view-name">Launcher</span>
+      </div>
       <div class="topbar-right">
-        <span class="badge green" id="tb-status"><span class="dot"></span> Online</span>
-        <span class="badge" id="tb-tools">0 tools</span>
-        <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+        <button class="topbar-btn" title="Notifications">&#x1F514;</button>
+        <div class="topbar-user-badge">
+          <div class="topbar-avatar" id="topbar-avatar">A</div>
+          <span id="topbar-username">admin</span>
+        </div>
       </div>
-    </div>
+    </header>
 
-    <!-- ── PAGE: Overview ── -->
-    <div class="page active" id="page-overview">
-      <div class="stat-grid">
-        <div class="stat-card">
-          <div class="stat-label">Node status</div>
-          <div class="stat-value green" id="ov-status">Online</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Registered tools</div>
-          <div class="stat-value" id="ov-tools">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Healthy tools</div>
-          <div class="stat-value" id="ov-healthy">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Exposed tools</div>
-          <div class="stat-value" id="ov-exposed">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Federation peers</div>
-          <div class="stat-value" id="ov-peers">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Addresses issued</div>
-          <div class="stat-value" id="ov-addresses">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Active domains</div>
-          <div class="stat-value" id="ov-domains">—</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Registered users</div>
-          <div class="stat-value" id="ov-users">—</div>
-        </div>
-      </div>
+    <div id="content-area">
 
-      <div class="section-hd"><span class="section-title">Registered Tools</span></div>
-      <div class="tool-list" id="ov-tool-list">
-        <div class="empty loading">Loading tools…</div>
-      </div>
-    </div>
-
-    <!-- ── PAGE: Tools ── -->
-    <div class="page" id="page-tools">
-      <div class="section-hd"><span class="section-title">All Tools</span></div>
-      <div class="tool-list" id="tools-list">
-        <div class="empty loading">Loading…</div>
-      </div>
-    </div>
-
-    <!-- ── PAGE: Users ── -->
-    <div class="page" id="page-users">
-      <div class="stat-grid" style="margin-bottom:20px">
-        <div class="stat-card">
-          <div class="stat-label">Registered users</div>
-          <div class="stat-value" id="users-count">—</div>
-          <div class="stat-sub">@user:shortId addresses</div>
+      <!-- Launcher -->
+      <div id="view-launcher" class="view active">
+        <div class="launcher-hero">
+          <h2>Good <span id="greeting-time">morning</span>, <span class="greet-name" id="greeting-name">Admin</span></h2>
+          <p>Your Nexus Cloud workspace</p>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-hd"><span class="card-title">User Address Registry</span></div>
-        <div id="users-body"><div class="empty loading">Loading…</div></div>
-      </div>
-    </div>
-
-    <!-- ── PAGE: Federation ── -->
-    <div class="page" id="page-federation">
-      <div class="section-hd"><span class="section-title">Known Peers</span></div>
-      <div class="card">
-        <div id="fed-peers-body"><div class="empty loading">Loading…</div></div>
-      </div>
-      <div class="section-hd" style="margin-top:24px"><span class="section-title">This Node's Gossip Announcement</span></div>
-      <div class="card">
-        <div class="card-body">
-          <div class="identity-grid" id="fed-announcement">
-            <span class="identity-key loading">loading…</span><span></span>
+        <div class="apps-section">
+          <h3>Registered Tools</h3>
+          <div class="app-grid" id="tools-grid"><div class="loading-state"><div class="spinner"></div></div></div>
+        </div>
+        <div class="apps-section">
+          <h3>Cloud Services</h3>
+          <div class="app-grid">
+            <div class="app-tile" onclick="navigate('dashboard')">
+              <div class="tile-icon" style="background:rgba(34,197,94,0.1);color:var(--green)">&#x25C8;</div>
+              <div class="tile-name">Dashboard</div>
+              <div class="tile-desc">Node status, health metrics, and cloud summary</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('tools')">
+              <div class="tile-icon" style="background:rgba(96,165,250,0.1);color:var(--blue)">&#x2699;</div>
+              <div class="tile-name">Tools</div>
+              <div class="tile-desc">Manage registered tools and their upstreams</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('users')">
+              <div class="tile-icon" style="background:rgba(167,139,250,0.1);color:var(--purple)">&#x25C9;</div>
+              <div class="tile-name">Users</div>
+              <div class="tile-desc">NS address registry and user management</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('federation')">
+              <div class="tile-icon" style="background:rgba(251,191,36,0.1);color:var(--amber)">&#x2B21;</div>
+              <div class="tile-name">Federation</div>
+              <div class="tile-desc">Peer nodes and inter-cloud gossip discovery</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('identity')">
+              <div class="tile-icon" style="background:rgba(34,197,94,0.1);color:var(--green)">&#x25C7;</div>
+              <div class="tile-name">Identity</div>
+              <div class="tile-desc">This node's permanent DID and NS address</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('api')">
+              <div class="tile-icon" style="background:rgba(96,165,250,0.1);color:var(--blue)">&#x2263;</div>
+              <div class="tile-name">API Docs</div>
+              <div class="tile-desc">Full route manifest for the Nexus Cloud API</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ── PAGE: Routes ── -->
-    <div class="page" id="page-routes">
-      <div class="section-hd"><span class="section-title">Live Proxy Routing Table</span></div>
-      <div class="card">
-        <div id="routes-body"><div class="empty loading">Loading…</div></div>
+      <!-- Dashboard -->
+      <div id="view-dashboard" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Dashboard</h1><p>Node health and cloud summary</p></div>
+        </div>
+        <div id="dashboard-content"><div class="loading-state"><div class="spinner"></div></div></div>
       </div>
-    </div>
 
-    <!-- ── PAGE: Identity ── -->
-    <div class="page" id="page-identity">
-      <div class="section-hd"><span class="section-title">Node Identity</span></div>
-      <div class="card">
-        <div class="card-body">
-          <div class="identity-grid" id="identity-grid">
-            <span class="identity-key loading">loading…</span><span></span>
-          </div>
+      <!-- Tools -->
+      <div id="view-tools" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Tools</h1><p>Registered tools and upstream configuration</p></div>
+        </div>
+        <div id="tools-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Users -->
+      <div id="view-users" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Users</h1><p>NS address registry &mdash; @username:nodeShortId</p></div>
+        </div>
+        <div id="users-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Federation -->
+      <div id="view-federation" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Federation</h1><p>Known peer nodes and gossip discovery</p></div>
+        </div>
+        <div id="federation-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Identity -->
+      <div id="view-identity" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Identity</h1><p>This node's permanent decentralised identity</p></div>
+        </div>
+        <div id="identity-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- API -->
+      <div id="view-api" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>API Reference</h1><p>All Nexus Cloud API endpoints</p></div>
+        </div>
+        <div id="api-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- App frame -->
+      <div id="view-app-frame" class="view">
+        <div id="frame-toolbar">
+          <span class="frame-app-name" id="frame-name">App</span>
+          <span class="frame-app-url" id="frame-url"></span>
+          <a class="open-tab-btn" id="frame-new-tab" href="#" target="_blank" rel="noopener">Open in new tab &#x2197;</a>
+        </div>
+        <iframe id="app-iframe" src="about:blank" allow="fullscreen"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"></iframe>
+        <div id="frame-blocked">
+          <div class="blocked-icon">&#x2298;</div>
+          <p>This app cannot be displayed in an embedded frame.</p>
+          <a id="frame-blocked-link" href="#" target="_blank" rel="noopener">Open in new tab &#x2197;</a>
         </div>
       </div>
-      <div class="section-hd" style="margin-top:24px"><span class="section-title">Discovery Document</span></div>
-      <div class="card">
-        <div class="card-body">
-          <pre id="discovery-doc" style="font-size:11px;color:var(--muted2);white-space:pre-wrap;word-break:break-all" class="loading">loading…</pre>
-        </div>
-      </div>
-    </div>
 
-    <!-- ── PAGE: API Reference ── -->
-    <div class="page" id="page-api">
-      <div class="section-hd"><span class="section-title">All API Endpoints</span></div>
-      <div class="card">
-        <table class="route-table" id="api-table">
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>Path</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody id="api-tbody">
-            <tr><td colspan="3"><div class="empty loading">Loading…</div></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
+    </div><!-- /content-area -->
   </div><!-- /main -->
-</div><!-- /shell -->
+</div><!-- /app-shell -->
 
 <script>
 'use strict';
-// ── Navigation ─────────────────────────────────────────────────────────────
-const PAGES = {
-  overview:   'Dashboard',
-  tools:      'Tools',
-  users:      'Users',
-  federation: 'Federation',
-  routes:     'Routes',
-  identity:   'Identity',
-  api:        'API Reference',
+
+// State
+var currentUser = null;
+var currentToken = null;
+var currentView = 'launcher';
+var openApps = new Map();
+var loadedViews = new Set(['launcher']);
+
+// Auth
+async function checkAuth() {
+  var token = localStorage.getItem('nc_token');
+  if (!token) { showLogin(); return; }
+  try {
+    var res = await fetch('/api/v1/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!res.ok) { localStorage.removeItem('nc_token'); showLogin(); return; }
+    var data = await res.json();
+    currentToken = token;
+    currentUser = data.user;
+    showShell();
+  } catch { showLogin(); }
+}
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-shell').style.display = 'none';
+}
+
+function showShell() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').removeAttribute('style');
+  var name = (currentUser && currentUser.sub) ? currentUser.sub : 'Admin';
+  var initial = name[0].toUpperCase();
+  document.getElementById('sidebar-avatar').textContent = initial;
+  document.getElementById('topbar-avatar').textContent = initial;
+  document.getElementById('sidebar-username').textContent = name;
+  document.getElementById('topbar-username').textContent = name;
+  document.getElementById('greeting-name').textContent = name[0].toUpperCase() + name.slice(1);
+  updateGreeting();
+  loadLauncher();
+}
+
+function logout() {
+  localStorage.removeItem('nc_token');
+  currentToken = null; currentUser = null;
+  loadedViews.clear(); loadedViews.add('launcher');
+  openApps.clear();
+  renderOpenApps();
+  showLogin();
+}
+
+// Login form
+document.getElementById('login-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('login-btn');
+  var errEl = document.getElementById('login-error');
+  var username = document.getElementById('login-username').value.trim();
+  var password = document.getElementById('login-password').value;
+  if (!username || !password) { showLoginError('Please enter username and password.'); return; }
+  btn.disabled = true; btn.textContent = 'Signing in\u2026';
+  errEl.style.display = 'none';
+  try {
+    var res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    });
+    var data = await res.json();
+    if (!res.ok) { showLoginError(data.error || 'Login failed.'); return; }
+    localStorage.setItem('nc_token', data.token);
+    currentToken = data.token;
+    currentUser = data.user;
+    showShell();
+  } catch { showLoginError('Network error \u2014 is Nexus Cloud running?'); }
+  finally { btn.disabled = false; btn.textContent = 'Sign in'; }
+});
+
+function showLoginError(msg) {
+  var el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// Navigation
+var VIEW_LABELS = {
+  launcher: 'Launcher', dashboard: 'Dashboard', tools: 'Tools',
+  users: 'Users', federation: 'Federation', identity: 'Identity', api: 'API'
 };
 
-function nav(page) {
-  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  document.querySelector('[data-page="' + page + '"]').classList.add('active');
-  document.getElementById('topbar-title').textContent = PAGES[page] || page;
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function fmtDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = now - d;
-  if (diff < 60000)  return Math.round(diff/1000) + 's ago';
-  if (diff < 3600000) return Math.round(diff/60000) + 'm ago';
-  if (diff < 86400000) return Math.round(diff/3600000) + 'h ago';
-  return d.toLocaleDateString();
-}
-
-function healthChip(h) {
-  if (h === 'healthy')  return '<span class="chip green">' + esc(h) + '</span>';
-  if (h === 'degraded') return '<span class="chip amber">' + esc(h) + '</span>';
-  if (h === 'offline')  return '<span class="chip red">'   + esc(h) + '</span>';
-  return '<span class="chip">' + esc(h || '?') + '</span>';
-}
-
-function toolCard(t) {
-  const caps = (t.capabilities || []).map(c => '<span class="chip">' + esc(c) + '</span>').join('');
-  const url  = t.upstreamUrl ? '<div class="tool-url">↗ ' + esc(t.upstreamUrl) + '</div>' : '';
-  const pubUrl = t.publicUrl ? '<div class="tool-url" style="color:var(--green)">⊕ ' + esc(t.publicUrl) + '</div>' : '';
-  return `
-    <div class="tool-row">
-      <div>
-        <div class="tool-name">${esc(t.name)} <span style="color:var(--muted);font-weight:400;font-size:11px">#${esc(t.id)}</span></div>
-        <div class="tool-desc">${esc(t.description || '')}</div>
-        <div class="tool-details">
-          ${healthChip(t.health)}
-          ${t.exposed ? '<span class="chip green">exposed</span>' : '<span class="chip">private</span>'}
-          ${t.mode ? '<span class="chip blue">' + esc(t.mode) + '</span>' : ''}
-          ${caps}
-        </div>
-        ${url}${pubUrl}
-      </div>
-      <div class="tool-ts">${fmtDate(t.registeredAt)}</div>
-    </div>`;
-}
-
-function setEl(id, html) {
-  const el = document.getElementById(id);
-  if (el) el.innerHTML = html;
-}
-
-// ── Data loaders ───────────────────────────────────────────────────────────
-async function loadStatus() {
-  const [legacy, status] = await Promise.all([
-    fetch('/api/status').then(r=>r.json()).catch(()=>({})),
-    fetch('/api/v1/status').then(r=>r.json()).catch(()=>({})),
-  ]);
-  // overview stats
-  setEl('ov-tools',     status.toolCount     ?? legacy.tools           ?? '0');
-  setEl('ov-healthy',   status.healthyToolCount ?? '—');
-  setEl('ov-exposed',   status.exposedToolCount ?? '—');
-  setEl('ov-peers',     legacy.federation_peers ?? '—');
-  setEl('ov-addresses', status.addressCount  ?? '—');
-  setEl('ov-domains',   status.verifiedDomainCount ?? '—');
-  document.getElementById('tb-tools').textContent = (status.toolCount ?? 0) + ' tools';
-}
-
-async function loadTools() {
-  const data = await fetch('/api/v1/tools').then(r=>r.json()).catch(()=>({}));
-  const tools = data.tools || data || [];
-  if (!Array.isArray(tools) || tools.length === 0) {
-    const msg = '<div class="empty">No tools registered yet. Start Nexus-Hosting or Nexus AI to see them appear here.</div>';
-    setEl('ov-tool-list', msg);
-    setEl('tools-list',   msg);
-    return;
-  }
-  const html = tools.map(toolCard).join('');
-  setEl('ov-tool-list', html);
-  setEl('tools-list',   html);
-  document.getElementById('tb-tools').textContent = tools.length + ' tool' + (tools.length !== 1 ? 's' : '');
-  setEl('ov-tools', tools.length);
-}
-
-async function loadUsers() {
-  const data = await fetch('/api/v1/users').then(r=>r.json()).catch(()=>({}));
-  const users = data.users || data || [];
-  setEl('ov-users', Array.isArray(users) ? users.length : '—');
-  setEl('users-count', Array.isArray(users) ? users.length : '—');
-  if (!Array.isArray(users) || users.length === 0) {
-    setEl('users-body', '<div class="empty">No users registered. POST /api/v1/users to register an address.</div>');
-    return;
-  }
-  const rows = users.map(u => `
-    <div class="user-row">
-      <div>
-        <div class="user-address">${esc(u.address || '@' + u.username + ':?')}</div>
-        <div style="font-size:11px;color:var(--muted)">${esc(u.username)}</div>
-      </div>
-      <div class="user-ts">${fmtDate(u.registeredAt)}</div>
-    </div>`).join('');
-  setEl('users-body', rows);
-}
-
-async function loadFederation() {
-  const [peers, ann] = await Promise.all([
-    fetch('/v1/federation/peers').then(r=>r.json()).catch(()=>({})),
-    fetch('/v1/federation/announcement').then(r=>r.json()).catch(()=>({})),
-  ]);
-  const peerList = peers.peers || [];
-  setEl('ov-peers', peerList.length);
-  if (peerList.length === 0) {
-    setEl('fed-peers-body', '<div class="empty">No peers known yet. Set BOOTSTRAP_PEERS in .env to connect to other nodes.</div>');
+function navigate(viewId, meta) {
+  meta = meta || {};
+  document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('.view').forEach(function(el) { el.classList.remove('active'); });
+  currentView = viewId;
+  if (viewId === 'app-frame' && meta.appId) {
+    var navEl = document.getElementById('nav-app-' + meta.appId);
+    if (navEl) navEl.classList.add('active');
   } else {
-    const rows = peerList.map(p => `
-      <div class="peer-row">
-        <div>
-          <div style="font-weight:600;font-size:12px">${esc(p.domain || p.url || p.did || JSON.stringify(p))}</div>
-          ${p.trust ? '<div style="font-size:10px;color:var(--muted)">trust: ' + esc(p.trust) + '</div>' : ''}
-        </div>
-        <span class="chip green">connected</span>
-      </div>`).join('');
-    setEl('fed-peers-body', rows);
+    var navEl2 = document.getElementById('nav-' + viewId);
+    if (navEl2) navEl2.classList.add('active');
   }
-  // Announcement
-  if (ann && Object.keys(ann).length) {
-    const rows = Object.entries(ann).map(([k,v]) =>
-      `<span class="identity-key">${esc(k)}</span><span class="identity-val">${esc(String(v))}</span>`
-    ).join('');
-    setEl('fed-announcement', rows);
+  var viewEl = document.getElementById('view-' + (viewId === 'app-frame' ? 'app-frame' : viewId));
+  if (viewEl) viewEl.classList.add('active');
+  var label = viewId === 'app-frame' ? (meta.name || 'App') : (VIEW_LABELS[viewId] || viewId);
+  document.getElementById('topbar-view-name').textContent = label;
+  if (viewId === 'app-frame' && meta.url) {
+    openAppFrame(meta);
+  } else if (!loadedViews.has(viewId)) {
+    loadedViews.add(viewId);
+    loadView(viewId);
   }
 }
 
-async function loadRoutes() {
-  const data = await fetch('/api/v1/routes').then(r=>r.json()).catch(()=>({}));
-  const routes = data.routes || data || [];
-  if (!Array.isArray(routes) || routes.length === 0) {
-    setEl('routes-body', '<div class="empty">No proxy routes active yet. Routes appear when tools are registered and exposed.</div>');
+function loadView(viewId) {
+  if (viewId === 'dashboard') loadDashboard();
+  else if (viewId === 'tools') loadToolsView();
+  else if (viewId === 'users') loadUsersView();
+  else if (viewId === 'federation') loadFederationView();
+  else if (viewId === 'identity') loadIdentityView();
+  else if (viewId === 'api') loadApiView();
+}
+
+// App frame
+function openTool(tool) {
+  if (!tool.upstreamUrl) { navigate('tools'); return; }
+  var meta = capMeta(tool.capabilities);
+  openApps.set(tool.id, { id: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
+  renderOpenApps();
+  navigate('app-frame', { appId: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
+}
+
+function openAppFrame(meta) {
+  var iframe = document.getElementById('app-iframe');
+  var blocked = document.getElementById('frame-blocked');
+  var newTab = document.getElementById('frame-new-tab');
+  var blockedLink = document.getElementById('frame-blocked-link');
+  document.getElementById('frame-name').textContent = meta.name || 'App';
+  document.getElementById('frame-url').textContent = meta.url;
+  newTab.href = meta.url; blockedLink.href = meta.url;
+  blocked.style.display = 'none'; iframe.style.display = '';
+  iframe.src = meta.url;
+  iframe.onload = function() {
+    try {
+      var doc = iframe.contentDocument;
+      if (doc && doc.body && doc.body.innerHTML === '') showFrameBlocked();
+    } catch (ex) { /* cross-origin: assume fine */ }
+  };
+}
+
+function showFrameBlocked() {
+  document.getElementById('app-iframe').style.display = 'none';
+  document.getElementById('frame-blocked').style.display = 'flex';
+}
+
+function renderOpenApps() {
+  var container = document.getElementById('open-apps-list');
+  var section = document.getElementById('open-apps-nav');
+  if (openApps.size === 0) { section.style.display = 'none'; return; }
+  section.removeAttribute('style');
+  container.innerHTML = '';
+  openApps.forEach(function(app, id) {
+    var el = document.createElement('div');
+    el.className = 'nav-item'; el.id = 'nav-app-' + id;
+    el.innerHTML = '<span class="nav-ico">' + esc(app.icon) + '</span>' +
+      '<span class="nav-label">' + esc(app.name) + '</span>' +
+      '<button class="nav-close-btn" title="Close" onclick="closeApp(\'' + esc(id) + '\',event)">&#x2715;</button>';
+    el.addEventListener('click', (function(a){ return function(){ navigate('app-frame', a); }; })(app));
+    container.appendChild(el);
+  });
+}
+
+function closeApp(id, e) {
+  e.stopPropagation();
+  openApps.delete(id);
+  renderOpenApps();
+  if (currentView === 'app-frame') navigate('launcher');
+}
+
+// Launcher
+async function loadLauncher() {
+  try {
+    var res = await fetch('/api/v1/tools');
+    var data = await res.json();
+    var tools = data.tools || data;
+    renderToolsGrid(Array.isArray(tools) ? tools : []);
+  } catch {
+    document.getElementById('tools-grid').innerHTML = '<div class="empty-state">' +
+      '<div class="empty-icon">&#x2699;</div><p>No tools registered yet.</p>' +
+      '<p>Start Nexus-Hosting, Nexus AI, or Nexus Chat to see them here.</p></div>';
+  }
+}
+
+function renderToolsGrid(tools) {
+  var grid = document.getElementById('tools-grid');
+  if (!tools.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2699;</div>' +
+      '<p>No tools registered yet.</p><p>Start your NS services to see them here.</p></div>';
     return;
   }
-  const rows = routes.map(r => `
-    <div class="user-row">
-      <div>
-        <div style="font-family:monospace;font-size:12px">${esc(r.domain || r.host || '?')}</div>
-        <div class="tool-url">→ ${esc(r.upstream || r.upstreamUrl || '?')}</div>
-      </div>
-      <span class="chip ${r.status === 'active' ? 'green' : ''}">${esc(r.status || 'active')}</span>
-    </div>`).join('');
-  setEl('routes-body', rows);
+  grid.innerHTML = '';
+  tools.forEach(function(tool) {
+    var meta = capMeta(tool.capabilities);
+    var statusCls = tool.status === 'healthy' ? 'healthy' : tool.status === 'degraded' ? 'degraded' : 'offline';
+    var tile = document.createElement('div');
+    tile.className = 'app-tile';
+    tile.innerHTML = '<div class="tile-icon" style="background:' + meta.bg + ';color:' + meta.color + '">' + meta.icon + '</div>' +
+      '<div class="tile-name">' + esc(tool.name) + '</div>' +
+      '<div class="tile-desc">' + esc(tool.description || meta.label) + '</div>' +
+      '<div class="tile-footer"><span class="status-dot ' + statusCls + '"></span>' +
+      '<span class="status-label">' + esc(tool.status || 'unknown') + '</span>' +
+      (tool.upstreamUrl ? '<span style="margin-left:auto;font-size:11px;color:var(--text-dim)">&#x2197;</span>' : '') + '</div>';
+    tile.addEventListener('click', (function(t){ return function(){ openTool(t); }; })(tool));
+    grid.appendChild(tile);
+  });
 }
 
-async function loadIdentity() {
-  const [identity, discovery] = await Promise.all([
-    fetch('/v1/federation/identity').then(r=>r.json()).catch(()=>({})),
-    fetch('/.well-known/nexus-cloud').then(r=>r.json()).catch(()=>({})),
-  ]);
-  // Sidebar
-  if (identity.shortId) {
-    setEl('sid-short', '@user:' + esc(identity.shortId));
-    document.getElementById('sid-did').textContent = identity.did || '';
-  }
-  // Identity page
-  const fields = [
-    ['DID',        identity.did],
-    ['Short ID',   identity.shortId],
-    ['NS Address', identity.nsAddress || ('@user:' + (identity.shortId||'?'))],
-    ['Domain',     identity.domain],
-    ['Version',    identity.version],
-  ].filter(([,v]) => v);
-  const rows = fields.map(([k,v]) =>
-    `<span class="identity-key">${esc(k)}</span><span class="identity-val ${k==='DID'?'':'green'}">${esc(String(v))}</span>`
-  ).join('');
-  setEl('identity-grid', rows || '<span class="identity-key">—</span><span></span>');
-  setEl('discovery-doc', JSON.stringify(discovery, null, 2));
+// Dashboard
+async function loadDashboard() {
+  var el = document.getElementById('dashboard-content');
+  try {
+    var [sr, ir] = await Promise.all([fetch('/api/v1/status'), fetch('/v1/federation/identity')]);
+    var status = await sr.json();
+    var identity = await ir.json();
+    var tools = status.tools || {}; var users = status.users || {}; var peers = status.peers || {};
+    var node = status.node || {};
+    el.innerHTML = '<div class="stats-row">' +
+      '<div class="stat-card"><div class="stat-val">' + (tools.healthy != null ? tools.healthy : tools.total || 0) + '</div><div class="stat-label">Healthy Tools</div><div class="stat-sub">' + (tools.total || 0) + ' registered</div></div>' +
+      '<div class="stat-card"><div class="stat-val">' + (users.total || 0) + '</div><div class="stat-label">Users</div><div class="stat-sub">on this node</div></div>' +
+      '<div class="stat-card"><div class="stat-val">' + (peers.total || peers.known || 0) + '</div><div class="stat-label">Peers</div><div class="stat-sub">federation nodes</div></div>' +
+      '</div>' +
+      '<div class="node-card"><div class="node-header"><div class="node-icon">&#x2B21;</div><div>' +
+      '<div class="node-name">' + esc(identity.address || node.id || 'Nexus Node') + '</div>' +
+      '<div class="node-meta">' + esc(identity.shortId || node.shortId || '') + '</div></div></div>' +
+      '<div class="node-fields">' +
+      '<div class="node-field"><label>DID</label><div class="val">' + esc(identity.did || node.did || '\u2014') + '</div></div>' +
+      '<div class="node-field"><label>Short ID</label><div class="val">' + esc(identity.shortId || node.shortId || '\u2014') + '</div></div>' +
+      '<div class="node-field"><label>NS Address</label><div class="val">' + esc(identity.address || '\u2014') + '</div></div>' +
+      '</div></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load dashboard: ' + esc(String(err)) + '</div>'; }
 }
 
-async function loadApiRoutes() {
-  const data = await fetch('/v1/architecture').then(r=>r.json()).catch(()=>({}));
-  const routes = data.routes || [];
-  if (!routes.length) { setEl('api-tbody','<tr><td colspan="3"><div class="empty">—</div></td></tr>'); return; }
-  const rows = routes.map(r => `
-    <tr>
-      <td><span class="method ${r.method}">${esc(r.method)}</span></td>
-      <td class="path-cell">${esc(r.path)}</td>
-      <td class="desc-cell">${esc(r.description)}</td>
-    </tr>`).join('');
-  setEl('api-tbody', rows);
+// Tools view
+async function loadToolsView() {
+  var el = document.getElementById('tools-content');
+  try {
+    var res = await fetch('/api/v1/tools');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var tools = data.tools || data;
+    if (!Array.isArray(tools) || !tools.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2699;</div><p>No tools registered.</p></div>'; return;
+    }
+    var rows = tools.map(function(t) {
+      var caps = (t.capabilities || []).map(function(c){ return '<span class="cap-badge cap-' + esc(c) + '">' + esc(c) + '</span>'; }).join('');
+      var sd = t.status === 'healthy' ? 'healthy' : t.status === 'degraded' ? 'degraded' : 'offline';
+      return '<tr><td><strong>' + esc(t.name) + '</strong></td>' +
+        '<td>' + (caps || '<span class="cap-badge cap-default">none</span>') + '</td>' +
+        '<td><span class="status-dot ' + sd + '" style="margin-right:6px"></span>' + esc(t.status || 'unknown') + '</td>' +
+        '<td class="mono">' + (t.upstreamUrl ? esc(t.upstreamUrl) : '\u2014') + '</td>' +
+        '<td>' + (t.heartbeatAt ? timeAgo(t.heartbeatAt) : '\u2014') + '</td>' +
+        '<td>' + (t.upstreamUrl ? '<button class="open-app-btn" onclick=\'openTool(' + JSON.stringify(t).replace(/'/g,"&#39;") + ')\'>Open &#x2197;</button>' : '') + '</td></tr>';
+    }).join('');
+    el.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Registered Tools</span><span class="card-count">' + tools.length + '</span></div>' +
+      '<table><thead><tr><th>Name</th><th>Capabilities</th><th>Status</th><th>Upstream URL</th><th>Last Seen</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load tools: ' + esc(String(err)) + '</div>'; }
 }
 
-async function loadAll() {
-  await Promise.allSettled([
-    loadStatus(),
-    loadTools(),
-    loadUsers(),
-    loadFederation(),
-    loadRoutes(),
-    loadIdentity(),
-    loadApiRoutes(),
-  ]);
+// Users view
+async function loadUsersView() {
+  var el = document.getElementById('users-content');
+  try {
+    var res = await fetch('/api/v1/users');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var users = data.users || data;
+    if (!Array.isArray(users) || !users.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x25C9;</div><p>No users registered yet.</p></div>'; return;
+    }
+    var rows = users.map(function(u) {
+      return '<tr><td><strong>' + esc(u.username) + '</strong></td>' +
+        '<td class="mono" style="color:var(--green)">' + esc(u.address) + '</td>' +
+        '<td class="mono">' + esc(u.nodeId || '\u2014') + '</td>' +
+        '<td>' + (u.registeredAt ? new Date(u.registeredAt).toLocaleString() : '\u2014') + '</td></tr>';
+    }).join('');
+    el.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Users on this node</span><span class="card-count">' + users.length + '</span></div>' +
+      '<table><thead><tr><th>Username</th><th>NS Address</th><th>Node ID</th><th>Registered</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load users: ' + esc(String(err)) + '</div>'; }
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────
-loadAll();
-setInterval(loadAll, 30000);
+// Federation view
+async function loadFederationView() {
+  var el = document.getElementById('federation-content');
+  try {
+    var res = await fetch('/v1/federation/peers');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var peers = data.peers || data;
+    if (!Array.isArray(peers) || !peers.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2B21;</div><p>No federation peers discovered yet.</p>' +
+        '<p>Add BOOTSTRAP_PEERS to your .env to connect to other Nexus nodes.</p></div>'; return;
+    }
+    var rows = peers.map(function(p) {
+      return '<tr><td class="mono">' + esc(p.domain || p.url || '\u2014') + '</td>' +
+        '<td>' + esc(p.trustLevel || p.trust || '\u2014') + '</td>' +
+        '<td>' + (p.lastSeen ? timeAgo(p.lastSeen) : '\u2014') + '</td>' +
+        '<td class="mono">' + esc(p.address || p.nodeAddress || '\u2014') + '</td></tr>';
+    }).join('');
+    el.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Known Peers</span><span class="card-count">' + peers.length + '</span></div>' +
+      '<table><thead><tr><th>Domain</th><th>Trust</th><th>Last Seen</th><th>Address</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load federation: ' + esc(String(err)) + '</div>'; }
+}
+
+// Identity view
+async function loadIdentityView() {
+  var el = document.getElementById('identity-content');
+  try {
+    var res = await fetch('/v1/federation/identity');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var d = await res.json();
+    el.innerHTML = '<div class="identity-grid">' +
+      '<div class="identity-field"><label>NS Address</label><div class="val address-val">' + esc(d.address || '\u2014') + '</div></div>' +
+      '<div class="identity-field"><label>Short ID</label><div class="val">' + esc(d.shortId || '\u2014') + '</div></div>' +
+      '<div class="identity-field"><label>Decentralized Identifier (DID)</label><div class="val">' + esc(d.did || '\u2014') + '</div></div>' +
+      (d.publicKey ? '<div class="identity-field"><label>Public Key</label><div class="val">' + esc(d.publicKey) + '</div></div>' : '') +
+      '</div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load identity: ' + esc(String(err)) + '</div>'; }
+}
+
+// API view
+async function loadApiView() {
+  var el = document.getElementById('api-content');
+  try {
+    var res = await fetch('/api/v1/endpoints');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var routes = data.routes || data.endpoints || data;
+    if (!Array.isArray(routes)) throw new Error('Unexpected response');
+    var groups = {};
+    routes.forEach(function(r) {
+      var parts = r.path.split('/').filter(Boolean);
+      var key = parts.length >= 3 && parts[0] !== 'v1' ? '/' + parts.slice(0,3).join('/') :
+               parts.length >= 2 ? '/' + parts.slice(0,2).join('/') : r.path;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+    var html = Object.keys(groups).map(function(g) {
+      var items = groups[g].map(function(r) {
+        return '<div class="route-item"><span class="method-badge method-' + esc(r.method) + '">' + esc(r.method) + '</span>' +
+          '<span class="route-path">' + esc(r.path) + '</span>' +
+          '<span class="route-desc">' + esc(r.description || '') + '</span></div>';
+      }).join('');
+      return '<div class="route-group"><h3>' + esc(g) + '</h3>' + items + '</div>';
+    }).join('');
+    el.innerHTML = html || '<div class="empty-state"><p>No routes found.</p></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load API routes: ' + esc(String(err)) + '</div>'; }
+}
+
+// Helpers
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function timeAgo(ts) {
+  var diff = Date.now() - new Date(ts).getTime();
+  if (diff < 60000) return Math.floor(diff/1000) + 's ago';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  return Math.floor(diff/86400000) + 'd ago';
+}
+
+function capMeta(capabilities) {
+  var c = (capabilities || [])[0];
+  var map = {
+    chat:      { icon: '&#x1F4AC;', color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Chat' },
+    ai:        { icon: '&#x2726;',  color: 'var(--purple)', bg: 'var(--purple-dim)', label: 'AI' },
+    hosting:   { icon: '&#x2601;',  color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Hosting' },
+    federation:{ icon: '&#x2B21;',  color: 'var(--amber)',  bg: 'var(--amber-dim)',  label: 'Federation' }
+  };
+  return map[c] || { icon: '&#x2699;', color: 'var(--text-muted)', bg: 'var(--bg-hover)', label: 'Tool' };
+}
+
+function updateGreeting() {
+  var h = new Date().getHours();
+  document.getElementById('greeting-time').textContent = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+}
+
+// Boot
+checkAuth();
 </script>
 </body>
 </html>
