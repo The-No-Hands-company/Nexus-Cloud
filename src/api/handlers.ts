@@ -7,6 +7,8 @@ import { observabilityService } from "../observability";
 import { storage } from "../storage";
 import { systemsApiService, heartbeatSystemsApiTool, listSystemsApiRoutes, getCloudDomain } from "../systems-api";
 import { describeSystemsApiDeployIntegration, systemsApiDeployIntegration } from "../systems-api/deploy";
+import { bootstrapDns, hasCloudflareDns } from "../cloudflare-dns";
+import { generateZoneFile } from "../dns-zone";
 import { apiRoutes } from "./index";
 import {
   type ArchitectureResponse,
@@ -561,6 +563,56 @@ async function handleSubdomainProxy(request: Request, host: string): Promise<Res
   return proxyToUpstream(request, route.upstream);
 }
 
+// ── DNS bootstrap and sovereign zone ────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/dns/bootstrap
+ * Idempotent: creates or updates the two mandatory A records on Cloudflare:
+ *   nexus.cloud        → ip   (proxied)
+ *   *.nexus.cloud      → ip   (not proxied — Caddy handles TLS)
+ * Body: { ip?: string }  — falls back to SERVER_PUBLIC_IP env var.
+ * Requires CF_API_TOKEN and CF_ZONE_ID to be set.
+ */
+async function handleDnsBootstrap(request: Request): Promise<Response> {
+  if (!hasCloudflareDns()) {
+    return json({ error: "CF_API_TOKEN and CF_ZONE_ID are not configured" }, 501);
+  }
+  const body = (await readJson(request)) as { ip?: string } | null;
+  const result = await bootstrapDns(body?.ip);
+  const ok = result.root.ok && result.wildcard.ok;
+  return json({ ok, root: result.root, wildcard: result.wildcard }, ok ? 200 : 502);
+}
+
+/**
+ * GET /api/v1/dns/status
+ * Reports whether Cloudflare DNS integration is configured and what SERVER_PUBLIC_IP is set to.
+ */
+function handleDnsStatus(): Response {
+  return json({
+    cloudflareConfigured: hasCloudflareDns(),
+    serverIp: cloudConfig.serverIp || null,
+    cloudDomain: cloudConfig.cloudDomain,
+  });
+}
+
+/**
+ * GET /api/v1/routes/zone
+ * Returns a BIND/RFC 1035 zone file for the cloud domain, suitable for CoreDNS
+ * (sovereign mode) or any other authoritative nameserver.
+ * CoreDNS is configured to poll this—or mount the zone from a shared volume.
+ */
+function handleZoneFile(): Response {
+  const zone = generateZoneFile();
+  return new Response(zone, {
+    status: 200,
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 /**
  * Caddy On-Demand TLS authorisation endpoint.
  * Caddy calls GET /api/v1/routes/tls-ask?domain=alice.nexus.cloud before issuing
@@ -623,7 +675,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/routes") return handleSystemsRoutes();
   if (request.method === "GET" && pathname === "/api/v1/routes/caddy") return handleSystemsRoutesCaddy();
   if (request.method === "GET" && pathname === "/api/v1/routes/tls-ask") return handleTlsAsk(url.searchParams);
+  if (request.method === "GET" && pathname === "/api/v1/routes/zone") return handleZoneFile();
   if (request.method === "GET" && pathname === "/.well-known/nexus-cloud") return handleWellKnown();
+  if (request.method === "GET" && pathname === "/api/v1/dns/status") return handleDnsStatus();
+  if (request.method === "POST" && pathname === "/api/v1/dns/bootstrap") return await handleDnsBootstrap(request);
   if (request.method === "GET" && pathname === "/api/v1/deployments/integration") return handleSystemsDeployIntegration();
   if (request.method === "POST" && pathname === "/api/v1/deployments") return handleSystemsDeploy(request);
   if (request.method === "POST" && pathname === "/api/v1/public-url") return handleSystemsPublicUrl(request);

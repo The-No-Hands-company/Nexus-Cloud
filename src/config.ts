@@ -7,6 +7,12 @@ export const cloudConfig = {
   cloudDomain: process.env.NEXUS_CLOUD_DOMAIN?.trim() || "nexus.local",
   // Publicly reachable URL of this Nexus Cloud instance (for discovery)
   cloudUrl: process.env.NEXUS_CLOUD_URL?.trim() || "",
+  // Public IPv4 of this server — used when generating DNS records
+  serverIp: process.env.SERVER_PUBLIC_IP?.trim() || "",
+  // Cloudflare API token with Zone:DNS:Edit permission for the cloud domain zone
+  cfApiToken: process.env.CF_API_TOKEN?.trim() || "",
+  // Cloudflare Zone ID for the cloud domain (find in Cloudflare dashboard)
+  cfZoneId: process.env.CF_ZONE_ID?.trim() || "",
 };
 
 export function hasDeployIntegration(): boolean {

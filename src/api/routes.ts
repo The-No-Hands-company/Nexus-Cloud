@@ -41,7 +41,10 @@ export const apiRouteManifest = [
   { method: "GET", path: "/api/v1/routes", description: "Live proxy routing table (domain → upstream)" },
   { method: "GET", path: "/api/v1/routes/caddy", description: "Caddy admin API format routing config" },
   { method: "GET", path: "/api/v1/routes/tls-ask", description: "Caddy On-Demand TLS authorisation endpoint (?domain=)" },
+  { method: "GET", path: "/api/v1/routes/zone", description: "BIND zone file for sovereign CoreDNS (RFC 1035)" },
   { method: "GET", path: "/.well-known/nexus-cloud", description: "Nexus Cloud discovery document" },
+  { method: "GET", path: "/api/v1/dns/status", description: "Report DNS integration config (Cloudflare, server IP)" },
+  { method: "POST", path: "/api/v1/dns/bootstrap", description: "Bootstrap Cloudflare A records for the cloud domain" },
   { method: "POST", path: "/api/v1/deployments", description: "Request a managed Deploy deployment" },
   { method: "GET", path: "/api/v1/deployments/integration", description: "Inspect the Deploy backend integration" },
 ] as const satisfies readonly ApiRoute[];

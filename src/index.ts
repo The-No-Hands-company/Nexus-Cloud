@@ -7,6 +7,8 @@ import { observability } from "./observability";
 import { server, port } from "./server";
 import { storage } from "./storage";
 import { systemsApiService } from "./systems-api";
+import { generateZoneFile } from "./dns-zone";
+import { mkdirSync, writeFileSync } from "fs";
 
 console.log(`${architecture.project} listening on ${port}`);
 console.log(architecture.mission);
@@ -33,3 +35,11 @@ console.log("Modules:", {
 });
 
 server;
+
+// Write the initial DNS zone file so CoreDNS (sovereign mode) can serve it on startup.
+try {
+  mkdirSync("data/dns", { recursive: true });
+  writeFileSync("data/dns/nexus.zone", generateZoneFile(), "utf-8");
+} catch {
+  // Non-fatal — zone file is regenerated on GET /api/v1/routes/zone
+}

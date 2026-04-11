@@ -42,6 +42,11 @@ services:
       NEXUS_CLOUD_DOMAIN: "${NEXUS_CLOUD_DOMAIN:-nexus.local}"
       # Public URL of this Nexus Cloud instance (used in /.well-known/nexus-cloud)
       NEXUS_CLOUD_URL: "${NEXUS_CLOUD_URL:-}"
+      # Server's public IPv4 — used when generating DNS records and the zone file
+      SERVER_PUBLIC_IP: "${SERVER_PUBLIC_IP:-}"
+      # Cloudflare DNS integration (optional — for automated A record bootstrap)
+      CF_API_TOKEN: "${CF_API_TOKEN:-}"
+      CF_ZONE_ID: "${CF_ZONE_ID:-}"
       NEXUS_DEPLOY_URL: "${NEXUS_DEPLOY_URL:-}"
       NEXUS_DEPLOY_TOKEN: "${NEXUS_DEPLOY_TOKEN:-}"
     volumes:
@@ -53,6 +58,31 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - nexus
+
+  # ── Sovereign DNS (optional) — run with: docker compose --profile sovereign up ──
+  # CoreDNS makes Nexus Cloud its own authoritative nameserver.
+  # After pointing glue records at this server, no DNS provider is needed.
+  # See caddy/Corefile for setup instructions and glue record details.
+  coredns:
+    image: coredns/coredns:latest
+    container_name: nexus-cloud-coredns
+    profiles:
+      - sovereign
+    command: ["-conf", "/etc/coredns/Corefile"]
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    environment:
+      NEXUS_CLOUD_DOMAIN: "${NEXUS_CLOUD_DOMAIN:-nexus.local}"
+    volumes:
+      - ./caddy/Corefile:/etc/coredns/Corefile:ro
+      - nexus_cloud_data:/data
+    depends_on:
+      nexus-cloud:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - nexus
 
