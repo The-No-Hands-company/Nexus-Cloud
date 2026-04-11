@@ -5,7 +5,7 @@ import { dataPlane } from "../data-plane";
 import { federationService } from "../federation";
 import { observabilityService } from "../observability";
 import { storage } from "../storage";
-import { systemsApiService } from "../systems-api";
+import { systemsApiService, heartbeatSystemsApiTool, listSystemsApiRoutes, getCloudDomain } from "../systems-api";
 import { describeSystemsApiDeployIntegration, systemsApiDeployIntegration } from "../systems-api/deploy";
 import { apiRoutes } from "./index";
 import {
@@ -46,6 +46,8 @@ import {
   type SystemsApiToolsResponseDTO,
   type TrustPeerResponse,
   type WorkloadListResponse,
+  type SystemsApiRoutesResponseDTO,
+  type SystemsApiToolRegistrationRequestDTO,
   isRegisterNodeRequest,
   isSystemsApiAddressRequest,
   isSystemsApiAddressRevokeRequest,
@@ -53,8 +55,10 @@ import {
   isSystemsApiDomainBindingRequest,
   isSystemsApiDomainVerificationRequest,
   isSystemsApiExposureRequest,
+  isSystemsApiNodeHeartbeatRequest,
   isSystemsApiPublicUrlRequest,
   isSystemsApiToolPatchRequest,
+  isSystemsApiToolRegistrationRequest,
   isTrustPeerRequest,
   isWorkloadPlanRequest,
 } from "./dto";
@@ -394,7 +398,79 @@ async function handleSystemsToolRoute(request: Request, pathname: string): Promi
     const toolId = decodeURIComponent(suffix.slice(0, -"/disable".length));
     return toolId ? handleSystemsToolDisable(toolId) : badRequest("Missing tool id");
   }
+  if (request.method === "POST" && suffix.endsWith("/heartbeat")) {
+    const toolId = decodeURIComponent(suffix.slice(0, -"/heartbeat".length));
+    return toolId ? handleToolHeartbeat(request, toolId) : badRequest("Missing tool id");
+  }
   return notFound();
+}
+
+function handleSystemsRoutes(): Response {
+  const domain = getCloudDomain();
+  const routes = listSystemsApiRoutes();
+  const body: SystemsApiRoutesResponseDTO = {
+    domain,
+    routes,
+    count: routes.length,
+    updatedAt: new Date().toISOString(),
+  };
+  return json(body);
+}
+
+function handleSystemsRoutesCaddy(): Response {
+  const routes = listSystemsApiRoutes();
+  const caddyRoutes = routes.map((route) => ({
+    match: [{ host: [route.domain] }],
+    handle: [{
+      handler: "reverse_proxy",
+      upstreams: [{ dial: route.upstream.replace(/^https?:\/\//, "") }],
+    }],
+  }));
+  return json({ routes: caddyRoutes });
+}
+
+function handleWellKnown(): Response {
+  const domain = getCloudDomain();
+  const cloudUrl = cloudConfig.cloudUrl || `https://${domain}`;
+  return json({
+    version: "v1",
+    domain,
+    apiBase: cloudUrl,
+    capabilities: [
+      "address-issuance",
+      "domain-binding",
+      "exposure-registry",
+      "routing-manifest",
+      "tool-registry",
+    ],
+    endpoints: {
+      register: "/api/v1/tools",
+      heartbeat: "/api/v1/tools/:toolId/heartbeat",
+      addresses: "/api/v1/addresses",
+      exposures: "/api/v1/exposures",
+      domains: "/api/v1/domains",
+      publicUrl: "/api/v1/public-url",
+      routes: "/api/v1/routes",
+      routesCaddy: "/api/v1/routes/caddy",
+      status: "/api/v1/status",
+      topology: "/api/v1/topology",
+    },
+  });
+}
+
+async function handleToolHeartbeat(request: Request, toolId: string): Promise<Response> {
+  const body = await readJson(request);
+  if (!isSystemsApiNodeHeartbeatRequest(body)) return badRequest("Missing heartbeat fields");
+  const tool = heartbeatSystemsApiTool(toolId, body);
+  if (!tool) return notFound();
+  return json({ tool } satisfies SystemsApiToolResponseDTO);
+}
+
+async function handleToolRegister(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (!isSystemsApiToolRegistrationRequest(body)) return badRequest("Missing tool registration fields");
+  const tool = systemsApiService.registerSystemsApiTool(body as SystemsApiToolRegistrationRequestDTO);
+  return json({ tool } satisfies SystemsApiToolResponseDTO, 201);
 }
 
 async function handleSystemsAddressRoute(request: Request, pathname: string): Promise<Response> {
@@ -486,10 +562,14 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/v1/federation/peers") return handlePeersList();
   if (request.method === "POST" && pathname.startsWith("/v1/federation/peers/") && pathname.endsWith("/trust")) return handlePeerTrust(request, pathname);
   if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools();
+  if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/endpoints") return handleSystemsEndpoints();
   if (request.method === "GET" && pathname === "/api/v1/capabilities") return handleSystemsCapabilities();
   if (request.method === "GET" && pathname === "/api/v1/summary") return handleSystemsSummary();
   if (request.method === "GET" && pathname === "/api/v1/status") return handleSystemsStatus();
+  if (request.method === "GET" && pathname === "/api/v1/routes") return handleSystemsRoutes();
+  if (request.method === "GET" && pathname === "/api/v1/routes/caddy") return handleSystemsRoutesCaddy();
+  if (request.method === "GET" && pathname === "/.well-known/nexus-cloud") return handleWellKnown();
   if (request.method === "GET" && pathname === "/api/v1/deployments/integration") return handleSystemsDeployIntegration();
   if (request.method === "POST" && pathname === "/api/v1/deployments") return handleSystemsDeploy(request);
   if (request.method === "POST" && pathname === "/api/v1/public-url") return handleSystemsPublicUrl(request);

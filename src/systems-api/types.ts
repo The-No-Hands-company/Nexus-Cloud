@@ -27,6 +27,8 @@ export type SystemsApiTool = {
   health: SystemsApiToolHealth;
   capabilities: readonly string[];
   publicUrl?: string;
+  /** The actual backend URL this tool is running on — used by the proxy routing table */
+  upstreamUrl?: string;
   registeredAt: string;
   updatedAt: string;
 };
@@ -216,6 +218,20 @@ export type SystemsApiTopology = {
 };
 
 export type SystemsApiExposureKind = SystemsApiAddressKind;
+
+export type SystemsApiRouteKind = "website" | "exposure" | "custom-domain" | "server";
+
+/**
+ * A live routing entry: maps a public-facing domain to a backend upstream.
+ * Consumed by reverse proxies (Caddy, Nginx, Traefik) to route external traffic.
+ */
+export type SystemsApiRoute = {
+  domain: string;
+  upstream: string;
+  toolId: string;
+  kind: SystemsApiRouteKind;
+  status: "active";
+};
 
 export type SystemsApiDeployRequest = {
   toolId: string;

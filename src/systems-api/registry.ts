@@ -13,6 +13,7 @@ import type {
   SystemsApiMode,
   SystemsApiPublicUrl,
   SystemsApiPublicUrlStatus,
+  SystemsApiRoute,
   SystemsApiStatus,
   SystemsApiTool,
   SystemsApiToolExposure,
@@ -30,6 +31,8 @@ export type SystemsApiToolRegistrationInput = {
   health?: SystemsApiToolHealth;
   capabilities?: readonly string[];
   publicUrl?: string;
+  /** Actual backend URL so the proxy routing table can forward traffic */
+  upstreamUrl?: string;
 };
 
 export type SystemsApiToolPatchInput = {
@@ -39,6 +42,7 @@ export type SystemsApiToolPatchInput = {
   exposed?: boolean;
   health?: SystemsApiToolHealth;
   capabilities?: readonly string[];
+  upstreamUrl?: string;
 };
 
 export type SystemsApiPublicUrlRequest = {
@@ -137,6 +141,7 @@ function buildTool(input: SystemsApiToolRegistrationInput, previous: SystemsApiT
     health: input.health ?? previous?.health ?? "healthy",
     capabilities: input.capabilities ?? previous?.capabilities ?? [],
     publicUrl: input.publicUrl ?? previous?.publicUrl,
+    upstreamUrl: input.upstreamUrl ?? previous?.upstreamUrl,
     registeredAt: previous?.registeredAt ?? now(),
     updatedAt: now(),
   };
@@ -235,6 +240,7 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
     exposure: exposureFromFlag(patch.exposed ?? previous.exposed),
     health: patch.health ?? previous.health,
     capabilities: patch.capabilities ?? previous.capabilities,
+    upstreamUrl: patch.upstreamUrl !== undefined ? patch.upstreamUrl : previous.upstreamUrl,
     updatedAt: now(),
   };
 
@@ -518,4 +524,45 @@ export function describeStatus(): SystemsApiStatus {
     registry: getSystemsApiRegistryMetadata(),
     updatedAt: now(),
   };
+}
+
+/**
+ * Build the live proxy routing table: maps public-facing domains to backend upstreams.
+ * Only includes tools that have registered an upstreamUrl.
+ * Used by reverse proxies (Caddy / Nginx / Traefik) to route external traffic.
+ */
+export function listActiveRoutes(): readonly SystemsApiRoute[] {
+  const routes: SystemsApiRoute[] = [];
+  const seen = new Set<string>();
+
+  for (const address of registry.addresses.filter((a) => a.status === "active")) {
+    const tool = registry.tools.find((t) => t.id === address.toolId);
+    if (!tool?.upstreamUrl) continue;
+    const domain = address.publicAddress.replace(/^https?:\/\//, "");
+    const key = `${domain}:${address.toolId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    routes.push({ domain, upstream: tool.upstreamUrl, toolId: address.toolId, kind: "website", status: "active" });
+  }
+
+  for (const exposure of registry.exposures.filter((e) => e.status === "active")) {
+    const tool = registry.tools.find((t) => t.id === exposure.toolId);
+    if (!tool?.upstreamUrl) continue;
+    const domain = exposure.publicUrl.replace(/^https?:\/\//, "");
+    const key = `${domain}:${exposure.toolId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    routes.push({ domain, upstream: tool.upstreamUrl, toolId: exposure.toolId, kind: "exposure", status: "active" });
+  }
+
+  for (const binding of registry.domains.filter((d) => d.status === "verified")) {
+    const tool = registry.tools.find((t) => t.id === binding.toolId);
+    if (!tool?.upstreamUrl) continue;
+    const key = `${binding.domain}:${binding.toolId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    routes.push({ domain: binding.domain, upstream: tool.upstreamUrl, toolId: binding.toolId, kind: "custom-domain", status: "active" });
+  }
+
+  return routes;
 }

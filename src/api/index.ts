@@ -21,12 +21,21 @@ export const cloudContract = {
     "/api/v1/connections",
     "/api/v1/status",
     "/api/v1/summary",
+    "/.well-known/nexus-cloud",
   ],
   issuance: [
     "/api/v1/public-url",
     "/api/v1/addresses",
     "/api/v1/exposures",
     "/api/v1/domains",
+  ],
+  routing: [
+    "/api/v1/routes",
+    "/api/v1/routes/caddy",
+  ],
+  registry: [
+    "/api/v1/tools",
+    "/api/v1/tools/:toolId/heartbeat",
   ],
   deployBridge: [
     "/api/v1/deployments",

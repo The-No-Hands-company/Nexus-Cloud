@@ -1,3 +1,4 @@
+import { cloudConfig } from "../config";
 import type { SystemsApiAddress, SystemsApiAddressKind, SystemsApiAddressStatus } from "./types";
 
 export type SystemsApiAddressRequest = {
@@ -13,21 +14,25 @@ function normalizeSubject(subject: string | undefined, fallback: string): string
 }
 
 export function buildCanonicalTarget(toolId: string): string {
-  return `https://${toolId}.nexus.local`;
+  return `https://${toolId}.${cloudConfig.cloudDomain}`;
 }
 
 export function buildPublicAddress(input: SystemsApiAddressRequest): string {
   const subject = normalizeSubject(input.subject, input.toolId);
+  const domain = cloudConfig.cloudDomain;
   if (input.kind === "website") {
-    const host = input.desiredHost?.trim() || `${subject}.nexus.dev`;
+    const host = input.desiredHost?.trim() || `${subject}.${domain}`;
     return host.startsWith("http://") || host.startsWith("https://") ? host : `https://${host}`;
   }
-
   if (input.kind === "email") {
-    return `${subject}@nexus.dev`;
+    return `${subject}@${domain}`;
   }
-
-  return `nexus://${subject}`;
+  if (input.kind === "server") {
+    const host = input.desiredHost?.trim() || `${subject}.${domain}`;
+    return host.startsWith("http://") || host.startsWith("https://") ? host : host;
+  }
+  const host = input.desiredHost?.trim() || `${subject}.${domain}`;
+  return `nexus://${host.replace(/^https?:\/\//, "")}`;
 }
 
 export function createAddressRecord(input: SystemsApiAddressRequest, publicAddress: string, status: SystemsApiAddressStatus = "requested", at = new Date().toISOString()): SystemsApiAddress {

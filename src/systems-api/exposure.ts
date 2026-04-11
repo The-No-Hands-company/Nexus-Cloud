@@ -1,3 +1,4 @@
+import { cloudConfig } from "../config";
 import type { SystemsApiExposureRecord, SystemsApiExposureStatus } from "./types";
 
 export type SystemsApiExposureRequestInput = {
@@ -6,12 +7,13 @@ export type SystemsApiExposureRequestInput = {
 };
 
 export function buildPublicUrl(toolId: string, desiredHost?: string): string {
-  const host = desiredHost?.trim() || `${toolId}.nexus.local`;
+  const domain = cloudConfig.cloudDomain;
+  const host = desiredHost?.trim() || `${toolId}.${domain}`;
   return host.startsWith("http://") || host.startsWith("https://") ? host : `https://${host}`;
 }
 
 export function buildCanonicalUrl(toolId: string): string {
-  return `https://${toolId}.nexus.local`;
+  return `https://${toolId}.${cloudConfig.cloudDomain}`;
 }
 
 export function createExposureRecord(input: SystemsApiExposureRequestInput, publicUrl: string, status: SystemsApiExposureStatus = "requested", at = new Date().toISOString()): SystemsApiExposureRecord {

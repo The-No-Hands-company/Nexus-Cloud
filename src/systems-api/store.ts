@@ -84,6 +84,7 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
     health: sanitizeHealth(value.health) ?? "healthy",
     capabilities: toStringArray(value.capabilities),
     publicUrl: typeof value.publicUrl === "string" ? value.publicUrl : undefined,
+    upstreamUrl: typeof value.upstreamUrl === "string" ? value.upstreamUrl : undefined,
     registeredAt,
     updatedAt,
   };

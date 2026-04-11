@@ -8,6 +8,7 @@ import {
   getDomainVerificationChallenge,
   getExposure,
   getPublicUrl,
+  listActiveRoutes,
   listAddresses,
   listDomainBindings,
   listExposures,
@@ -24,6 +25,7 @@ import {
   updateTool as patchTool,
   verifyDomainBinding,
 } from "./registry";
+import { cloudConfig } from "../config";
 import { systemsApiDeployIntegration as deployIntegration } from "./deploy";
 import type {
   SystemsApiAddress,
@@ -42,6 +44,7 @@ import type {
   SystemsApiStatus,
   SystemsApiSummary,
   SystemsApiTool,
+  SystemsApiToolHealth,
   SystemsApiToolHistoryEntry,
   SystemsApiTopology,
 } from "./types";
@@ -318,6 +321,7 @@ export type SystemsApiToolRegistrationInput = {
   health?: import("./types").SystemsApiToolHealth;
   capabilities?: readonly string[];
   publicUrl?: string;
+  upstreamUrl?: string;
 };
 
 export type SystemsApiToolPatchInput = {
@@ -327,15 +331,21 @@ export type SystemsApiToolPatchInput = {
   exposed?: boolean;
   health?: import("./types").SystemsApiToolHealth;
   capabilities?: readonly string[];
+  upstreamUrl?: string;
 };
 
 const endpoints = [
   { method: "GET", path: "/api/v1/tools", description: "List registered tools" },
+  { method: "POST", path: "/api/v1/tools", description: "Register or upsert a tool" },
   { method: "GET", path: "/api/v1/tools/:toolId", description: "Inspect a registered tool" },
   { method: "GET", path: "/api/v1/tools/:toolId/history", description: "Inspect tool lifecycle history" },
   { method: "PATCH", path: "/api/v1/tools/:toolId", description: "Update registered tool metadata" },
   { method: "POST", path: "/api/v1/tools/:toolId/enable", description: "Enable a registered tool" },
   { method: "POST", path: "/api/v1/tools/:toolId/disable", description: "Disable a registered tool" },
+  { method: "POST", path: "/api/v1/tools/:toolId/heartbeat", description: "Update tool liveness and upstream URL" },
+  { method: "GET", path: "/api/v1/routes", description: "Live proxy routing table (domain → upstream)" },
+  { method: "GET", path: "/api/v1/routes/caddy", description: "Caddy admin API format routing config" },
+  { method: "GET", path: "/.well-known/nexus-cloud", description: "Nexus Cloud discovery document" },
   { method: "GET", path: "/api/v1/status", description: "Return normalized platform status" },
   { method: "POST", path: "/api/v1/public-url", description: "Request or refresh a public URL" },
   { method: "GET", path: "/api/v1/addresses", description: "List public address records" },
@@ -514,6 +524,7 @@ export function describeSystemsApiTopology(): SystemsApiTopology {
 }
 
 export function describeSystemsApi(): SystemsApiSummary {
+
   const status = describeSystemsApiStatus();
   return {
     version: status.version,
@@ -532,6 +543,18 @@ export function describeSystemsApiDeployIntegration(): typeof deployIntegration 
 }
 
 export const systemsApiDeployIntegration = deployIntegration;
+
+export function listSystemsApiRoutes() {
+  return listActiveRoutes();
+}
+
+export function heartbeatSystemsApiTool(toolId: string, patch: { upstreamUrl?: string; health?: SystemsApiToolHealth }): SystemsApiTool | null {
+  return patchTool(toolId, patch);
+}
+
+export function getCloudDomain(): string {
+  return cloudConfig.cloudDomain;
+}
 
 export const systemsApiService = {
   describeSystemsApi,
@@ -570,4 +593,7 @@ export const systemsApiService = {
   revokeSystemsApiExposure,
   updateSystemsApiTool,
   verifySystemsApiDomain,
+  listSystemsApiRoutes,
+  heartbeatSystemsApiTool,
+  getCloudDomain,
 };

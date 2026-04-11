@@ -8,7 +8,7 @@ import type { FederationSummary } from "../federation/service";
 import type { ObservabilityEvent } from "../observability";
 import type { ObservabilitySummary } from "../observability/service";
 import type { StorageVolume } from "../storage";
-import type { SystemsApiApp, SystemsApiCapability, SystemsApiConnection, SystemsApiDeployRequest, SystemsApiDeployResponse, SystemsApiAddress, SystemsApiAddressKind, SystemsApiDomainBinding, SystemsApiDomainVerificationChallenge, SystemsApiEndpoint, SystemsApiExposureRecord, SystemsApiMode, SystemsApiPublicUrl, SystemsApiRegistryMetadata, SystemsApiStatus, SystemsApiSummary, SystemsApiTool, SystemsApiToolHealth, SystemsApiToolHistoryEntry, SystemsApiTopology } from "../systems-api";
+import type { SystemsApiApp, SystemsApiCapability, SystemsApiConnection, SystemsApiDeployRequest, SystemsApiDeployResponse, SystemsApiAddress, SystemsApiAddressKind, SystemsApiDomainBinding, SystemsApiDomainVerificationChallenge, SystemsApiEndpoint, SystemsApiExposureRecord, SystemsApiMode, SystemsApiPublicUrl, SystemsApiRegistryMetadata, SystemsApiRoute, SystemsApiStatus, SystemsApiSummary, SystemsApiTool, SystemsApiToolHealth, SystemsApiToolHistoryEntry, SystemsApiTopology } from "../systems-api";
 import type { SystemsApiDomainResponseDTO as SystemsApiDomainResourceDTO, SystemsApiExposureResourceDTO, SystemsApiExposureResourcesResponseDTO } from "./exposure-dto";
 
 export type ApiRoute = {
@@ -210,6 +210,34 @@ export type SystemsApiToolPatchRequestDTO = {
   exposed?: boolean;
   health?: SystemsApiToolHealth;
   capabilities?: readonly string[];
+  /** Update the backend URL used by the proxy routing table */
+  upstreamUrl?: string;
+};
+
+/** Register (or upsert) a tool with Nexus Cloud */
+export type SystemsApiToolRegistrationRequestDTO = {
+  id: string;
+  name: string;
+  description: string;
+  upstreamUrl?: string;
+  mode?: SystemsApiMode;
+  exposed?: boolean;
+  health?: SystemsApiToolHealth;
+  capabilities?: readonly string[];
+};
+
+export type SystemsApiNodeHeartbeatRequestDTO = {
+  upstreamUrl?: string;
+  health?: SystemsApiToolHealth;
+};
+
+export type SystemsApiRouteDTO = SystemsApiRoute;
+
+export type SystemsApiRoutesResponseDTO = {
+  domain: string;
+  routes: readonly SystemsApiRouteDTO[];
+  count: number;
+  updatedAt: string;
 };
 
 export type SystemsApiDeployRequestDTO = SystemsApiDeployRequest;
@@ -317,7 +345,26 @@ export function isSystemsApiToolPatchRequest(value: unknown): value is SystemsAp
     && (value.mode === undefined || isMode(value.mode))
     && (value.exposed === undefined || typeof value.exposed === "boolean")
     && (value.health === undefined || isToolHealth(value.health))
+    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
     && (value.capabilities === undefined || Array.isArray(value.capabilities) && value.capabilities.every(isString));
+}
+
+export function isSystemsApiToolRegistrationRequest(value: unknown): value is SystemsApiToolRegistrationRequestDTO {
+  return isRecord(value)
+    && isString(value.id)
+    && isString(value.name)
+    && isString(value.description)
+    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
+    && (value.mode === undefined || isMode(value.mode))
+    && (value.exposed === undefined || typeof value.exposed === "boolean")
+    && (value.health === undefined || isToolHealth(value.health))
+    && (value.capabilities === undefined || Array.isArray(value.capabilities) && value.capabilities.every(isString));
+}
+
+export function isSystemsApiNodeHeartbeatRequest(value: unknown): value is SystemsApiNodeHeartbeatRequestDTO {
+  return isRecord(value)
+    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
+    && (value.health === undefined || isToolHealth(value.health));
 }
 
 export function isSystemsApiDeployRequest(value: unknown): value is SystemsApiDeployRequestDTO {
