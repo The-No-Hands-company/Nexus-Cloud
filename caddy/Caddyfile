@@ -1,39 +1,52 @@
 # Nexus Cloud Caddyfile
 #
-# DNS requirements — set these at your registrar / DNS provider before deploying:
-#   A record:   {$NEXUS_CLOUD_DOMAIN}    →  <server public IP>
-#   A record:   *.{$NEXUS_CLOUD_DOMAIN}  →  <server public IP>
+# Full cost of this stack: ZERO (ongoing). All components are free and open source.
+#   - Caddy          Apache 2.0, free forever
+#   - Let's Encrypt  Non-profit (ISRG), free certificate authority, no account cost
+#   - CoreDNS        Apache 2.0, runs as the authoritative DNS in the default stack
 #
-# Both records must point to the same server so that:
-#   - The root domain serves the Nexus Cloud API
-#   - Wildcard subdomains reach this server for Let's Encrypt HTTP-01 challenges
-#     and for traffic routing to the registered NS tool upstreams
+# Domain registration is the only one-time cost (~$10-15/year at any registrar).
+# After that: no subscriptions, no API billing, no provider lock-in.
+#
+# Let's Encrypt rate limits (production CA, free):
+#   50 certificates per registered domain per 7 days.
+#   Certs are cached; only NEW unique subdomains count against this limit.
+#   For dev/load testing: set ACME_CA_URL to the LE staging endpoint (no rate limits).
+#   Staging certs are not browser-trusted; use for testing only, never production.
 #
 # Environment variables (set in .env or docker compose):
 #   NEXUS_CLOUD_DOMAIN   your public base domain (e.g. nexus.cloud)
-#   ACME_EMAIL           email for Let's Encrypt registration (required in production)
+#   ACME_EMAIL           email for Let's Encrypt (required; no cost, just contact info)
+#   ACME_CA_URL          ACME CA endpoint (optional, defaults to LE production)
+#                        staging: https://acme-staging-v02.api.letsencrypt.org/directory
+#                        custom:  any step-ca / smallstep endpoint you self-host
 #
 # Usage:
-#   Production:  docker compose up  (Caddy runs as a service with the env vars set)
-#   Local dev:   run nexus-cloud directly with `bun run src/index.ts` — no Caddy needed
+#   Production:  docker compose up
+#   Dev/staging: ACME_CA_URL=https://acme-staging-v02.api.letsencrypt.org/directory docker compose up
+#   Local only:  bun run src/index.ts  (no Caddy, no TLS needed on localhost)
 
-# ── Global options ─────────────────────────────────────────────────────────────
+# -- Global options ------------------------------------------------------------
 {
     email {$ACME_EMAIL:admin@example.com}
 
-    # On-Demand TLS: Caddy asks Nexus Cloud before issuing a cert for any subdomain.
-    # This prevents certificate-bomb attacks and avoids issuing certs for unknown domains.
-    # The ask endpoint returns HTTP 200 only for domains known to the routing table.
+    # ACME CA endpoint. Leave unset to use Let's Encrypt production (free, browser-trusted).
+    # Switch to staging during development to avoid the 50 certs/week LE rate limit.
+    acme_ca {$ACME_CA_URL:https://acme-v02.api.letsencrypt.org/directory}
+
+    # On-Demand TLS: Caddy calls the tls-ask endpoint before issuing a cert for any
+    # subdomain. Nexus Cloud returns 200 only for domains in the live routing table.
+    # This blocks cert-bomb attacks (malicious actors forcing mass certificate requests).
     on_demand_tls {
         ask http://nexus-cloud:8787/api/v1/routes/tls-ask
-        # Allow up to 10 new cert requests per minute (rate-limit certificate issuance)
+        # Max 10 new cert requests per minute from this Caddy instance
         burst 10
         interval 1m
     }
 }
 
-# ── API plane — served directly by Nexus Cloud ────────────────────────────────
-# Handles all /api/v1/*, /.well-known/nexus-cloud, /health, and the root domain.
+# -- API plane — root domain ---------------------------------------------------
+# Serves the Nexus Cloud API, /.well-known/nexus-cloud, and /health.
 {$NEXUS_CLOUD_DOMAIN:nexus.local} {
     reverse_proxy nexus-cloud:8787
 
@@ -46,19 +59,18 @@
     header {
         X-Content-Type-Options  "nosniff"
         X-Frame-Options         "SAMEORIGIN"
-        # HSTS — enable only once TLS is confirmed stable
+        # HSTS -- enable only once TLS is confirmed stable on the domain
         Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
         Referrer-Policy         "strict-origin-when-cross-origin"
         -Server
     }
 }
 
-# ── Subdomain plane — On-Demand TLS per subdomain ─────────────────────────────
+# -- Subdomain plane — On-Demand TLS per subdomain ----------------------------
 # Every *.nexus.cloud request reaches this block. Caddy gets an individual
-# Let's Encrypt certificate for each new hostname on first access (HTTP-01 ACME
-# challenge works because the wildcard A record routes the request here first).
-# Nexus Cloud's built-in subdomain proxy resolves the Host to the correct
-# registered upstream and forwards the request.
+# Let's Encrypt cert on first access via HTTP-01 ACME challenge. CoreDNS resolves
+# the subdomain to this server, Caddy terminates TLS, then proxies to Nexus Cloud
+# which in turn proxies to the registered NS tool upstream.
 *.{$NEXUS_CLOUD_DOMAIN:nexus.local} {
     tls {
         on_demand

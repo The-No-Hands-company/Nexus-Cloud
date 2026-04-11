@@ -60,6 +60,9 @@ services:
     environment:
       NEXUS_CLOUD_DOMAIN: "${NEXUS_CLOUD_DOMAIN:-nexus.local}"
       ACME_EMAIL: "${ACME_EMAIL:-}"
+      # Optional: override ACME CA for staging/dev (avoids LE 50 certs/week rate limit)
+      # staging: https://acme-staging-v02.api.letsencrypt.org/directory
+      ACME_CA_URL: "${ACME_CA_URL:-}"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
