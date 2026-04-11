@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  # ── Reverse proxy — TLS termination and subdomain routing ──────────────────
+  # Handles HTTPS for nexus.cloud and *.nexus.cloud.
+  # Gets individual Let's Encrypt certs per subdomain via On-Demand TLS.
+  # Proxies all traffic to nexus-cloud which does the internal routing.
+  #
+  # DNS prerequisites (set at your registrar before first deploy):
+  #   A record:   ${NEXUS_CLOUD_DOMAIN}   →  <this server's public IP>
+  #   A record:   *.${NEXUS_CLOUD_DOMAIN} →  <this server's public IP>
+  caddy:
+    image: caddy:2-alpine
+    container_name: nexus-cloud-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NEXUS_CLOUD_DOMAIN: "${NEXUS_CLOUD_DOMAIN:-nexus.local}"
+      ACME_EMAIL: "${ACME_EMAIL:-}"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      nexus-cloud:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nexus
+
+  nexus-cloud:
+    build: .
+    container_name: nexus-cloud
+    ports:
+      - "${PORT:-8787}:${PORT:-8787}"
+    environment:
+      PORT: "${PORT:-8787}"
+      NEXUS_CLOUD_API_KEY: "${NEXUS_CLOUD_API_KEY:-}"
+      CORS_ORIGIN: "${CORS_ORIGIN:-*}"
+      # Base domain for public subdomain generation — set this to your real domain
+      NEXUS_CLOUD_DOMAIN: "${NEXUS_CLOUD_DOMAIN:-nexus.local}"
+      # Public URL of this Nexus Cloud instance (used in /.well-known/nexus-cloud)
+      NEXUS_CLOUD_URL: "${NEXUS_CLOUD_URL:-}"
+      NEXUS_DEPLOY_URL: "${NEXUS_DEPLOY_URL:-}"
+      NEXUS_DEPLOY_TOKEN: "${NEXUS_DEPLOY_TOKEN:-}"
+    volumes:
+      - nexus_cloud_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:${PORT:-8787}/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - nexus
+
+volumes:
+  nexus_cloud_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  nexus:
+    driver: bridge

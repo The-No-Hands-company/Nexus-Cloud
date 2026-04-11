@@ -533,9 +533,62 @@ async function handleSystemsRoute(request: Request, pathname: string): Promise<R
   return notFound();
 }
 
+// ── Subdomain reverse proxy ────────────────────────────────────────────────────
+
+async function proxyToUpstream(request: Request, upstream: string): Promise<Response> {
+  const url = new URL(request.url);
+  const targetUrl = new URL(url.pathname + url.search, upstream);
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  headers.set("x-forwarded-host", url.host);
+  headers.set("x-forwarded-proto", "https");
+  try {
+    const res = await fetch(targetUrl.toString(), {
+      method: request.method,
+      headers,
+      body: ["GET", "HEAD"].includes(request.method) ? null : request.body,
+    });
+    return new Response(res.body, { status: res.status, headers: res.headers });
+  } catch {
+    return json({ error: "upstream unreachable" }, 502);
+  }
+}
+
+async function handleSubdomainProxy(request: Request, host: string): Promise<Response> {
+  const routes = listSystemsApiRoutes();
+  const route = routes.find((r) => r.domain.toLowerCase() === host);
+  if (!route) return json({ error: "no route for this domain" }, 404);
+  return proxyToUpstream(request, route.upstream);
+}
+
+/**
+ * Caddy On-Demand TLS authorisation endpoint.
+ * Caddy calls GET /api/v1/routes/tls-ask?domain=alice.nexus.cloud before issuing
+ * a Let's Encrypt certificate for a new subdomain. Return 2xx to allow, 4xx to deny.
+ * This prevents cert-bomb attacks and avoids issuing certs for unknown domains.
+ */
+function handleTlsAsk(searchParams: URLSearchParams): Response {
+  const domain = searchParams.get("domain")?.trim().toLowerCase();
+  if (!domain) return badRequest("domain query parameter required");
+  const cloudDomain = cloudConfig.cloudDomain.toLowerCase();
+  if (!domain.endsWith(`.${cloudDomain}`)) return json({ allowed: false }, 403);
+  const routes = listSystemsApiRoutes();
+  const allowed = routes.some((r) => r.domain.toLowerCase() === domain);
+  if (!allowed) return json({ allowed: false }, 403);
+  return json({ allowed: true });
+}
+
 export async function handleApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
+
+  // Subdomain proxy: *.cloudDomain requests are routed to the registered upstream.
+  // This runs before CORS and auth so the upstream handles its own CORS/auth headers.
+  const host = (request.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  const cloudDomain = cloudConfig.cloudDomain.toLowerCase();
+  if (host !== cloudDomain && host.endsWith(`.${cloudDomain}`)) {
+    return handleSubdomainProxy(request, host);
+  }
 
   // Handle CORS preflight
   if (request.method === "OPTIONS") {
@@ -569,6 +622,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/status") return handleSystemsStatus();
   if (request.method === "GET" && pathname === "/api/v1/routes") return handleSystemsRoutes();
   if (request.method === "GET" && pathname === "/api/v1/routes/caddy") return handleSystemsRoutesCaddy();
+  if (request.method === "GET" && pathname === "/api/v1/routes/tls-ask") return handleTlsAsk(url.searchParams);
   if (request.method === "GET" && pathname === "/.well-known/nexus-cloud") return handleWellKnown();
   if (request.method === "GET" && pathname === "/api/v1/deployments/integration") return handleSystemsDeployIntegration();
   if (request.method === "POST" && pathname === "/api/v1/deployments") return handleSystemsDeploy(request);

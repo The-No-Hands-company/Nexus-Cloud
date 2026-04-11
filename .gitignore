@@ -2,9 +2,16 @@
 !/.gitignore
 !/AGENTS.md
 !/README.md
+!/Dockerfile
+!/docker-compose.yml
+!/.env.example
 !/package.json
 !/tsconfig.json
+!/caddy/
+!/caddy/**
 !/docs/
 !/docs/**
 !/src/
 !/src/**
+!/public/
+!/public/**

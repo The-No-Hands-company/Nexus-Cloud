@@ -1,0 +1,81 @@
+# Nexus Cloud Caddyfile
+#
+# DNS requirements — set these at your registrar / DNS provider before deploying:
+#   A record:   {$NEXUS_CLOUD_DOMAIN}    →  <server public IP>
+#   A record:   *.{$NEXUS_CLOUD_DOMAIN}  →  <server public IP>
+#
+# Both records must point to the same server so that:
+#   - The root domain serves the Nexus Cloud API
+#   - Wildcard subdomains reach this server for Let's Encrypt HTTP-01 challenges
+#     and for traffic routing to the registered NS tool upstreams
+#
+# Environment variables (set in .env or docker compose):
+#   NEXUS_CLOUD_DOMAIN   your public base domain (e.g. nexus.cloud)
+#   ACME_EMAIL           email for Let's Encrypt registration (required in production)
+#
+# Usage:
+#   Production:  docker compose up  (Caddy runs as a service with the env vars set)
+#   Local dev:   run nexus-cloud directly with `bun run src/index.ts` — no Caddy needed
+
+# ── Global options ─────────────────────────────────────────────────────────────
+{
+    email {$ACME_EMAIL:admin@example.com}
+
+    # On-Demand TLS: Caddy asks Nexus Cloud before issuing a cert for any subdomain.
+    # This prevents certificate-bomb attacks and avoids issuing certs for unknown domains.
+    # The ask endpoint returns HTTP 200 only for domains known to the routing table.
+    on_demand_tls {
+        ask http://nexus-cloud:8787/api/v1/routes/tls-ask
+        # Allow up to 10 new cert requests per minute (rate-limit certificate issuance)
+        burst 10
+        interval 1m
+    }
+}
+
+# ── API plane — served directly by Nexus Cloud ────────────────────────────────
+# Handles all /api/v1/*, /.well-known/nexus-cloud, /health, and the root domain.
+{$NEXUS_CLOUD_DOMAIN:nexus.local} {
+    reverse_proxy nexus-cloud:8787
+
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+
+    header {
+        X-Content-Type-Options  "nosniff"
+        X-Frame-Options         "SAMEORIGIN"
+        # HSTS — enable only once TLS is confirmed stable
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        Referrer-Policy         "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+
+# ── Subdomain plane — On-Demand TLS per subdomain ─────────────────────────────
+# Every *.nexus.cloud request reaches this block. Caddy gets an individual
+# Let's Encrypt certificate for each new hostname on first access (HTTP-01 ACME
+# challenge works because the wildcard A record routes the request here first).
+# Nexus Cloud's built-in subdomain proxy resolves the Host to the correct
+# registered upstream and forwards the request.
+*.{$NEXUS_CLOUD_DOMAIN:nexus.local} {
+    tls {
+        on_demand
+    }
+
+    reverse_proxy nexus-cloud:8787
+
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+
+    header {
+        X-Content-Type-Options  "nosniff"
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        Referrer-Policy         "strict-origin-when-cross-origin"
+        -Server
+    }
+}
