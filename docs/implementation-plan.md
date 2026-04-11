@@ -74,14 +74,17 @@ Make the public URL pipeline real, explicit, and safe enough to support hosted N
 
 ### Sprint checklist
 
-- [ ] define the canonical public URL request/response shape in the Systems API
+- [x] define the canonical public URL request/response shape in the Systems API
 - [ ] make Tunnel responsible for creating and refreshing reachability records
 - [ ] make Edge responsible for host-based public routing
 - [ ] make Guardian responsible for approval, denial, and policy checks
-- [ ] add a clear exposure state to the tool registry
-- [ ] add audit events for public URL issuance and refresh
+- [x] add a clear exposure state to the tool registry
+- [x] add audit events for public URL issuance and refresh
 - [ ] document how Nexus Hosting uses the public URL pipeline
 - [ ] document how Nexus Chat uses the public URL pipeline
+- [x] containerise Nexus Cloud (Dockerfile + docker-compose.yml)
+- [x] CORS headers and OPTIONS preflight for browser clients
+- [x] API key authentication on all mutating endpoints (POST/PATCH/DELETE)
 
 ## Weekly checkpoints
 

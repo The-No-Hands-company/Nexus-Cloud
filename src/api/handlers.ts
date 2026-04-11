@@ -1,3 +1,4 @@
+import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
 import { architecture } from "../architecture";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane } from "../data-plane";
@@ -66,8 +67,16 @@ import {
   type SystemsApiExposureStatusResponseDTO,
 } from "./exposure-dto";
 
+function corsHeaders(): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": cloudConfig.corsOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+}
+
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, { status });
+  return Response.json(data, { status, headers: corsHeaders() });
 }
 
 function badRequest(message: string): Response {
@@ -76,6 +85,16 @@ function badRequest(message: string): Response {
 
 function notFound(): Response {
   return json({ error: "Not found" }, 404);
+}
+
+function checkApiKey(request: Request): Response | null {
+  if (!requiresApiKey()) return null;
+  const header = request.headers.get("authorization");
+  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  if (!token || !isValidApiKey(token)) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+  return null;
 }
 
 async function readJson(request: Request): Promise<unknown | null> {
@@ -441,6 +460,21 @@ async function handleSystemsRoute(request: Request, pathname: string): Promise<R
 export async function handleApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
+
+  // Handle CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: { ...corsHeaders(), "Access-Control-Max-Age": "86400" },
+    });
+  }
+
+  // Authenticate all mutating requests. /api/v1/deployments handles its own auth token.
+  if (["POST", "PATCH", "DELETE"].includes(request.method) && pathname !== "/api/v1/deployments") {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
+  }
+
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();
   if (request.method === "GET" && pathname === "/v1/architecture") return handleArchitecture();
