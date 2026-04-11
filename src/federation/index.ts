@@ -40,3 +40,4 @@ export const federation = {
 export * from "./peers";
 export * from "./service";
 export * from "./naming";
+export * from "./gossip";

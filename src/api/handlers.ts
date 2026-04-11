@@ -10,6 +10,8 @@ import { describeSystemsApiDeployIntegration, systemsApiDeployIntegration } from
 import { bootstrapDns, hasCloudflareDns } from "../cloudflare-dns";
 import { generateZoneFile } from "../dns-zone";
 import { getNodeIdentity } from "../identity";
+import { registerUser, listUsers } from "../users";
+import { selfAnnouncement, handleInboundAnnouncement, type GossipAnnouncement } from "../federation";
 import { apiRoutes } from "./index";
 import {
   type ArchitectureResponse,
@@ -445,6 +447,37 @@ function handleFederationIdentity(): Response {
   });
 }
 
+function handleNodeAnnouncement(): Response {
+  return json(selfAnnouncement());
+}
+
+async function handleInboundPeerAnnounce(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (
+    typeof body !== "object" || body === null ||
+    typeof (body as Record<string, unknown>)["did"] !== "string" ||
+    typeof (body as Record<string, unknown>)["upstreamUrl"] !== "string"
+  ) {
+    return badRequest("Missing required fields: did, upstreamUrl");
+  }
+  const result = handleInboundAnnouncement(body as GossipAnnouncement);
+  return json(result);
+}
+
+async function handleUserRegister(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (typeof body !== "object" || body === null || typeof (body as Record<string, unknown>)["username"] !== "string") {
+    return badRequest("Missing required field: username");
+  }
+  const result = registerUser((body as Record<string, unknown>)["username"] as string);
+  if (!result.ok) return badRequest(result.error);
+  return json({ user: result.user }, 201);
+}
+
+function handleUserList(): Response {
+  return json({ users: listUsers() });
+}
+
 function handleWellKnown(): Response {
   const domain = getCloudDomain();
   const cloudUrl = cloudConfig.cloudUrl || `https://${domain}`;
@@ -687,6 +720,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/v1/federation/peers") return handlePeersList();
   if (request.method === "POST" && pathname.startsWith("/v1/federation/peers/") && pathname.endsWith("/trust")) return handlePeerTrust(request, pathname);
   if (request.method === "GET" && pathname === "/v1/federation/identity") return handleFederationIdentity();
+  if (request.method === "GET" && pathname === "/v1/federation/announcement") return handleNodeAnnouncement();
+  if (request.method === "POST" && pathname === "/v1/federation/peers/announce") return handleInboundPeerAnnounce(request);
+  if (request.method === "GET" && pathname === "/api/v1/users") return handleUserList();
+  if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools();
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/endpoints") return handleSystemsEndpoints();

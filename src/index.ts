@@ -9,6 +9,7 @@ import { storage } from "./storage";
 import { systemsApiService } from "./systems-api";
 import { generateZoneFile } from "./dns-zone";
 import { initNodeIdentity } from "./identity";
+import { bootstrapPeers } from "./federation";
 import { mkdirSync, writeFileSync } from "fs";
 
 // ─── Node identity ────────────────────────────────────────────────────────────
@@ -51,3 +52,10 @@ try {
 } catch {
   // Non-fatal — zone file is regenerated on GET /api/v1/routes/zone
 }
+
+// Bootstrap federation peer discovery (non-blocking).
+// Reads BOOTSTRAP_PEERS env var (comma-separated URLs) on first run.
+// Also loads any previously discovered peers from data/federation-peers.json.
+bootstrapPeers().catch(() => {
+  // Non-fatal — node runs fine with no peers
+});
