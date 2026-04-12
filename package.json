@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
+    "dev:ecosystem": "bash ../scripts/ecosystem-local.sh start",
+    "stop:ecosystem": "bash ../scripts/ecosystem-local.sh stop",
+    "status:ecosystem": "bash ../scripts/ecosystem-local.sh status",
+    "health:ecosystem": "bash ../scripts/ecosystem-local.sh health",
     "check": "tsc --noEmit",
     "test": "bun test src"
   },
