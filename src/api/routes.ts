@@ -28,6 +28,7 @@ export const apiRouteManifest = [
   { method: "POST", path: "/api/v1/tools/:toolId/enable", description: "Enable a registered tool" },
   { method: "POST", path: "/api/v1/tools/:toolId/disable", description: "Disable a registered tool" },
   { method: "POST", path: "/api/v1/tools/:toolId/heartbeat", description: "Update tool liveness and upstream URL" },
+  { method: "DELETE", path: "/api/v1/tools/:toolId", description: "Deregister a tool" },
   { method: "GET", path: "/api/v1/status", description: "Return normalized platform status" },
   { method: "POST", path: "/api/v1/public-url", description: "Compatibility alias for website address issuance" },
   { method: "GET", path: "/api/v1/addresses", description: "List general public address records" },

@@ -15,6 +15,7 @@ import {
   listPublicUrls,
   listToolHistory,
   listTools,
+  deregisterTool,
   registerSystemsApiTool as registerTool,
   requestDomainBinding,
   requestExposure,
@@ -467,6 +468,10 @@ export function revokeSystemsApiDomain(domain: string): SystemsApiDomainBinding 
   return revokeDomainBinding(domain);
 }
 
+export function deregisterSystemsApiTool(toolId: string): SystemsApiTool | null {
+  return deregisterTool(toolId);
+}
+
 export function registerSystemsApiTool(input: SystemsApiToolRegistrationInput): SystemsApiTool {
   return registerTool(input);
 }
@@ -548,8 +553,33 @@ export function listSystemsApiRoutes() {
   return listActiveRoutes();
 }
 
+// In-memory record of the last successful heartbeat per tool (ms since epoch).
+// Populated only by incoming heartbeat requests; cleared on Cloud restart.
+const lastHeartbeatMs = new Map<string, number>();
+
 export function heartbeatSystemsApiTool(toolId: string, patch: { upstreamUrl?: string; health?: SystemsApiToolHealth }): SystemsApiTool | null {
+  lastHeartbeatMs.set(toolId, Date.now());
   return patchTool(toolId, patch);
+}
+
+/**
+ * Mark tools as `offline` when they have previously heartbeated but have not
+ * done so within `thresholdMs` milliseconds. Tools that have never heartbeated
+ * since Cloud started are left untouched (they keep their persisted state).
+ * Returns the number of tools transitioned.
+ */
+export function applyHeartbeatExpiry(thresholdMs = 90_000): number {
+  const cutoff = Date.now() - thresholdMs;
+  let count = 0;
+  for (const tool of listTools()) {
+    if (tool.health === "offline") continue;
+    const last = lastHeartbeatMs.get(tool.id);
+    if (last !== undefined && last < cutoff) {
+      patchTool(tool.id, { health: "offline" });
+      count++;
+    }
+  }
+  return count;
 }
 
 export function getCloudDomain(): string {
@@ -557,6 +587,7 @@ export function getCloudDomain(): string {
 }
 
 export const systemsApiService = {
+  deregisterSystemsApiTool,
   describeSystemsApi,
   describeSystemsApiDeployIntegration,
   describeSystemsApiStatus,

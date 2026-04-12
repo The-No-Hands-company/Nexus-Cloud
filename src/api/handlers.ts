@@ -80,7 +80,7 @@ function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": cloudConfig.corsOrigin,
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key",
   };
 }
 
@@ -99,7 +99,9 @@ function notFound(): Response {
 function checkApiKey(request: Request): Response | null {
   if (!requiresApiKey()) return null;
   const header = request.headers.get("authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  const bearerToken = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  const apiKeyHeader = request.headers.get("x-api-key")?.trim() || null;
+  const token = bearerToken || apiKeyHeader;
   if (!token || !isValidApiKey(token)) {
     return json({ error: "Unauthorized" }, 401);
   }
@@ -468,6 +470,12 @@ async function handleSystemsToolRoute(request: Request, pathname: string): Promi
   if (request.method === "POST" && suffix.endsWith("/heartbeat")) {
     const toolId = decodeURIComponent(suffix.slice(0, -"/heartbeat".length));
     return toolId ? handleToolHeartbeat(request, toolId) : badRequest("Missing tool id");
+  }
+  if (request.method === "DELETE" && !suffix.includes("/")) {
+    const toolId = decodeURIComponent(suffix);
+    const tool = systemsApiService.deregisterSystemsApiTool(toolId);
+    if (!tool) return notFound();
+    return json({ tool });
   }
   return notFound();
 }

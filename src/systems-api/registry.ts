@@ -250,6 +250,15 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
   return tool;
 }
 
+export function deregisterTool(toolId: string): SystemsApiTool | null {
+  const existingIndex = findToolIndex(toolId);
+  if (existingIndex < 0) return null;
+  const [removed] = registry.tools.splice(existingIndex, 1);
+  registry.history = registry.history.filter((entry) => entry.toolId !== toolId);
+  persist();
+  return removed;
+}
+
 export function enableSystemsApiTool(toolId: string): SystemsApiTool | null {
   const tool = updateToolRecord(toolId, (current) => ({
     ...current,

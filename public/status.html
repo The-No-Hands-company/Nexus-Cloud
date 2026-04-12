@@ -8,12 +8,16 @@
 /* Reset & Base */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
+html { -webkit-text-size-adjust: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   background: #09090e; color: #e4e4f0; font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 a { color: inherit; text-decoration: none; }
-button { cursor: pointer; font: inherit; border: none; background: none; color: inherit; }
+button { cursor: pointer; font: inherit; border: none; background: none; color: inherit;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
@@ -546,6 +550,16 @@ tr:hover td { background: var(--bg-hover); }
   </div><!-- /main -->
 </div><!-- /app-shell -->
 
+<!-- Offline modal -->
+<div id="offline-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-layer);border:1px solid var(--border-md);border-radius:12px;padding:32px 28px;max-width:380px;width:90%;text-align:center;">
+    <div style="font-size:36px;margin-bottom:12px;">🔌</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:8px;">Service Offline</div>
+    <div id="offline-modal-msg" style="font-size:13px;color:var(--text-muted);margin-bottom:24px;"></div>
+    <button onclick="document.getElementById('offline-modal').style.display='none'" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 22px;font-size:13px;font-weight:600;cursor:pointer;">OK</button>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -670,11 +684,22 @@ function loadView(viewId) {
 
 // App frame
 function openTool(tool) {
+  var h = tool.health || tool.status;
   if (!tool.upstreamUrl) { navigate('tools'); return; }
+  if (h && h !== 'healthy' && h !== 'degraded') {
+    showOfflineModal(tool.name);
+    return;
+  }
   var meta = capMeta(tool.capabilities);
   openApps.set(tool.id, { id: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
   renderOpenApps();
   navigate('app-frame', { appId: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
+}
+
+function showOfflineModal(name) {
+  var msg = (name || 'This tool') + ' is currently offline and cannot be opened.';
+  document.getElementById('offline-modal-msg').textContent = msg;
+  document.getElementById('offline-modal').style.display = 'flex';
 }
 
 function openAppFrame(meta) {
@@ -748,14 +773,15 @@ function renderToolsGrid(tools) {
   grid.innerHTML = '';
   tools.forEach(function(tool) {
     var meta = capMeta(tool.capabilities);
-    var statusCls = tool.status === 'healthy' ? 'healthy' : tool.status === 'degraded' ? 'degraded' : 'offline';
+    var h = tool.health || tool.status;
+    var statusCls = h === 'healthy' ? 'healthy' : h === 'degraded' ? 'degraded' : 'offline';
     var tile = document.createElement('div');
     tile.className = 'app-tile';
     tile.innerHTML = '<div class="tile-icon" style="background:' + meta.bg + ';color:' + meta.color + '">' + meta.icon + '</div>' +
       '<div class="tile-name">' + esc(tool.name) + '</div>' +
       '<div class="tile-desc">' + esc(tool.description || meta.label) + '</div>' +
       '<div class="tile-footer"><span class="status-dot ' + statusCls + '"></span>' +
-      '<span class="status-label">' + esc(tool.status || 'unknown') + '</span>' +
+      '<span class="status-label">' + esc(h || 'unknown') + '</span>' +
       (tool.upstreamUrl ? '<span style="margin-left:auto;font-size:11px;color:var(--text-dim)">&#x2197;</span>' : '') + '</div>';
     tile.addEventListener('click', (function(t){ return function(){ openTool(t); }; })(tool));
     grid.appendChild(tile);
@@ -767,6 +793,8 @@ async function loadDashboard() {
   var el = document.getElementById('dashboard-content');
   try {
     var [sr, ir] = await Promise.all([fetch('/api/v1/status'), fetch('/v1/federation/identity')]);
+    if (!sr.ok) throw new Error('Status API returned HTTP ' + sr.status);
+    if (!ir.ok) throw new Error('Identity API returned HTTP ' + ir.status);
     var status = await sr.json();
     var identity = await ir.json();
     var tools = status.tools || {}; var users = status.users || {}; var peers = status.peers || {};
@@ -783,6 +811,19 @@ async function loadDashboard() {
       '<div class="node-field"><label>DID</label><div class="val">' + esc(identity.did || node.did || '\u2014') + '</div></div>' +
       '<div class="node-field"><label>Short ID</label><div class="val">' + esc(identity.shortId || node.shortId || '\u2014') + '</div></div>' +
       '<div class="node-field"><label>NS Address</label><div class="val">' + esc(identity.address || '\u2014') + '</div></div>' +
+      '</div></div>' +
+      '<div class="card" style="margin-top:20px"><div class="card-header"><span class="card-title">\u{1F5F3}\uFE0F Cloud-Internal Subsystems</span><span class="card-count" style="background:var(--amber-dim);color:var(--amber)">planned</span></div>' +
+      '<div style="padding:4px 0">' +
+      '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border)">' +
+      '<div style="font-size:20px;line-height:1;margin-top:1px">\u{1F6E1}\uFE0F</div>' +
+      '<div><div style="font-weight:600;color:var(--text);font-size:13px">Nexus Guardian</div>' +
+      '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">Enforces exposure policy, approves/denies public URL issuance, manages service trust. Planned for Phase 4.</div>' +
+      '<span style="display:inline-block;margin-top:6px;font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--amber-dim);color:var(--amber)">cloud-internal \u00B7 phase 4</span></div></div>' +
+      '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 18px">' +
+      '<div style="font-size:20px;line-height:1;margin-top:1px">\u{1F4BB}</div>' +
+      '<div><div style="font-weight:600;color:var(--text);font-size:13px">Nexus Edge</div>' +
+      '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">Terminates public traffic, routes requests by host header and service identity. Planned for Phase 4.</div>' +
+      '<span style="display:inline-block;margin-top:6px;font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--amber-dim);color:var(--amber)">cloud-internal \u00B7 phase 4</span></div></div>' +
       '</div></div>';
   } catch(err) { el.innerHTML = '<div class="error-state">Failed to load dashboard: ' + esc(String(err)) + '</div>'; }
 }
@@ -800,10 +841,11 @@ async function loadToolsView() {
     }
     var rows = tools.map(function(t) {
       var caps = (t.capabilities || []).map(function(c){ return '<span class="cap-badge cap-' + esc(c) + '">' + esc(c) + '</span>'; }).join('');
-      var sd = t.status === 'healthy' ? 'healthy' : t.status === 'degraded' ? 'degraded' : 'offline';
+      var sh = t.health || t.status;
+      var sd = sh === 'healthy' ? 'healthy' : sh === 'degraded' ? 'degraded' : 'offline';
       return '<tr><td><strong>' + esc(t.name) + '</strong></td>' +
         '<td>' + (caps || '<span class="cap-badge cap-default">none</span>') + '</td>' +
-        '<td><span class="status-dot ' + sd + '" style="margin-right:6px"></span>' + esc(t.status || 'unknown') + '</td>' +
+        '<td><span class="status-dot ' + sd + '" style="margin-right:6px"></span>' + esc(sh || 'unknown') + '</td>' +
         '<td class="mono">' + (t.upstreamUrl ? esc(t.upstreamUrl) : '\u2014') + '</td>' +
         '<td>' + (t.heartbeatAt ? timeAgo(t.heartbeatAt) : '\u2014') + '</td>' +
         '<td>' + (t.upstreamUrl ? '<button class="open-app-btn" onclick=\'openTool(' + JSON.stringify(t).replace(/'/g,"&#39;") + ')\'>Open &#x2197;</button>' : '') + '</td></tr>';
@@ -921,12 +963,18 @@ function timeAgo(ts) {
 function capMeta(capabilities) {
   var c = (capabilities || [])[0];
   var map = {
-    chat:      { icon: '&#x1F4AC;', color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Chat' },
-    ai:        { icon: '&#x2726;',  color: 'var(--purple)', bg: 'var(--purple-dim)', label: 'AI' },
-    hosting:   { icon: '&#x2601;',  color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Hosting' },
-    federation:{ icon: '&#x2B21;',  color: 'var(--amber)',  bg: 'var(--amber-dim)',  label: 'Federation' }
+    chat:      { icon: '\u{1F4AC}', color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Chat' },
+    ai:        { icon: '\u2726',    color: 'var(--purple)', bg: 'var(--purple-dim)', label: 'AI' },
+    hosting:   { icon: '\u2601',    color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Hosting' },
+    federation:{ icon: '\u2B21',    color: 'var(--amber)',  bg: 'var(--amber-dim)',  label: 'Federation' },
+    security:  { icon: '\u{1F6E1}', color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Security' },
+    vault:     { icon: '\u{1F512}', color: 'var(--amber)',  bg: 'var(--amber-dim)',  label: 'Vault' },
+    edge:      { icon: '\u{1F4BB}', color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Edge' },
+    network:   { icon: '\u{1F310}', color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Network' },
+    deploy:    { icon: '\u{1F680}', color: 'var(--purple)', bg: 'var(--purple-dim)', label: 'Deploy' },
+    messaging: { icon: '\u2709',    color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Messaging' }
   };
-  return map[c] || { icon: '&#x2699;', color: 'var(--text-muted)', bg: 'var(--bg-hover)', label: 'Tool' };
+  return map[c] || { icon: '\u2699', color: 'var(--text-muted)', bg: 'var(--bg-hover)', label: 'Tool' };
 }
 
 function updateGreeting() {
