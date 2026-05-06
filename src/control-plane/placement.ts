@@ -1,12 +1,15 @@
 import type { WorkloadSpec } from "./types";
+import { mutateState } from "../state";
 
 export function upsertWorkload(workloads: WorkloadSpec[], workload: WorkloadSpec): WorkloadSpec {
-  const existingIndex = workloads.findIndex((item) => item.id === workload.id);
-  if (existingIndex >= 0) {
-    workloads[existingIndex] = workload;
-  } else {
-    workloads.push(workload);
-  }
+  mutateState(() => {
+    const existingIndex = workloads.findIndex((item) => item.id === workload.id);
+    if (existingIndex >= 0) {
+      workloads[existingIndex] = workload;
+    } else {
+      workloads.push(workload);
+    }
+  });
 
   return workload;
 }

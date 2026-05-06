@@ -20,6 +20,9 @@ export const cloudContract = {
     "/api/v1/apps",
     "/api/v1/connections",
     "/api/v1/status",
+    "/api/v1/trust/summary",
+    "/api/v1/compliance/phantom",
+    "/api/v1/compliance/phantom/summary",
     "/api/v1/summary",
   ],
   issuance: [

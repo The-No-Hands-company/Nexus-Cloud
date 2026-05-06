@@ -1,14 +1,16 @@
 import type { ArchitectureLayer } from "../architecture";
 import type { FederationTrust } from "../architecture";
 import type { NodeCapacity, NodeRegistrationRequest, NodeSpec, PlacementPlan, WorkloadSpec } from "../control-plane";
+import type { DataPlaneUnit } from "../data-plane";
 import type { PolicyDecision } from "../control-plane/policy";
 import type { QuotaDecision } from "../control-plane/quota";
 import type { FederationPeer, FederationSignedRequest } from "../federation";
+import type { GuardianDecision } from "../state";
 import type { FederationSummary } from "../federation/service";
-import type { ObservabilityEvent } from "../observability";
+import type { HealthCheck, ObservabilityEvent } from "../observability";
 import type { ObservabilitySummary } from "../observability/service";
 import type { StorageVolume } from "../storage";
-import type { SystemsApiApp, SystemsApiCapability, SystemsApiConnection, SystemsApiDeployRequest, SystemsApiDeployResponse, SystemsApiAddress, SystemsApiAddressKind, SystemsApiDomainBinding, SystemsApiDomainVerificationChallenge, SystemsApiEndpoint, SystemsApiExposureRecord, SystemsApiMode, SystemsApiPublicUrl, SystemsApiRegistryMetadata, SystemsApiStatus, SystemsApiSummary, SystemsApiTool, SystemsApiToolHealth, SystemsApiToolHistoryEntry, SystemsApiTopology } from "../systems-api";
+import type { SystemsApiApp, SystemsApiCapability, SystemsApiConnection, SystemsApiDeployRequest, SystemsApiDeployResponse, SystemsApiAddress, SystemsApiAddressKind, SystemsApiDomainBinding, SystemsApiDomainVerificationChallenge, SystemsApiEndpoint, SystemsApiExposureRecord, SystemsApiIntegrationFailure, SystemsApiMode, SystemsApiPhantomSecurityProfile, SystemsApiPublicUrl, SystemsApiRegistryMetadata, SystemsApiRoute, SystemsApiStatus, SystemsApiSummary, SystemsApiTool, SystemsApiToolHealth, SystemsApiToolHistoryEntry, SystemsApiTopology } from "../systems-api";
 import type { SystemsApiDomainResponseDTO as SystemsApiDomainResourceDTO, SystemsApiExposureResourceDTO, SystemsApiExposureResourcesResponseDTO } from "./exposure-dto";
 
 export type ApiRoute = {
@@ -47,6 +49,8 @@ export type LegacyStatusResponse = {
   workloads: number;
   tools: number;
   public_urls: number;
+  node_trust_summary: SystemsApiStatus["trust"]["nodes"];
+  peer_trust_summary: SystemsApiStatus["trust"]["peers"];
   updated_at: string;
 };
 
@@ -56,6 +60,9 @@ export type StateResponse = {
   peers: readonly FederationPeer[];
   events: readonly ObservabilityEvent[];
   volumes: readonly StorageVolume[];
+  units: readonly DataPlaneUnit[];
+  healthChecks: readonly HealthCheck[];
+  guardianDecisions: readonly GuardianDecision[];
 };
 
 export type NodeListResponse = {
@@ -66,12 +73,65 @@ export type WorkloadListResponse = {
   workloads: readonly WorkloadSpec[];
 };
 
+export type WorkloadRunResponse = {
+  ok: boolean;
+  unit: DataPlaneUnit;
+  provider?: "docker" | "podman";
+  error?: string;
+};
+
+export type WorkloadStopResponse = {
+  units: readonly DataPlaneUnit[];
+};
+
+export type GuardianDecisionsResponse = {
+  decisions: readonly GuardianDecision[];
+};
+
+export type GuardianDecisionResponse = {
+  decision: GuardianDecision;
+};
+
 export type PeerListResponse = {
   peers: readonly FederationPeer[];
 };
 
 export type RegisterNodeResponse = {
   node: NodeSpec;
+};
+
+export type NodeTrustActionRequestDTO = {
+  reason?: string;
+};
+
+export type NodeTrustBulkAction = "promote" | "quarantine" | "revoke";
+
+export type NodeTrustBulkOperationDTO = {
+  nodeId: string;
+  action: NodeTrustBulkAction;
+  reason?: string;
+};
+
+export type NodeTrustBulkRequestDTO = {
+  operations: readonly NodeTrustBulkOperationDTO[];
+};
+
+export type NodeTrustBulkResultDTO = {
+  nodeId: string;
+  action: NodeTrustBulkAction;
+  ok: boolean;
+  node?: NodeSpec;
+  error?: string;
+  reasonCode?: "NODE_NOT_FOUND";
+};
+
+export type NodeTrustBulkResponseDTO = {
+  results: readonly NodeTrustBulkResultDTO[];
+  summary: {
+    total: number;
+    succeeded: number;
+    failed: number;
+  };
 };
 
 export type TrustPeerResponse = {
@@ -126,6 +186,36 @@ export type SystemsApiStatusResponseDTO = {
   status: SystemsApiStatus;
   tools: readonly SystemsApiTool[];
   publicUrls: readonly SystemsApiPublicUrl[];
+};
+
+export type SystemsApiPhantomComplianceToolDTO = {
+  tool: SystemsApiTool;
+  compliant: boolean;
+  failure?: SystemsApiIntegrationFailure;
+};
+
+export type SystemsApiPhantomComplianceResponseDTO = {
+  scope: "phantom-security";
+  status: SystemsApiStatus["integrationStatus"];
+  count: number;
+  failingCount: number;
+  entries: readonly SystemsApiPhantomComplianceToolDTO[];
+  failures: readonly SystemsApiIntegrationFailure[];
+  updatedAt: string;
+};
+
+export type SystemsApiPhantomComplianceSummaryResponseDTO = {
+  scope: "phantom-security";
+  status: SystemsApiStatus["integrationStatus"];
+  claimedSecuredCount: number;
+  compliantCount: number;
+  failingCount: number;
+  updatedAt: string;
+};
+
+export type SystemsApiTrustSummaryResponseDTO = {
+  scope: "trust-lifecycle";
+  trust: SystemsApiStatus["trust"];
 };
 
 export type SystemsApiEndpointsResponseDTO = {
@@ -210,6 +300,37 @@ export type SystemsApiToolPatchRequestDTO = {
   exposed?: boolean;
   health?: SystemsApiToolHealth;
   capabilities?: readonly string[];
+  /** Update the backend URL used by the proxy routing table */
+  upstreamUrl?: string;
+  phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+};
+
+/** Register (or upsert) a tool with Nexus Cloud */
+export type SystemsApiToolRegistrationRequestDTO = {
+  id: string;
+  name: string;
+  description: string;
+  upstreamUrl?: string;
+  mode?: SystemsApiMode;
+  exposed?: boolean;
+  health?: SystemsApiToolHealth;
+  capabilities?: readonly string[];
+  phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+};
+
+export type SystemsApiNodeHeartbeatRequestDTO = {
+  upstreamUrl?: string;
+  health?: SystemsApiToolHealth;
+  phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+};
+
+export type SystemsApiRouteDTO = SystemsApiRoute;
+
+export type SystemsApiRoutesResponseDTO = {
+  domain: string;
+  routes: readonly SystemsApiRouteDTO[];
+  count: number;
+  updatedAt: string;
 };
 
 export type SystemsApiDeployRequestDTO = SystemsApiDeployRequest;
@@ -243,8 +364,48 @@ function isToolHealth(value: unknown): value is SystemsApiToolHealth {
   return value === "healthy" || value === "degraded" || value === "offline";
 }
 
+function isPhantomProtectionLevel(value: unknown): value is "transitional" | "hardened" | "maximum" {
+  return value === "transitional" || value === "hardened" || value === "maximum";
+}
+
+function isPhantomSecurityProfile(value: unknown): value is SystemsApiPhantomSecurityProfile {
+  if (!isRecord(value) || !isRecord(value.guarantees)) return false;
+  return typeof value.claimedSecured === "boolean"
+    && isPhantomProtectionLevel(value.protectionLevel)
+    && typeof value.guarantees.postQuantum === "boolean"
+    && typeof value.guarantees.fheTransport === "boolean"
+    && typeof value.guarantees.zkProofs === "boolean"
+    && (
+      value.metadata === undefined
+      || (
+        isRecord(value.metadata)
+        && (value.metadata.pqAlgorithms === undefined || Array.isArray(value.metadata.pqAlgorithms) && value.metadata.pqAlgorithms.every(isString))
+        && (value.metadata.fheScheme === undefined || isString(value.metadata.fheScheme))
+        && (value.metadata.zkProofSystem === undefined || isString(value.metadata.zkProofSystem))
+        && (value.metadata.proofAttestation === undefined || isString(value.metadata.proofAttestation))
+        && (value.metadata.proofEndpoint === undefined || isString(value.metadata.proofEndpoint))
+        && (value.metadata.lastVerifiedAt === undefined || isString(value.metadata.lastVerifiedAt))
+      )
+    );
+}
+
 export function isRegisterNodeRequest(value: unknown): value is RegisterNodeRequestDTO {
   return isRecord(value) && isString(value.name) && isString(value.region) && isString(value.zone) && (value.labels === undefined || isStringRecord(value.labels)) && isNodeCapacity(value.capacity);
+}
+
+export function isNodeTrustActionRequest(value: unknown): value is NodeTrustActionRequestDTO {
+  return isRecord(value) && (value.reason === undefined || isString(value.reason));
+}
+
+export function isNodeTrustBulkRequest(value: unknown): value is NodeTrustBulkRequestDTO {
+  return isRecord(value)
+    && Array.isArray(value.operations)
+    && value.operations.every((operation) =>
+      isRecord(operation)
+      && isString(operation.nodeId)
+      && (operation.action === "promote" || operation.action === "quarantine" || operation.action === "revoke")
+      && (operation.reason === undefined || isString(operation.reason))
+    );
 }
 
 export function isWorkloadPlanRequest(value: unknown): value is WorkloadPlanRequestDTO {
@@ -317,7 +478,29 @@ export function isSystemsApiToolPatchRequest(value: unknown): value is SystemsAp
     && (value.mode === undefined || isMode(value.mode))
     && (value.exposed === undefined || typeof value.exposed === "boolean")
     && (value.health === undefined || isToolHealth(value.health))
-    && (value.capabilities === undefined || Array.isArray(value.capabilities) && value.capabilities.every(isString));
+    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
+    && (value.capabilities === undefined || Array.isArray(value.capabilities) && value.capabilities.every(isString))
+    && (value.phantomSecurityProfile === undefined || isPhantomSecurityProfile(value.phantomSecurityProfile));
+}
+
+export function isSystemsApiToolRegistrationRequest(value: unknown): value is SystemsApiToolRegistrationRequestDTO {
+  return isRecord(value)
+    && isString(value.id)
+    && isString(value.name)
+    && isString(value.description)
+    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
+    && (value.mode === undefined || isMode(value.mode))
+    && (value.exposed === undefined || typeof value.exposed === "boolean")
+    && (value.health === undefined || isToolHealth(value.health))
+    && (value.capabilities === undefined || Array.isArray(value.capabilities) && value.capabilities.every(isString))
+    && (value.phantomSecurityProfile === undefined || isPhantomSecurityProfile(value.phantomSecurityProfile));
+}
+
+export function isSystemsApiNodeHeartbeatRequest(value: unknown): value is SystemsApiNodeHeartbeatRequestDTO {
+  return isRecord(value)
+    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
+    && (value.health === undefined || isToolHealth(value.health))
+    && (value.phantomSecurityProfile === undefined || isPhantomSecurityProfile(value.phantomSecurityProfile));
 }
 
 export function isSystemsApiDeployRequest(value: unknown): value is SystemsApiDeployRequestDTO {

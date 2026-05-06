@@ -121,7 +121,7 @@ export function toSystemsApiExposureStatusResponseDTO(
     total: exposureResources.length + domainResources.length,
     active: exposureResources.filter((item) => item.target.status === "active").length,
     verified: domainResources.filter((item) => item.target.status === "verified").length,
-    pending: exposureResources.filter((item) => item.target.status === "requested" || item.target.status === "suspended" || item.target.status === "pending").length + domainResources.filter((item) => item.target.status === "pending").length,
+    pending: exposureResources.filter((item) => item.target.status === "requested" || item.target.status === "suspended" || item.target.status === "quarantined" || item.target.status === "denied" || item.target.status === "pending").length + domainResources.filter((item) => item.target.status === "pending" || item.target.status === "quarantined" || item.target.status === "denied").length,
     revoked: exposureResources.filter((item) => item.target.status === "revoked").length + domainResources.filter((item) => item.target.status === "revoked").length,
   };
 

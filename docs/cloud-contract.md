@@ -20,6 +20,8 @@ This document defines the sovereign public access flow for Nexus tools. It is th
 - `GET /api/v1/apps`
 - `GET /api/v1/connections`
 - `GET /api/v1/status`
+- `GET /api/v1/status?compact=trust`
+- `GET /api/v1/trust/summary`
 - `GET /api/v1/summary`
 
 ### Public access issuance
@@ -67,3 +69,18 @@ All tools should expose a client contract that includes:
 ## Notes
 
 This document is the shared reference for any public access or domain feature work across the Nexus stack.
+
+## Deprecation window for dashboard polling
+
+Dashboard clients should migrate from full `GET /api/v1/status` polling to compact trust polling.
+
+Recommended order:
+
+1. Use `GET /api/v1/status?compact=trust`.
+2. Fall back to `GET /api/v1/trust/summary` for older Cloud deployments.
+
+Compatibility promise:
+
+- Full `GET /api/v1/status` polling is kept for one release cycle to avoid breaking existing dashboards.
+- New dashboard and sync clients should treat full status polling as compatibility-only, not the preferred steady-state contract.
+- Compact polling endpoints support `ETag` and `If-None-Match` and should be used for high-frequency trust/status refresh loops.

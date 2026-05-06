@@ -1,6 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import type { SystemsApiAddress, SystemsApiAddressKind, SystemsApiAddressStatus, SystemsApiDomainBinding, SystemsApiDomainBindingStatus, SystemsApiExposureRecord, SystemsApiExposureStatus, SystemsApiMode, SystemsApiPublicUrl, SystemsApiPublicUrlStatus, SystemsApiTool, SystemsApiToolExposure, SystemsApiToolHealth, SystemsApiToolHistoryEntry } from "./types";
+import { getJsonStoreMetadata, loadJsonStoreWithRecovery, resolveJsonStorePath, writeJsonStoreAtomic, type JsonStoreRecovery } from "../persistence/json-store";
+import type { SystemsApiAddress, SystemsApiAddressKind, SystemsApiAddressStatus, SystemsApiDomainBinding, SystemsApiDomainBindingStatus, SystemsApiExposureRecord, SystemsApiExposureStatus, SystemsApiMode, SystemsApiPhantomProtectionLevel, SystemsApiPhantomSecurityMetadata, SystemsApiPhantomSecurityProfile, SystemsApiPublicUrl, SystemsApiPublicUrlStatus, SystemsApiTool, SystemsApiToolExposure, SystemsApiToolHealth, SystemsApiToolHistoryEntry, SystemsApiToolRegistrationStatus } from "./types";
 
 export type SystemsApiRegistryData = {
   tools: SystemsApiTool[];
@@ -19,7 +18,7 @@ export type SystemsApiRegistryMetadata = {
   ageSeconds: number | null;
 };
 
-const REGISTRY_PATH = join(process.cwd(), "data", "systems-api-registry.json");
+export type SystemsApiRegistryRecovery = JsonStoreRecovery;
 
 const EMPTY_REGISTRY: SystemsApiRegistryData = {
   tools: [],
@@ -31,7 +30,11 @@ const EMPTY_REGISTRY: SystemsApiRegistryData = {
 };
 
 function ensureStorageDir(): void {
-  mkdirSync(dirname(REGISTRY_PATH), { recursive: true });
+  // Persistence directory creation is handled by the shared JSON store helper.
+}
+
+function getRegistryPath(): string {
+  return resolveJsonStorePath("data/systems-api-registry.json", "NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH");
 }
 
 function sanitizeMode(value: unknown): SystemsApiMode | undefined {
@@ -42,8 +45,16 @@ function sanitizeHealth(value: unknown): SystemsApiToolHealth | undefined {
   return value === "healthy" || value === "degraded" || value === "offline" ? value : undefined;
 }
 
+function sanitizeRegistrationStatus(value: unknown): SystemsApiToolRegistrationStatus | undefined {
+  return value === "registered" || value === "active" || value === "offline" ? value : undefined;
+}
+
 function sanitizeExposure(value: unknown): SystemsApiToolExposure | undefined {
   return value === "private" || value === "public" || value === "pending" ? value : undefined;
+}
+
+function sanitizePhantomProtectionLevel(value: unknown): SystemsApiPhantomProtectionLevel | undefined {
+  return value === "transitional" || value === "hardened" || value === "maximum" ? value : undefined;
 }
 
 function sanitizePublicUrlStatus(value: unknown): SystemsApiPublicUrlStatus | undefined {
@@ -51,7 +62,7 @@ function sanitizePublicUrlStatus(value: unknown): SystemsApiPublicUrlStatus | un
 }
 
 function sanitizeExposureStatus(value: unknown): SystemsApiExposureStatus | undefined {
-  return value === "requested" || value === "active" || value === "suspended" || value === "revoked" ? value : undefined;
+  return value === "requested" || value === "active" || value === "suspended" || value === "quarantined" || value === "denied" || value === "revoked" ? value : undefined;
 }
 
 function sanitizeAddressStatus(value: unknown): SystemsApiAddressStatus | undefined {
@@ -64,6 +75,38 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function toStringArray(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function sanitizePhantomSecurityMetadata(value: unknown): SystemsApiPhantomSecurityMetadata | undefined {
+  if (!isObject(value)) return undefined;
+  const metadata: SystemsApiPhantomSecurityMetadata = {};
+  const pqAlgorithms = toStringArray(value.pqAlgorithms);
+  if (pqAlgorithms.length > 0) metadata.pqAlgorithms = pqAlgorithms;
+  if (typeof value.fheScheme === "string") metadata.fheScheme = value.fheScheme;
+  if (typeof value.zkProofSystem === "string") metadata.zkProofSystem = value.zkProofSystem;
+  if (typeof value.proofAttestation === "string") metadata.proofAttestation = value.proofAttestation;
+  if (typeof value.proofEndpoint === "string") metadata.proofEndpoint = value.proofEndpoint;
+  if (typeof value.lastVerifiedAt === "string") metadata.lastVerifiedAt = value.lastVerifiedAt;
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function sanitizePhantomSecurityProfile(value: unknown): SystemsApiPhantomSecurityProfile | undefined {
+  if (!isObject(value) || !isObject(value.guarantees)) return undefined;
+  if (typeof value.claimedSecured !== "boolean") return undefined;
+  const protectionLevel = sanitizePhantomProtectionLevel(value.protectionLevel) ?? "transitional";
+  if (typeof value.guarantees.postQuantum !== "boolean" || typeof value.guarantees.fheTransport !== "boolean" || typeof value.guarantees.zkProofs !== "boolean") {
+    return undefined;
+  }
+  return {
+    claimedSecured: value.claimedSecured,
+    protectionLevel,
+    guarantees: {
+      postQuantum: value.guarantees.postQuantum,
+      fheTransport: value.guarantees.fheTransport,
+      zkProofs: value.guarantees.zkProofs,
+    },
+    metadata: sanitizePhantomSecurityMetadata(value.metadata),
+  };
 }
 
 function sanitizeTool(value: unknown): SystemsApiTool | null {
@@ -82,8 +125,13 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
     exposed: Boolean(value.exposed),
     exposure: sanitizeExposure(value.exposure) ?? (Boolean(value.exposed) ? "public" : "private"),
     health: sanitizeHealth(value.health) ?? "healthy",
+    registrationStatus: sanitizeRegistrationStatus(value.registrationStatus) ?? "registered",
     capabilities: toStringArray(value.capabilities),
+    phantomSecurityProfile: sanitizePhantomSecurityProfile(value.phantomSecurityProfile),
     publicUrl: typeof value.publicUrl === "string" ? value.publicUrl : undefined,
+    upstreamUrl: typeof value.upstreamUrl === "string" ? value.upstreamUrl : undefined,
+    lastHeartbeatAt: typeof value.lastHeartbeatAt === "string" ? value.lastHeartbeatAt : undefined,
+    heartbeatCount: typeof value.heartbeatCount === "number" && Number.isFinite(value.heartbeatCount) ? value.heartbeatCount : 0,
     registeredAt,
     updatedAt,
   };
@@ -129,7 +177,7 @@ function sanitizeAddress(value: unknown): SystemsApiAddress | null {
 function sanitizeHistoryEntry(value: unknown): SystemsApiToolHistoryEntry | null {
   if (!isObject(value)) return null;
   const toolId = typeof value.toolId === "string" ? value.toolId : "";
-  const action = value.action === "registered" || value.action === "updated" || value.action === "enabled" || value.action === "disabled" || value.action === "public-url-issued" || value.action === "address-issued" || value.action === "domain-bound" || value.action === "domain-verified" || value.action === "domain-revoked" || value.action === "exposure-requested" || value.action === "exposure-activated" || value.action === "exposure-revoked" ? value.action : "updated";
+  const action = value.action === "registered" || value.action === "updated" || value.action === "enabled" || value.action === "disabled" || value.action === "heartbeat-received" || value.action === "public-url-issued" || value.action === "public-url-revoked" || value.action === "address-issued" || value.action === "address-revoked" || value.action === "domain-bound" || value.action === "domain-verified" || value.action === "domain-revoked" || value.action === "exposure-requested" || value.action === "exposure-activated" || value.action === "exposure-revoked" ? value.action : "updated";
   const summary = typeof value.summary === "string" ? value.summary : "";
   const at = typeof value.at === "string" ? value.at : new Date().toISOString();
   if (!toolId || !summary) return null;
@@ -179,7 +227,7 @@ function sanitizeDomainBinding(value: unknown): SystemsApiDomainBinding | null {
     verificationToken,
     verificationIssuedAt,
     verificationExpiresAt,
-    status: value.status === "pending" || value.status === "verified" || value.status === "revoked" || value.status === "expired" ? value.status : "pending",
+    status: value.status === "pending" || value.status === "verified" || value.status === "quarantined" || value.status === "denied" || value.status === "revoked" || value.status === "expired" ? value.status : "pending",
     requestedAt,
     verifiedAt: typeof value.verifiedAt === "string" ? value.verifiedAt : undefined,
     revokedAt: typeof value.revokedAt === "string" ? value.revokedAt : undefined,
@@ -199,41 +247,26 @@ function sanitizeRegistry(value: unknown): SystemsApiRegistryData {
 }
 
 export function loadSystemsApiRegistry(): SystemsApiRegistryData {
-  if (!existsSync(REGISTRY_PATH)) return EMPTY_REGISTRY;
-  try {
-    const raw = readFileSync(REGISTRY_PATH, "utf8");
-    return sanitizeRegistry(JSON.parse(raw));
-  } catch {
-    return EMPTY_REGISTRY;
-  }
+  return loadJsonStoreWithRecovery(getRegistryPath(), EMPTY_REGISTRY, sanitizeRegistry).value;
 }
 
 export function saveSystemsApiRegistry(registry: SystemsApiRegistryData): void {
   ensureStorageDir();
-  writeFileSync(REGISTRY_PATH, `${JSON.stringify(registry, null, 2)}\n`);
+  writeJsonStoreAtomic(getRegistryPath(), registry, { backupCurrentPrimary: true });
 }
 
 export function getSystemsApiRegistryPath(): string {
-  return REGISTRY_PATH;
+  return getRegistryPath();
 }
 
 export function getSystemsApiRegistryMetadata(): SystemsApiRegistryMetadata {
-  if (!existsSync(REGISTRY_PATH)) {
-    return {
-      path: REGISTRY_PATH,
-      exists: false,
-      sizeBytes: 0,
-      lastWriteAt: null,
-      ageSeconds: null,
-    };
-  }
+  return getJsonStoreMetadata(getRegistryPath());
+}
 
-  const stats = statSync(REGISTRY_PATH);
+export function recoverSystemsApiRegistryFromDisk(): { registry: SystemsApiRegistryData; recovery: SystemsApiRegistryRecovery } {
+  const loaded = loadJsonStoreWithRecovery(getRegistryPath(), EMPTY_REGISTRY, sanitizeRegistry);
   return {
-    path: REGISTRY_PATH,
-    exists: true,
-    sizeBytes: stats.size,
-    lastWriteAt: stats.mtime.toISOString(),
-    ageSeconds: Math.max(0, Math.floor((Date.now() - stats.mtimeMs) / 1000)),
+    registry: loaded.value,
+    recovery: loaded.recovery,
   };
 }

@@ -63,6 +63,8 @@ Owns trust relationships, peer registration, and federation summaries.
 
 Owns signals, event recording, and observability summaries.
 
+Current maturity: summary and event plumbing exist, but production-grade metrics, logs, alerts, and audit querying are still incomplete.
+
 ### `systems-api/`
 
 Owns the canonical platform contract, tool registry, status model, and public URL exposure primitives.
@@ -71,9 +73,13 @@ Owns the canonical platform contract, tool registry, status model, and public UR
 
 Owns runtime execution abstractions.
 
+Current maturity: mostly scaffolding and type boundaries. Real workload enactment, runtime state transitions, and adapter implementations still need to be built.
+
 ### `storage/`
 
 Owns storage classes and volume abstractions.
+
+Current maturity: storage class metadata exists, but real volume lifecycle, snapshots, retention, and recovery workflows are still missing.
 
 ## Next expansion pass
 

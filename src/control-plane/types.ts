@@ -1,5 +1,7 @@
 export type NodeStatus = "pending" | "ready" | "draining" | "offline";
 
+export type NodeTrustState = "pending" | "verified" | "trusted" | "quarantined" | "revoked" | "expired";
+
 export type NodeCapacity = {
   cpu: number;
   memoryMb: number;
@@ -15,6 +17,9 @@ export type NodeSpec = {
   labels: Record<string, string>;
   capacity: NodeCapacity;
   status: NodeStatus;
+  trustState: NodeTrustState;
+  trustExpiresAt?: string;
+  trustUpdatedAt?: string;
   lastSeenAt?: string;
 };
 

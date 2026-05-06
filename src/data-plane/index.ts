@@ -7,6 +7,14 @@ export type DataPlaneUnit = {
   nodeId: string;
   image?: string;
   workloadId?: string;
+  runtimeId?: string;
+  provider?: "docker" | "podman";
+  mounts?: StorageMount[];
+  ports?: number[];
+  env?: Record<string, string>;
+  lastError?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type StorageMount = {
@@ -24,3 +32,5 @@ export type WorkloadRuntimeSnapshot = {
 export const dataPlane = {
   runtimes: ["container", "vm", "function"] as const,
 };
+
+export * from "./service";

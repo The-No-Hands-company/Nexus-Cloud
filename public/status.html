@@ -3,92 +3,1155 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Nexus Cloud — Node Status</title>
+<title>Nexus Cloud</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0e0e0f; --bg2: #161618; --bg3: #1e1e21;
-    --border: rgba(255,255,255,0.07);
-    --text: #e8e8e8; --muted: #777;
-    --green: #1D9E75; --amber: #BA7517;
-  }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system,'Segoe UI',system-ui,sans-serif; font-size: 14px; line-height: 1.6; min-height: 100vh; }
-  .wrap { max-width: 680px; margin: 0 auto; padding: 48px 20px; }
-  .logo { font-size: 13px; font-weight: 600; color: var(--green); letter-spacing: -0.2px; margin-bottom: 32px; }
-  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.4px; margin-bottom: 6px; }
-  .sub { font-size: 13px; color: var(--muted); margin-bottom: 32px; }
-  .node-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 32px; }
-  .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .stat-value { font-size: 20px; font-weight: 600; color: var(--text); }
-  .stat-value.green { color: var(--green); }
-  .divider { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
-  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 12px; }
-  .footer { margin-top: 40px; font-size: 11px; color: var(--muted); }
-  .footer a { color: var(--muted); text-decoration: none; }
-  .footer a:hover { color: var(--text); }
+/* Reset & Base */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: #09090e; color: #e4e4f0; font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font: inherit; border: none; background: none; color: inherit;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+/* Variables */
+:root {
+  --bg: #09090e; --bg-layer: #0c0c14; --bg-card: #12121e;
+  --bg-hover: #18182a; --bg-active: #1e1e30;
+  --border: rgba(255,255,255,0.06); --border-md: rgba(255,255,255,0.10);
+  --text: #e4e4f0; --text-muted: #7878a0; --text-dim: #3d3d56;
+  --green: #22c55e; --green-dim: rgba(34,197,94,0.12);
+  --purple: #a78bfa; --purple-dim: rgba(167,139,250,0.12);
+  --blue: #60a5fa; --blue-dim: rgba(96,165,250,0.12);
+  --amber: #fbbf24; --amber-dim: rgba(251,191,36,0.12);
+  --red: #f87171; --red-dim: rgba(248,113,113,0.12);
+  --orange: #fb923c; --orange-dim: rgba(251,146,60,0.12);
+  --sidebar-w: 220px; --topbar-h: 52px; --radius: 8px; --radius-sm: 5px;
+}
+
+/* Login */
+#login-screen {
+  position: fixed; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  background: var(--bg); z-index: 100;
+}
+.login-bg-glow {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+}
+.login-bg-glow::before {
+  content: ""; position: absolute; width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,197,94,0.07) 0%, transparent 70%);
+  top: -200px; left: -100px;
+}
+.login-bg-glow::after {
+  content: ""; position: absolute; width: 500px; height: 500px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(96,165,250,0.05) 0%, transparent 70%);
+  bottom: -150px; right: -50px;
+}
+.login-card {
+  position: relative; width: 380px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-md);
+  border-radius: 14px; padding: 40px;
+}
+.login-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; }
+.login-logo-icon {
+  width: 36px; height: 36px; background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.25); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--green);
+}
+.login-logo-name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.login-logo-name span { color: var(--green); }
+.login-card h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
+.login-card > p { color: var(--text-muted); font-size: 13px; margin-bottom: 28px; }
+.form-field { margin-bottom: 14px; }
+.form-field label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--text-muted); margin-bottom: 6px;
+  letter-spacing: 0.02em; text-transform: uppercase;
+}
+.form-field input {
+  width: 100%; background: var(--bg-layer); border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm); color: var(--text);
+  font: inherit; font-size: 14px; padding: 9px 12px; outline: none;
+  transition: border-color 0.15s;
+}
+.form-field input:focus { border-color: rgba(34,197,94,0.4); }
+.form-field input::placeholder { color: var(--text-dim); }
+.btn-primary {
+  width: 100%; margin-top: 8px; background: var(--green); color: #071a0d;
+  font-weight: 600; font-size: 14px; padding: 10px; border-radius: var(--radius-sm);
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn-primary:hover { background: #16a34a; }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+#login-error {
+  margin-top: 14px; padding: 10px 12px;
+  background: var(--red-dim); border: 1px solid rgba(248,113,113,0.2);
+  border-radius: var(--radius-sm); color: var(--red); font-size: 13px; display: none;
+}
+
+/* App Shell */
+#app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+/* Sidebar */
+#sidebar {
+  width: var(--sidebar-w); background: var(--bg-layer);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
+}
+.sidebar-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border); }
+.sidebar-brand { display: flex; align-items: center; gap: 9px; }
+.sidebar-brand-icon {
+  width: 28px; height: 28px; background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.2); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--green); flex-shrink: 0;
+}
+.sidebar-brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.sidebar-brand-badge {
+  font-size: 9px; font-weight: 700; background: var(--green-dim);
+  color: var(--green); border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 3px; padding: 1px 4px; letter-spacing: 0.05em;
+  text-transform: uppercase; margin-left: auto;
+}
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0; }
+.nav-section { padding: 0 10px; margin-bottom: 2px; }
+.nav-divider {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-dim); padding: 10px 18px 4px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer;
+  color: var(--text-muted); transition: background 0.1s, color 0.1s; margin: 1px 0;
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text); }
+.nav-item.active { background: var(--bg-active); color: var(--text); }
+.nav-item.active .nav-ico { color: var(--green); }
+.nav-ico { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.nav-label { font-size: 13px; }
+.nav-close-btn {
+  margin-left: auto; font-size: 11px; color: var(--text-dim);
+  opacity: 0; padding: 2px 4px; border-radius: 3px;
+  transition: opacity 0.1s, background 0.1s;
+}
+.nav-item:hover .nav-close-btn { opacity: 1; }
+.nav-close-btn:hover { background: var(--bg-hover); color: var(--text-muted); }
+.sidebar-footer { border-top: 1px solid var(--border); padding: 12px; }
+.user-row { display: flex; align-items: center; gap: 9px; padding: 6px 4px; margin-bottom: 4px; }
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.3); display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 700;
+  color: var(--green); flex-shrink: 0;
+}
+.user-name { font-size: 13px; font-weight: 500; }
+.user-role { font-size: 11px; color: var(--text-muted); }
+.sign-out-btn {
+  width: 100%; background: var(--bg-hover); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-muted); font-size: 12px; padding: 7px;
+  transition: background 0.1s, color 0.1s;
+}
+.sign-out-btn:hover { background: var(--red-dim); border-color: rgba(248,113,113,0.2); color: var(--red); }
+
+/* Main */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+#topbar {
+  height: var(--topbar-h); background: var(--bg); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
+}
+.topbar-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); font-weight: 500; }
+.topbar-breadcrumb span { color: var(--text); }
+.topbar-sep { color: var(--text-dim); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.topbar-btn {
+  width: 30px; height: 30px; background: var(--bg-hover); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--text-muted); transition: background 0.1s, color 0.1s;
+}
+.topbar-btn:hover { background: var(--bg-active); color: var(--text); }
+.topbar-user-badge {
+  display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 5px;
+  background: var(--bg-hover); border: 1px solid var(--border); border-radius: 20px; font-size: 12px;
+}
+.topbar-avatar {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--green-dim);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: var(--green);
+}
+#content-area { flex: 1; overflow: hidden; position: relative; }
+
+/* Views */
+.view { position: absolute; inset: 0; overflow-y: auto; padding: 28px; display: none; }
+.view.active { display: block; }
+#view-app-frame { padding: 0; display: none; flex-direction: column; overflow: hidden; }
+#view-app-frame.active { display: flex; }
+
+/* Frame toolbar */
+#frame-toolbar {
+  height: 38px; background: var(--bg-layer); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 14px; gap: 10px; flex-shrink: 0;
+}
+.frame-app-name { font-size: 13px; font-weight: 500; flex: 1; }
+.frame-app-url {
+  font-size: 11px; color: var(--text-muted); font-family: monospace;
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.open-tab-btn {
+  font-size: 11px; color: var(--text-muted); background: var(--bg-hover);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 8px;
+  transition: color 0.1s, background 0.1s;
+}
+.open-tab-btn:hover { color: var(--text); background: var(--bg-active); }
+#app-iframe { flex: 1; border: none; background: #fff; }
+#frame-blocked { flex: 1; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--text-muted); }
+#frame-blocked .blocked-icon { font-size: 32px; color: var(--text-dim); }
+#frame-blocked p { font-size: 14px; }
+#frame-blocked a {
+  font-size: 13px; color: var(--blue); background: var(--blue-dim);
+  border: 1px solid rgba(96,165,250,0.2); border-radius: var(--radius-sm); padding: 7px 14px;
+}
+
+/* Launcher */
+.launcher-hero { margin-bottom: 36px; }
+.launcher-hero h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.025em; margin-bottom: 4px; }
+.launcher-hero h2 .greet-name { color: var(--green); }
+.launcher-hero p { font-size: 14px; color: var(--text-muted); }
+.apps-section { margin-bottom: 36px; }
+.apps-section h3 {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 14px;
+}
+.app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.app-tile {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.app-tile:hover { border-color: var(--border-md); background: var(--bg-hover); transform: translateY(-1px); }
+.tile-icon {
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; margin-bottom: 12px;
+}
+.tile-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-desc {
+  font-size: 12px; color: var(--text-muted); margin-bottom: 10px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tile-footer { display: flex; align-items: center; gap: 6px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.status-dot.healthy { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+.status-dot.degraded { background: var(--amber); }
+.status-dot.offline  { background: var(--red); }
+.status-dot.unknown  { background: var(--text-dim); }
+.status-label { font-size: 11px; color: var(--text-muted); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+.empty-state .empty-icon { font-size: 28px; margin-bottom: 10px; }
+.empty-state p { color: var(--text-dim); margin-top: 4px; }
+
+/* View common */
+.view-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+.view-title-block h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 3px; }
+.view-title-block p { font-size: 13px; color: var(--text-muted); }
+
+/* Stats */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.stat-val { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+.stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-sub { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+
+/* Card + table */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
+.card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.card-title { font-size: 13px; font-weight: 600; }
+.card-count { font-size: 11px; color: var(--text-muted); background: var(--bg-hover); border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; }
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); padding: 10px 18px; text-align: left; border-bottom: 1px solid var(--border); }
+td { padding: 12px 18px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr { transition: background 0.1s; }
+tr:hover td { background: var(--bg-hover); }
+.mono { font-family: "SF Mono", "Cascadia Code", monospace; font-size: 12px; }
+.cap-badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; margin-right: 4px; }
+.cap-chat    { background: var(--green-dim);  color: var(--green); }
+.cap-ai      { background: var(--purple-dim); color: var(--purple); }
+.cap-hosting { background: var(--blue-dim);   color: var(--blue); }
+.cap-default { background: var(--bg-hover);   color: var(--text-muted); }
+.open-app-btn { font-size: 11px; background: var(--bg-hover); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 10px; color: var(--text-muted); transition: background 0.1s, color 0.1s; }
+.open-app-btn:hover { background: var(--bg-active); color: var(--text); }
+
+/* Identity */
+.identity-grid { display: grid; gap: 12px; margin-bottom: 20px; }
+.identity-field { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.identity-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 5px; }
+.identity-field .val { font-size: 13px; font-family: "SF Mono", "Cascadia Code", monospace; word-break: break-all; }
+.identity-field .address-val { font-size: 18px; font-weight: 600; font-family: inherit; color: var(--green); }
+
+/* API routes */
+.route-group { margin-bottom: 24px; }
+.route-group h3 { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+.route-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 4px; }
+.method-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; min-width: 46px; text-align: center; flex-shrink: 0; }
+.method-GET    { background: var(--blue-dim);   color: var(--blue); }
+.method-POST   { background: var(--green-dim);  color: var(--green); }
+.method-PATCH  { background: var(--amber-dim);  color: var(--amber); }
+.method-DELETE { background: var(--red-dim);    color: var(--red); }
+.route-path { font-family: monospace; font-size: 12px; color: var(--text); flex: 1; }
+.route-desc { font-size: 12px; color: var(--text-muted); text-align: right; }
+
+/* Node card */
+.node-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+.node-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.node-icon { width: 40px; height: 40px; background: var(--green-dim); border: 1px solid rgba(34,197,94,0.2); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--green); }
+.node-name { font-size: 15px; font-weight: 600; }
+.node-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.node-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.node-field label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); display: block; margin-bottom: 3px; }
+.node-field .val { font-size: 12px; font-family: monospace; color: var(--text-muted); word-break: break-all; }
+
+/* Misc */
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border-md); border-top-color: var(--green); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 40px auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-state { text-align: center; padding: 40px; color: var(--text-muted); }
+.error-state { padding: 16px; border-radius: var(--radius-sm); background: var(--red-dim); border: 1px solid rgba(248,113,113,0.15); color: var(--red); font-size: 13px; }
+
+/* Trust lifecycle */
+.trust-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.trust-scope { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.trust-scope:nth-child(odd) { border-right: 1px solid var(--border); }
+.trust-scope-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+.trust-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.trust-pill { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px; letter-spacing: 0.02em; }
+.tp-trusted   { background: var(--green-dim);  color: var(--green); }
+.tp-verified  { background: var(--blue-dim);   color: var(--blue); }
+.tp-pending   { background: var(--amber-dim);  color: var(--amber); }
+.tp-quarantined { background: var(--orange-dim); color: var(--orange); }
+.tp-revoked   { background: var(--red-dim);    color: var(--red); }
+.tp-expired   { background: var(--bg-hover);   color: var(--text-dim); }
+.trust-updated { font-size: 11px; color: var(--text-dim); padding: 10px 18px; }
+
+/* Audit event row */
+.audit-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.audit-row:last-child { border-bottom: none; }
+.audit-action-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; flex-shrink: 0; margin-top: 1px; }
+.ab-promote   { background: var(--green-dim);  color: var(--green); }
+.ab-quarantine { background: var(--orange-dim); color: var(--orange); }
+.ab-revoke    { background: var(--red-dim);    color: var(--red); }
+.ab-expire    { background: var(--bg-hover);   color: var(--text-dim); }
+.audit-meta { flex: 1; min-width: 0; }
+.audit-subject { font-size: 12px; font-family: monospace; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.audit-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.audit-reason { font-size: 11px; color: var(--text-dim); font-style: italic; margin-top: 3px; }
+.audit-ts { font-size: 11px; color: var(--text-dim); flex-shrink: 0; margin-top: 2px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="logo">Nexus Cloud</div>
-  <h1>Node Status</h1>
-  <p class="sub">This node is part of the Nexus federation. Storage, sync, and file sharing services.</p>
 
-  <div class="node-stats">
-    <div class="stat">
-      <div class="stat-label">Node status</div>
-      <div class="stat-value green" id="s-status">Online</div>
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-bg-glow"></div>
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">&#x2B21;</div>
+      <div class="login-logo-name">Nexus <span>Cloud</span></div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Storage used</div>
-      <div class="stat-value" id="s-storage">—</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Files stored</div>
-      <div class="stat-value" id="s-files">—</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Federation peers</div>
-      <div class="stat-value" id="s-peers">—</div>
-    </div>
+    <h1>Welcome back</h1>
+    <p>Sign in to your Nexus Cloud workspace</p>
+    <form id="login-form">
+      <div class="form-field">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" placeholder="admin" autocomplete="username" autofocus />
+      </div>
+      <div class="form-field">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary" id="login-btn">Sign in</button>
+    </form>
+    <div id="login-error"></div>
   </div>
+</div>
 
-  <script>
-    fetch('/api/status').then(r => r.json()).then(d => {
-      if (d.storage_used_gb !== undefined)
-        document.getElementById('s-storage').textContent =
-          d.storage_used_gb >= 1024
-            ? (d.storage_used_gb / 1024).toFixed(1) + ' TB'
-            : Math.round(d.storage_used_gb) + ' GB';
-      if (d.files_count !== undefined)
-        document.getElementById('s-files').textContent = d.files_count.toLocaleString();
-      if (d.federation_peers !== undefined)
-        document.getElementById('s-peers').textContent = d.federation_peers;
-    }).catch(() => {});
-  </script>
+<!-- APP SHELL -->
+<div id="app-shell" style="display:none">
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">&#x2B21;</div>
+        <div class="sidebar-brand-name">Nexus Cloud</div>
+        <div class="sidebar-brand-badge">Alpha</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-item active" id="nav-launcher" onclick="navigate('launcher')">
+          <span class="nav-ico">&#x229E;</span>
+          <span class="nav-label">Launcher</span>
+        </div>
+      </div>
+      <div id="open-apps-nav" style="display:none">
+        <div class="nav-divider">Open Apps</div>
+        <div class="nav-section" id="open-apps-list"></div>
+      </div>
+      <div class="nav-divider">Cloud</div>
+      <div class="nav-section">
+        <div class="nav-item" id="nav-dashboard" onclick="navigate('dashboard')">
+          <span class="nav-ico">&#x25C8;</span><span class="nav-label">Dashboard</span>
+        </div>
+        <div class="nav-item" id="nav-tools" onclick="navigate('tools')">
+          <span class="nav-ico">&#x2699;</span><span class="nav-label">Tools</span>
+        </div>
+        <div class="nav-item" id="nav-users" onclick="navigate('users')">
+          <span class="nav-ico">&#x25C9;</span><span class="nav-label">Users</span>
+        </div>
+        <div class="nav-item" id="nav-federation" onclick="navigate('federation')">
+          <span class="nav-ico">&#x2B21;</span><span class="nav-label">Federation</span>
+        </div>
+        <div class="nav-item" id="nav-identity" onclick="navigate('identity')">
+          <span class="nav-ico">&#x25C7;</span><span class="nav-label">Identity</span>
+        </div>
+        <div class="nav-item" id="nav-api" onclick="navigate('api')">
+          <span class="nav-ico">&#x2263;</span><span class="nav-label">API</span>
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row">
+        <div class="user-avatar" id="sidebar-avatar">A</div>
+        <div>
+          <div class="user-name" id="sidebar-username">admin</div>
+          <div class="user-role">Cloud Admin</div>
+        </div>
+      </div>
+      <button class="sign-out-btn" onclick="logout()">Sign out</button>
+    </div>
+  </aside>
 
-  <hr class="divider" />
+  <!-- Main -->
+  <div id="main">
+    <header id="topbar">
+      <div class="topbar-breadcrumb">
+        <span>Nexus Cloud</span>
+        <span class="topbar-sep">/</span>
+        <span id="topbar-view-name">Launcher</span>
+      </div>
+      <div class="topbar-right">
+        <button class="topbar-btn" title="Notifications">&#x1F514;</button>
+        <div class="topbar-user-badge">
+          <div class="topbar-avatar" id="topbar-avatar">A</div>
+          <span id="topbar-username">admin</span>
+        </div>
+      </div>
+    </header>
 
-  <div class="section-label">Nexus Network — Federation health</div>
-  <div id="nexus-network-widget"></div>
+    <div id="content-area">
 
-  <div class="footer" style="margin-top: 24px;">
-    <a href="https://github.com/The-No-Hands-company/Nexus-cloud" target="_blank" rel="noopener">Nexus Cloud</a>
-    · <a href="https://github.com/The-No-Hands-company" target="_blank" rel="noopener">The No Hands Company</a>
-    · <a href="https://github.com/The-No-Hands-company/Nexus-Network" target="_blank" rel="noopener">Nexus Network</a>
+      <!-- Launcher -->
+      <div id="view-launcher" class="view active">
+        <div class="launcher-hero">
+          <h2>Good <span id="greeting-time">morning</span>, <span class="greet-name" id="greeting-name">Admin</span></h2>
+          <p>Your Nexus Cloud workspace</p>
+        </div>
+        <div class="apps-section">
+          <h3>Registered Tools</h3>
+          <div class="app-grid" id="tools-grid"><div class="loading-state"><div class="spinner"></div></div></div>
+        </div>
+        <div class="apps-section">
+          <h3>Cloud Services</h3>
+          <div class="app-grid">
+            <div class="app-tile" onclick="navigate('dashboard')">
+              <div class="tile-icon" style="background:rgba(34,197,94,0.1);color:var(--green)">&#x25C8;</div>
+              <div class="tile-name">Dashboard</div>
+              <div class="tile-desc">Node status, health metrics, and cloud summary</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('tools')">
+              <div class="tile-icon" style="background:rgba(96,165,250,0.1);color:var(--blue)">&#x2699;</div>
+              <div class="tile-name">Tools</div>
+              <div class="tile-desc">Manage registered tools and their upstreams</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('users')">
+              <div class="tile-icon" style="background:rgba(167,139,250,0.1);color:var(--purple)">&#x25C9;</div>
+              <div class="tile-name">Users</div>
+              <div class="tile-desc">NS address registry and user management</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('federation')">
+              <div class="tile-icon" style="background:rgba(251,191,36,0.1);color:var(--amber)">&#x2B21;</div>
+              <div class="tile-name">Federation</div>
+              <div class="tile-desc">Peer nodes and inter-cloud gossip discovery</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('identity')">
+              <div class="tile-icon" style="background:rgba(34,197,94,0.1);color:var(--green)">&#x25C7;</div>
+              <div class="tile-name">Identity</div>
+              <div class="tile-desc">This node's permanent DID and NS address</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+            <div class="app-tile" onclick="navigate('api')">
+              <div class="tile-icon" style="background:rgba(96,165,250,0.1);color:var(--blue)">&#x2263;</div>
+              <div class="tile-name">API Docs</div>
+              <div class="tile-desc">Full route manifest for the Nexus Cloud API</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard -->
+      <div id="view-dashboard" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Dashboard</h1><p>Node health and cloud summary</p></div>
+        </div>
+        <div id="dashboard-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Tools -->
+      <div id="view-tools" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Tools</h1><p>Registered tools and upstream configuration</p></div>
+        </div>
+        <div id="tools-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Users -->
+      <div id="view-users" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Users</h1><p>NS address registry &mdash; @username:nodeShortId</p></div>
+        </div>
+        <div id="users-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Federation -->
+      <div id="view-federation" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Federation</h1><p>Known peer nodes and gossip discovery</p></div>
+        </div>
+        <div id="federation-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Identity -->
+      <div id="view-identity" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>Identity</h1><p>This node's permanent decentralised identity</p></div>
+        </div>
+        <div id="identity-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- API -->
+      <div id="view-api" class="view">
+        <div class="view-header">
+          <div class="view-title-block"><h1>API Reference</h1><p>All Nexus Cloud API endpoints</p></div>
+        </div>
+        <div id="api-content"><div class="loading-state"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- App frame -->
+      <div id="view-app-frame" class="view">
+        <div id="frame-toolbar">
+          <span class="frame-app-name" id="frame-name">App</span>
+          <span class="frame-app-url" id="frame-url"></span>
+          <a class="open-tab-btn" id="frame-new-tab" href="#" target="_blank" rel="noopener">Open in new tab &#x2197;</a>
+        </div>
+        <iframe id="app-iframe" src="about:blank" allow="fullscreen"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"></iframe>
+        <div id="frame-blocked">
+          <div class="blocked-icon">&#x2298;</div>
+          <p>This app cannot be displayed in an embedded frame.</p>
+          <a id="frame-blocked-link" href="#" target="_blank" rel="noopener">Open in new tab &#x2197;</a>
+        </div>
+      </div>
+
+    </div><!-- /content-area -->
+  </div><!-- /main -->
+</div><!-- /app-shell -->
+
+<!-- Offline modal -->
+<div id="offline-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-layer);border:1px solid var(--border-md);border-radius:12px;padding:32px 28px;max-width:380px;width:90%;text-align:center;">
+    <div style="font-size:36px;margin-bottom:12px;">🔌</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:8px;">Service Offline</div>
+    <div id="offline-modal-msg" style="font-size:13px;color:var(--text-muted);margin-bottom:24px;"></div>
+    <button onclick="document.getElementById('offline-modal').style.display='none'" style="background:var(--green);color:#000;border:none;border-radius:6px;padding:8px 22px;font-size:13px;font-weight:600;cursor:pointer;">OK</button>
   </div>
 </div>
 
 <script>
-(function(){
-  const s = document.createElement('script');
-  s.setAttribute('data-target', 'nexus-network-widget');
-  s.setAttribute('data-api', 'https://network.nexus.computer/api/stats');
-  s.setAttribute('data-theme', 'dark');
-  s.src = 'https://network.nexus.computer/widget.js';
-  document.head.appendChild(s);
-})();
+'use strict';
+
+// State
+var currentUser = null;
+var currentToken = null;
+var currentView = 'launcher';
+var openApps = new Map();
+var loadedViews = new Set(['launcher']);
+
+// Auth
+async function checkAuth() {
+  var token = localStorage.getItem('nc_token');
+  if (!token) { showLogin(); return; }
+  try {
+    var res = await fetch('/api/v1/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!res.ok) { localStorage.removeItem('nc_token'); showLogin(); return; }
+    var data = await res.json();
+    currentToken = token;
+    currentUser = data.user;
+    showShell();
+  } catch { showLogin(); }
+}
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-shell').style.display = 'none';
+}
+
+function showShell() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').removeAttribute('style');
+  var name = (currentUser && currentUser.sub) ? currentUser.sub : 'Admin';
+  var initial = name[0].toUpperCase();
+  document.getElementById('sidebar-avatar').textContent = initial;
+  document.getElementById('topbar-avatar').textContent = initial;
+  document.getElementById('sidebar-username').textContent = name;
+  document.getElementById('topbar-username').textContent = name;
+  document.getElementById('greeting-name').textContent = name[0].toUpperCase() + name.slice(1);
+  updateGreeting();
+  loadLauncher();
+}
+
+function logout() {
+  localStorage.removeItem('nc_token');
+  currentToken = null; currentUser = null;
+  loadedViews.clear(); loadedViews.add('launcher');
+  openApps.clear();
+  renderOpenApps();
+  showLogin();
+}
+
+// Login form
+document.getElementById('login-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('login-btn');
+  var errEl = document.getElementById('login-error');
+  var username = document.getElementById('login-username').value.trim();
+  var password = document.getElementById('login-password').value;
+  if (!username || !password) { showLoginError('Please enter username and password.'); return; }
+  btn.disabled = true; btn.textContent = 'Signing in\u2026';
+  errEl.style.display = 'none';
+  try {
+    var res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    });
+    var data = await res.json();
+    if (!res.ok) { showLoginError(data.error || 'Login failed.'); return; }
+    localStorage.setItem('nc_token', data.token);
+    currentToken = data.token;
+    currentUser = data.user;
+    showShell();
+  } catch { showLoginError('Network error \u2014 is Nexus Cloud running?'); }
+  finally { btn.disabled = false; btn.textContent = 'Sign in'; }
+});
+
+function showLoginError(msg) {
+  var el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// Navigation
+var VIEW_LABELS = {
+  launcher: 'Launcher', dashboard: 'Dashboard', tools: 'Tools',
+  users: 'Users', federation: 'Federation', identity: 'Identity', api: 'API'
+};
+
+function navigate(viewId, meta) {
+  meta = meta || {};
+  document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('.view').forEach(function(el) { el.classList.remove('active'); });
+  currentView = viewId;
+  if (viewId === 'app-frame' && meta.appId) {
+    var navEl = document.getElementById('nav-app-' + meta.appId);
+    if (navEl) navEl.classList.add('active');
+  } else {
+    var navEl2 = document.getElementById('nav-' + viewId);
+    if (navEl2) navEl2.classList.add('active');
+  }
+  var viewEl = document.getElementById('view-' + (viewId === 'app-frame' ? 'app-frame' : viewId));
+  if (viewEl) viewEl.classList.add('active');
+  var label = viewId === 'app-frame' ? (meta.name || 'App') : (VIEW_LABELS[viewId] || viewId);
+  document.getElementById('topbar-view-name').textContent = label;
+  if (viewId === 'app-frame' && meta.url) {
+    openAppFrame(meta);
+  } else if (!loadedViews.has(viewId)) {
+    loadedViews.add(viewId);
+    loadView(viewId);
+  }
+}
+
+function loadView(viewId) {
+  if (viewId === 'dashboard') loadDashboard();
+  else if (viewId === 'tools') loadToolsView();
+  else if (viewId === 'users') loadUsersView();
+  else if (viewId === 'federation') loadFederationView();
+  else if (viewId === 'identity') loadIdentityView();
+  else if (viewId === 'api') loadApiView();
+}
+
+// App frame
+function openTool(tool) {
+  var h = tool.health || tool.status;
+  if (!tool.upstreamUrl) { navigate('tools'); return; }
+  if (h && h !== 'healthy' && h !== 'degraded') {
+    showOfflineModal(tool.name);
+    return;
+  }
+  var meta = capMeta(tool.capabilities);
+  openApps.set(tool.id, { id: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
+  renderOpenApps();
+  navigate('app-frame', { appId: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
+}
+
+function showOfflineModal(name) {
+  var msg = (name || 'This tool') + ' is currently offline and cannot be opened.';
+  document.getElementById('offline-modal-msg').textContent = msg;
+  document.getElementById('offline-modal').style.display = 'flex';
+}
+
+function openAppFrame(meta) {
+  var iframe = document.getElementById('app-iframe');
+  var blocked = document.getElementById('frame-blocked');
+  var newTab = document.getElementById('frame-new-tab');
+  var blockedLink = document.getElementById('frame-blocked-link');
+  document.getElementById('frame-name').textContent = meta.name || 'App';
+  document.getElementById('frame-url').textContent = meta.url;
+  newTab.href = meta.url; blockedLink.href = meta.url;
+  blocked.style.display = 'none'; iframe.style.display = '';
+  iframe.src = meta.url;
+  iframe.onload = function() {
+    try {
+      var doc = iframe.contentDocument;
+      if (doc && doc.body && doc.body.innerHTML === '') showFrameBlocked();
+    } catch (ex) { /* cross-origin: assume fine */ }
+  };
+}
+
+function showFrameBlocked() {
+  document.getElementById('app-iframe').style.display = 'none';
+  document.getElementById('frame-blocked').style.display = 'flex';
+}
+
+function renderOpenApps() {
+  var container = document.getElementById('open-apps-list');
+  var section = document.getElementById('open-apps-nav');
+  if (openApps.size === 0) { section.style.display = 'none'; return; }
+  section.removeAttribute('style');
+  container.innerHTML = '';
+  openApps.forEach(function(app, id) {
+    var el = document.createElement('div');
+    el.className = 'nav-item'; el.id = 'nav-app-' + id;
+    el.innerHTML = '<span class="nav-ico">' + esc(app.icon) + '</span>' +
+      '<span class="nav-label">' + esc(app.name) + '</span>' +
+      '<button class="nav-close-btn" title="Close" onclick="closeApp(\'' + esc(id) + '\',event)">&#x2715;</button>';
+    el.addEventListener('click', (function(a){ return function(){ navigate('app-frame', a); }; })(app));
+    container.appendChild(el);
+  });
+}
+
+function closeApp(id, e) {
+  e.stopPropagation();
+  openApps.delete(id);
+  renderOpenApps();
+  if (currentView === 'app-frame') navigate('launcher');
+}
+
+// Launcher
+async function loadLauncher() {
+  try {
+    var res = await fetch('/api/v1/tools');
+    var data = await res.json();
+    var tools = data.tools || data;
+    renderToolsGrid(Array.isArray(tools) ? tools : []);
+  } catch {
+    document.getElementById('tools-grid').innerHTML = '<div class="empty-state">' +
+      '<div class="empty-icon">&#x2699;</div><p>No tools registered yet.</p>' +
+      '<p>Start Nexus-Hosting, Nexus AI, or Nexus Chat to see them here.</p></div>';
+  }
+}
+
+function renderToolsGrid(tools) {
+  var grid = document.getElementById('tools-grid');
+  if (!tools.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2699;</div>' +
+      '<p>No tools registered yet.</p><p>Start your NS services to see them here.</p></div>';
+    return;
+  }
+  grid.innerHTML = '';
+  tools.forEach(function(tool) {
+    var meta = capMeta(tool.capabilities);
+    var h = tool.health || tool.status;
+    var statusCls = h === 'healthy' ? 'healthy' : h === 'degraded' ? 'degraded' : 'offline';
+    var tile = document.createElement('div');
+    tile.className = 'app-tile';
+    tile.innerHTML = '<div class="tile-icon" style="background:' + meta.bg + ';color:' + meta.color + '">' + meta.icon + '</div>' +
+      '<div class="tile-name">' + esc(tool.name) + '</div>' +
+      '<div class="tile-desc">' + esc(tool.description || meta.label) + '</div>' +
+      '<div class="tile-footer"><span class="status-dot ' + statusCls + '"></span>' +
+      '<span class="status-label">' + esc(h || 'unknown') + '</span>' +
+      (tool.upstreamUrl ? '<span style="margin-left:auto;font-size:11px;color:var(--text-dim)">&#x2197;</span>' : '') + '</div>';
+    tile.addEventListener('click', (function(t){ return function(){ openTool(t); }; })(tool));
+    grid.appendChild(tile);
+  });
+}
+
+// Dashboard
+async function loadDashboard() {
+  var el = document.getElementById('dashboard-content');
+  try {
+    var [sr, ir, tr, ar] = await Promise.all([
+      fetch('/api/v1/status'),
+      fetch('/v1/federation/identity'),
+      fetch('/api/v1/status?compact=trust'),
+      fetch('/api/v1/audit?eventType=node-trust-action&kind=audit&limit=10')
+    ]);
+    var [toolsR] = await Promise.all([fetch('/api/v1/tools')]);
+    if (!sr.ok) throw new Error('Status API returned HTTP ' + sr.status);
+    if (!ir.ok) throw new Error('Identity API returned HTTP ' + ir.status);
+    var status = await sr.json();
+    var identity = await ir.json();
+    var trustPayload = tr.ok ? await tr.json() : null;
+    var auditPayload = ar.ok ? await ar.json() : null;
+    var allTools = toolsR.ok ? ((await toolsR.json()).tools || []) : [];
+    var tools = status.tools || {}; var users = status.users || {}; var peers = status.peers || {};
+    var node = status.node || {};
+    el.innerHTML = '<div class="stats-row">' +
+      '<div class="stat-card"><div class="stat-val">' + (tools.healthy != null ? tools.healthy : tools.total || 0) + '</div><div class="stat-label">Healthy Tools</div><div class="stat-sub">' + (tools.total || 0) + ' registered</div></div>' +
+      '<div class="stat-card"><div class="stat-val">' + (users.total || 0) + '</div><div class="stat-label">Users</div><div class="stat-sub">on this node</div></div>' +
+      '<div class="stat-card"><div class="stat-val">' + (peers.total || peers.known || 0) + '</div><div class="stat-label">Peers</div><div class="stat-sub">federation nodes</div></div>' +
+      '</div>' +
+      '<div class="node-card"><div class="node-header"><div class="node-icon">&#x2B21;</div><div>' +
+      '<div class="node-name">' + esc(identity.address || node.id || 'Nexus Node') + '</div>' +
+      '<div class="node-meta">' + esc(identity.shortId || node.shortId || '') + '</div></div></div>' +
+      '<div class="node-fields">' +
+      '<div class="node-field"><label>DID</label><div class="val">' + esc(identity.did || node.did || '\u2014') + '</div></div>' +
+      '<div class="node-field"><label>Short ID</label><div class="val">' + esc(identity.shortId || node.shortId || '\u2014') + '</div></div>' +
+      '<div class="node-field"><label>NS Address</label><div class="val">' + esc(identity.address || '\u2014') + '</div></div>' +
+      '</div></div>' +
+      renderTrustCard(trustPayload) +
+      renderAuditCard(auditPayload) +
+      renderInternalServicesCard(allTools);
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load dashboard: ' + esc(String(err)) + '</div>'; }
+}
+
+// Tools view
+// Trust lifecycle card
+// Internal cloud services card
+function renderInternalServicesCard(allTools) {
+  var INTERNAL = [
+    { id: 'nexus-guardian', icon: '\u{1F6E1}\uFE0F', name: 'Nexus Guardian', desc: 'Behavior guardrails & policy enforcement. Approves or denies service exposure and records trust decisions.' },
+    { id: 'nexus-edge',     icon: '\u{1F50D}',        name: 'Nexus Edge',     desc: 'Threat detection & anomaly monitoring. Records threats, assigns severity, recommends responses.' },
+    { id: 'nexus-tunnel',   icon: '\u{1F30F}',        name: 'Nexus Tunnel',   desc: 'Exposure management & routing. Controls which services get public URLs and gates access via Guardian.' },
+  ];
+  var byId = {};
+  (allTools || []).forEach(function(t) { byId[t.id] = t; });
+  var onlineCount = INTERNAL.filter(function(s) { return byId[s.id]; }).length;
+  var countBadge = onlineCount === 0
+    ? '<span class="card-count" style="background:var(--amber-dim);color:var(--amber)">not registered</span>'
+    : '<span class="card-count" style="background:rgba(34,197,94,.15);color:#4ade80">' + onlineCount + '/' + INTERNAL.length + ' online</span>';
+  var rows = INTERNAL.map(function(svc, i) {
+    var t = byId[svc.id];
+    var isLast = i === INTERNAL.length - 1;
+    var border = isLast ? '' : 'border-bottom:1px solid var(--border);';
+    if (!t) {
+      return '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 18px;' + border + '">' +
+        '<div style="font-size:20px;line-height:1;margin-top:1px">' + svc.icon + '</div>' +
+        '<div style="flex:1"><div style="font-weight:600;color:var(--text);font-size:13px">' + esc(svc.name) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">' + esc(svc.desc) + '</div>' +
+        '<span style="display:inline-block;margin-top:6px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--amber-dim);color:var(--amber)">not registered</span>' +
+        '</div></div>';
+    }
+    var health = t.health || 'unknown';
+    var healthCls = health === 'healthy' ? 'healthy' : health === 'degraded' ? 'degraded' : 'offline';
+    var healthColor = health === 'healthy' ? '#4ade80' : health === 'degraded' ? '#fbbf24' : '#f87171';
+    var caps = (t.capabilities || []).slice(0, 4).map(function(c) {
+      return '<span class="cap-badge">' + esc(c) + '</span>';
+    }).join('');
+    var hbAgo = t.lastHeartbeatAt ? timeAgo(t.lastHeartbeatAt) : (t.registeredAt ? 'registered ' + timeAgo(t.registeredAt) : '\u2014');
+    var openBtn = t.upstreamUrl
+      ? '<a href="' + esc(t.upstreamUrl) + '" target="_blank" style="margin-left:auto;flex-shrink:0;font-size:11px;padding:3px 10px;border-radius:4px;background:var(--surface2);color:var(--text);text-decoration:none;border:1px solid var(--border)">Open &#x2197;</a>'
+      : '';
+    return '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 18px;' + border + '">' +
+      '<div style="font-size:20px;line-height:1;margin-top:1px">' + svc.icon + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+          '<span style="font-weight:600;color:var(--text);font-size:13px">' + esc(svc.name) + '</span>' +
+          '<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:' + healthColor + '">' +
+            '<span class="status-dot ' + healthCls + '"></span>' + esc(health) +
+          '</span>' +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">' + esc(svc.desc) + '</div>' +
+        '<div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+          caps +
+          '<span style="font-size:11px;color:var(--text-dim);margin-left:2px">\u2665 ' + esc(hbAgo) + '</span>' +
+        '</div>' +
+      '</div>' +
+      openBtn +
+      '</div>';
+  }).join('');
+  return '<div class="card" style="margin-top:20px">' +
+    '<div class="card-header"><span class="card-title">\u{1F9E9} Internal Cloud Services</span>' + countBadge + '</div>' +
+    '<div style="padding:4px 0">' + rows + '</div>' +
+    '</div>';
+}
+
+function renderTrustCard(payload) {
+  if (!payload || !payload.trust) return '';
+  var t = payload.trust;
+  function pills(scope) {
+    var s = scope;
+    var out = '';
+    var states = [
+      { key: 'trusted',     cls: 'tp-trusted' },
+      { key: 'verified',    cls: 'tp-verified' },
+      { key: 'pending',     cls: 'tp-pending' },
+      { key: 'quarantined', cls: 'tp-quarantined' },
+      { key: 'revoked',     cls: 'tp-revoked' },
+      { key: 'expired',     cls: 'tp-expired' }
+    ];
+    states.forEach(function(st) {
+      var n = s[st.key] || 0;
+      if (n > 0) {
+        out += '<span class="trust-pill ' + st.cls + '">' + n + ' ' + st.key + '</span>';
+      }
+    });
+    if (!out) out = '<span class="trust-pill tp-expired">none</span>';
+    return out;
+  }
+  var updatedAgo = t.updatedAt ? timeAgo(t.updatedAt) : '\u2014';
+  return '<div class="card" style="margin-top:20px">' +
+    '<div class="card-header">' +
+    '<span class="card-title">&#x1F512; Trust Lifecycle</span>' +
+    '<span class="card-count">updated ' + esc(updatedAgo) + '</span>' +
+    '</div>' +
+    '<div class="trust-grid">' +
+    '<div class="trust-scope">' +
+    '<div class="trust-scope-label">Nodes (' + (t.nodes.total || 0) + ' total)</div>' +
+    '<div class="trust-pills">' + pills(t.nodes) + '</div>' +
+    '</div>' +
+    '<div class="trust-scope">' +
+    '<div class="trust-scope-label">Peers (' + (t.peers.total || 0) + ' total)</div>' +
+    '<div class="trust-pills">' + pills(t.peers) + '</div>' +
+    '</div>' +
+    '</div>' +
+    '</div>';
+}
+
+// Recent trust events card
+function renderAuditCard(payload) {
+  if (!payload || !Array.isArray(payload.events) || payload.events.length === 0) return '';
+  var rows = payload.events.map(function(ev) {
+    var m = ev.metadata || {};
+    var action = m.action || 'unknown';
+    var actor  = m.actor  || 'system';
+    var prev   = m.previousState || '';
+    var next   = m.nextState || '';
+    var reason = m.reason || '';
+    var subject = esc(ev.subjectId || '\u2014');
+    var badgeCls = action === 'promote' ? 'ab-promote' :
+                   action === 'quarantine' ? 'ab-quarantine' :
+                   action === 'revoke'    ? 'ab-revoke' : 'ab-expire';
+    var transition = (prev && next) ? (esc(prev) + ' \u2192 ' + esc(next)) : (next ? esc(next) : '');
+    return '<div class="audit-row">' +
+      '<span class="audit-action-badge ' + badgeCls + '">' + esc(action) + '</span>' +
+      '<div class="audit-meta">' +
+      '<div class="audit-subject">' + subject + '</div>' +
+      '<div class="audit-detail">' +
+      (transition ? '<span style="margin-right:8px">' + transition + '</span>' : '') +
+      '<span style="color:var(--text-dim)">by ' + esc(actor) + '</span>' +
+      '</div>' +
+      (reason ? '<div class="audit-reason">' + esc(reason) + '</div>' : '') +
+      '</div>' +
+      '<div class="audit-ts">' + (ev.timestamp ? timeAgo(ev.timestamp) : '\u2014') + '</div>' +
+      '</div>';
+  }).join('');
+  return '<div class="card" style="margin-top:20px">' +
+    '<div class="card-header">' +
+    '<span class="card-title">&#x1F4CB; Recent Trust Actions</span>' +
+    '<span class="card-count">' + payload.events.length + '</span>' +
+    '</div>' +
+    rows +
+    '</div>';
+}
+
+async function loadToolsView() {
+  var el = document.getElementById('tools-content');
+  try {
+    var res = await fetch('/api/v1/tools');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var tools = data.tools || data;
+    if (!Array.isArray(tools) || !tools.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2699;</div><p>No tools registered.</p></div>'; return;
+    }
+    var rows = tools.map(function(t) {
+      var caps = (t.capabilities || []).map(function(c){ return '<span class="cap-badge cap-' + esc(c) + '">' + esc(c) + '</span>'; }).join('');
+      var sh = t.health || t.status;
+      var sd = sh === 'healthy' ? 'healthy' : sh === 'degraded' ? 'degraded' : 'offline';
+      return '<tr><td><strong>' + esc(t.name) + '</strong></td>' +
+        '<td>' + (caps || '<span class="cap-badge cap-default">none</span>') + '</td>' +
+        '<td><span class="status-dot ' + sd + '" style="margin-right:6px"></span>' + esc(sh || 'unknown') + '</td>' +
+        '<td class="mono">' + (t.upstreamUrl ? esc(t.upstreamUrl) : '\u2014') + '</td>' +
+        '<td>' + (t.lastHeartbeatAt ? timeAgo(t.lastHeartbeatAt) : '\u2014') + '</td>' +
+        '<td>' + (t.upstreamUrl ? '<button class="open-app-btn" onclick=\'openTool(' + JSON.stringify(t).replace(/'/g,"&#39;") + ')\'>Open &#x2197;</button>' : '') + '</td></tr>';
+    }).join('');
+    el.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Registered Tools</span><span class="card-count">' + tools.length + '</span></div>' +
+      '<table><thead><tr><th>Name</th><th>Capabilities</th><th>Status</th><th>Upstream URL</th><th>Last Seen</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load tools: ' + esc(String(err)) + '</div>'; }
+}
+
+// Users view
+async function loadUsersView() {
+  var el = document.getElementById('users-content');
+  try {
+    var res = await fetch('/api/v1/users');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var users = data.users || data;
+    if (!Array.isArray(users) || !users.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x25C9;</div><p>No users registered yet.</p></div>'; return;
+    }
+    var rows = users.map(function(u) {
+      return '<tr><td><strong>' + esc(u.username) + '</strong></td>' +
+        '<td class="mono" style="color:var(--green)">' + esc(u.address) + '</td>' +
+        '<td class="mono">' + esc(u.nodeId || '\u2014') + '</td>' +
+        '<td>' + (u.registeredAt ? new Date(u.registeredAt).toLocaleString() : '\u2014') + '</td></tr>';
+    }).join('');
+    el.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Users on this node</span><span class="card-count">' + users.length + '</span></div>' +
+      '<table><thead><tr><th>Username</th><th>NS Address</th><th>Node ID</th><th>Registered</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load users: ' + esc(String(err)) + '</div>'; }
+}
+
+// Federation view
+async function loadFederationView() {
+  var el = document.getElementById('federation-content');
+  try {
+    var res = await fetch('/v1/federation/peers');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var peers = data.peers || data;
+    if (!Array.isArray(peers) || !peers.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2B21;</div><p>No federation peers discovered yet.</p>' +
+        '<p>Add BOOTSTRAP_PEERS to your .env to connect to other Nexus nodes.</p></div>'; return;
+    }
+    var rows = peers.map(function(p) {
+      return '<tr><td class="mono">' + esc(p.domain || p.url || '\u2014') + '</td>' +
+        '<td>' + esc(p.trustLevel || p.trust || '\u2014') + '</td>' +
+        '<td>' + (p.lastSeen ? timeAgo(p.lastSeen) : '\u2014') + '</td>' +
+        '<td class="mono">' + esc(p.address || p.nodeAddress || '\u2014') + '</td></tr>';
+    }).join('');
+    el.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Known Peers</span><span class="card-count">' + peers.length + '</span></div>' +
+      '<table><thead><tr><th>Domain</th><th>Trust</th><th>Last Seen</th><th>Address</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load federation: ' + esc(String(err)) + '</div>'; }
+}
+
+// Identity view
+async function loadIdentityView() {
+  var el = document.getElementById('identity-content');
+  try {
+    var res = await fetch('/v1/federation/identity');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var d = await res.json();
+    el.innerHTML = '<div class="identity-grid">' +
+      '<div class="identity-field"><label>NS Address</label><div class="val address-val">' + esc(d.address || '\u2014') + '</div></div>' +
+      '<div class="identity-field"><label>Short ID</label><div class="val">' + esc(d.shortId || '\u2014') + '</div></div>' +
+      '<div class="identity-field"><label>Decentralized Identifier (DID)</label><div class="val">' + esc(d.did || '\u2014') + '</div></div>' +
+      (d.publicKey ? '<div class="identity-field"><label>Public Key</label><div class="val">' + esc(d.publicKey) + '</div></div>' : '') +
+      '</div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load identity: ' + esc(String(err)) + '</div>'; }
+}
+
+// API view
+async function loadApiView() {
+  var el = document.getElementById('api-content');
+  try {
+    var res = await fetch('/api/v1/endpoints');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    var routes = data.routes || data.endpoints || data;
+    if (!Array.isArray(routes)) throw new Error('Unexpected response');
+    var groups = {};
+    routes.forEach(function(r) {
+      var parts = r.path.split('/').filter(Boolean);
+      var key = parts.length >= 3 && parts[0] !== 'v1' ? '/' + parts.slice(0,3).join('/') :
+               parts.length >= 2 ? '/' + parts.slice(0,2).join('/') : r.path;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+    var html = Object.keys(groups).map(function(g) {
+      var items = groups[g].map(function(r) {
+        return '<div class="route-item"><span class="method-badge method-' + esc(r.method) + '">' + esc(r.method) + '</span>' +
+          '<span class="route-path">' + esc(r.path) + '</span>' +
+          '<span class="route-desc">' + esc(r.description || '') + '</span></div>';
+      }).join('');
+      return '<div class="route-group"><h3>' + esc(g) + '</h3>' + items + '</div>';
+    }).join('');
+    el.innerHTML = html || '<div class="empty-state"><p>No routes found.</p></div>';
+  } catch(err) { el.innerHTML = '<div class="error-state">Failed to load API routes: ' + esc(String(err)) + '</div>'; }
+}
+
+// Helpers
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function timeAgo(ts) {
+  var diff = Date.now() - new Date(ts).getTime();
+  if (diff < 60000) return Math.floor(diff/1000) + 's ago';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  return Math.floor(diff/86400000) + 'd ago';
+}
+
+function capMeta(capabilities) {
+  var c = (capabilities || [])[0];
+  var map = {
+    chat:      { icon: '\u{1F4AC}', color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Chat' },
+    ai:        { icon: '\u2726',    color: 'var(--purple)', bg: 'var(--purple-dim)', label: 'AI' },
+    hosting:   { icon: '\u2601',    color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Hosting' },
+    federation:{ icon: '\u2B21',    color: 'var(--amber)',  bg: 'var(--amber-dim)',  label: 'Federation' },
+    security:  { icon: '\u{1F6E1}', color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Security' },
+    vault:     { icon: '\u{1F512}', color: 'var(--amber)',  bg: 'var(--amber-dim)',  label: 'Vault' },
+    edge:      { icon: '\u{1F4BB}', color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Edge' },
+    network:   { icon: '\u{1F310}', color: 'var(--blue)',   bg: 'var(--blue-dim)',   label: 'Network' },
+    deploy:    { icon: '\u{1F680}', color: 'var(--purple)', bg: 'var(--purple-dim)', label: 'Deploy' },
+    messaging: { icon: '\u2709',    color: 'var(--green)',  bg: 'var(--green-dim)',  label: 'Messaging' }
+  };
+  return map[c] || { icon: '\u2699', color: 'var(--text-muted)', bg: 'var(--bg-hover)', label: 'Tool' };
+}
+
+function updateGreeting() {
+  var h = new Date().getHours();
+  document.getElementById('greeting-time').textContent = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+}
+
+// Boot
+checkAuth();
 </script>
 </body>
 </html>

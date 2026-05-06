@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createSystemsApiTestHarness } from "../test/systems-api-harness";
-import { systemsApiService } from "../systems-api";
 
 let handleRequest: (request: Request) => Promise<Response>;
+let systemsApiService: typeof import("../systems-api").systemsApiService;
 let cleanup: () => void;
 
 beforeAll(async () => {
   const harness = await createSystemsApiTestHarness();
   handleRequest = harness.handleRequest;
+  systemsApiService = harness.systemsApiService;
   cleanup = harness.cleanup;
 });
 
@@ -24,6 +25,7 @@ describe("public address issuance flow", () => {
       id: toolId,
       name,
       description: "Exposes a web URL",
+      upstreamUrl: "http://127.0.0.1:5300",
       exposed: false,
       capabilities: ["public-url.exposure"],
     });

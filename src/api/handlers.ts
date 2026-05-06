@@ -1,22 +1,37 @@
+import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
+import { createHash } from "node:crypto";
 import { architecture } from "../architecture";
+import { queryAuditLog, type AuditFilter } from "../audit";
 import { controlPlane, controlPlaneService } from "../control-plane";
-import { dataPlane } from "../data-plane";
+import { dataPlane, dataPlaneService } from "../data-plane";
 import { federationService } from "../federation";
-import { observabilityService } from "../observability";
+import { guardianService } from "../guardian";
+import { observabilityService, recordEvent } from "../observability";
 import { storage } from "../storage";
-import { systemsApiService } from "../systems-api";
+import { systemsApiService, heartbeatSystemsApiTool, listSystemsApiRoutes, getCloudDomain } from "../systems-api";
 import { describeSystemsApiDeployIntegration, systemsApiDeployIntegration } from "../systems-api/deploy";
+import { bootstrapDns, hasCloudflareDns } from "../cloudflare-dns";
+import { generateZoneFile } from "../dns-zone";
+import { getNodeIdentity } from "../identity";
+import { registerUser, listUsers } from "../users";
+import { selfAnnouncement, handleInboundAnnouncement, type GossipAnnouncement } from "../federation";
 import { apiRoutes } from "./index";
 import {
   type ArchitectureResponse,
   type HealthResponse,
   type LegacyStatusResponse,
   type NodeListResponse,
+  type NodeTrustActionRequestDTO,
+  type NodeTrustBulkAction,
+  type NodeTrustBulkRequestDTO,
+  type NodeTrustBulkResponseDTO,
   type PeerListResponse,
   type PlanWorkloadErrorResponse,
   type PlanWorkloadSuccessResponse,
   type RegisterNodeResponse,
   type StateResponse,
+  type GuardianDecisionResponse,
+  type GuardianDecisionsResponse,
   type SystemsApiAddressesResponseDTO,
   type SystemsApiAddressRequestDTO,
   type SystemsApiAddressRevokeRequestDTO,
@@ -31,6 +46,9 @@ import {
   type SystemsApiDomainVerificationRequestDTO,
   type SystemsApiDomainVerificationResponseDTO,
   type SystemsApiEndpointsResponseDTO,
+  type SystemsApiPhantomComplianceResponseDTO,
+  type SystemsApiPhantomComplianceSummaryResponseDTO,
+  type SystemsApiTrustSummaryResponseDTO,
   type SystemsApiExposureRequestDTO,
   type SystemsApiExposureResponseDTO,
   type SystemsApiExposuresResponseDTO,
@@ -45,6 +63,12 @@ import {
   type SystemsApiToolsResponseDTO,
   type TrustPeerResponse,
   type WorkloadListResponse,
+  type WorkloadRunResponse,
+  type WorkloadStopResponse,
+  type SystemsApiRoutesResponseDTO,
+  type SystemsApiToolRegistrationRequestDTO,
+  isNodeTrustActionRequest,
+  isNodeTrustBulkRequest,
   isRegisterNodeRequest,
   isSystemsApiAddressRequest,
   isSystemsApiAddressRevokeRequest,
@@ -52,8 +76,10 @@ import {
   isSystemsApiDomainBindingRequest,
   isSystemsApiDomainVerificationRequest,
   isSystemsApiExposureRequest,
+  isSystemsApiNodeHeartbeatRequest,
   isSystemsApiPublicUrlRequest,
   isSystemsApiToolPatchRequest,
+  isSystemsApiToolRegistrationRequest,
   isTrustPeerRequest,
   isWorkloadPlanRequest,
 } from "./dto";
@@ -66,8 +92,71 @@ import {
   type SystemsApiExposureStatusResponseDTO,
 } from "./exposure-dto";
 
+function corsHeaders(): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": cloudConfig.corsOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key",
+  };
+}
+
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, { status });
+  return Response.json(data, { status, headers: corsHeaders() });
+}
+
+function jsonWithConditionalEtag(request: Request, data: unknown, status = 200): Response {
+  const body = JSON.stringify(data);
+  const etag = `W/\"${createHash("sha1").update(body).digest("hex")}\"`;
+  const ifNoneMatch = request.headers.get("if-none-match")?.trim();
+  if (ifNoneMatch === etag || ifNoneMatch === "*") {
+    return new Response(null, {
+      status: 304,
+      headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "no-store" },
+    });
+  }
+
+  return new Response(body, {
+    status,
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ETag: etag,
+    },
+  });
+}
+
+function resolveAuditActor(request: Request): string {
+  const explicitActor = request.headers.get("x-nexus-actor")?.trim() || request.headers.get("x-actor")?.trim();
+  if (explicitActor) return explicitActor;
+  return "system:api-key";
+}
+
+function appendNodeTrustAuditEvent(params: {
+  action: NodeTrustBulkAction;
+  actor: string;
+  nodeId: string;
+  previousState: string;
+  nextState: string;
+  reason: string;
+}): void {
+  const timestamp = new Date().toISOString();
+  recordEvent({
+    kind: "audit",
+    source: "control-plane",
+    level: params.action === "promote" ? "info" : params.action === "quarantine" ? "warn" : "error",
+    subjectId: params.nodeId,
+    message: `Node trust ${params.action}: ${params.previousState} -> ${params.nextState}`,
+    timestamp,
+    metadata: {
+      eventType: "node-trust-action",
+      action: params.action,
+      actor: params.actor,
+      previousState: params.previousState,
+      nextState: params.nextState,
+      reason: params.reason,
+    },
+  });
 }
 
 function badRequest(message: string): Response {
@@ -78,12 +167,86 @@ function notFound(): Response {
   return json({ error: "Not found" }, 404);
 }
 
+function checkApiKey(request: Request): Response | null {
+  if (!requiresApiKey()) return null;
+  const header = request.headers.get("authorization");
+  const bearerToken = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  const apiKeyHeader = request.headers.get("x-api-key")?.trim() || null;
+  const token = bearerToken || apiKeyHeader;
+  if (!token || !isValidApiKey(token)) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+  return null;
+}
+
 async function readJson(request: Request): Promise<unknown | null> {
   try {
     return await request.json();
   } catch {
     return null;
   }
+}
+
+// ── Portal auth helpers ───────────────────────────────────────────────────────
+async function signToken(payload: Record<string, unknown>): Promise<string> {
+  const enc = new TextEncoder();
+  const secret = enc.encode(cloudConfig.apiKey || "nexus-cloud-dev-secret");
+  const data = enc.encode(JSON.stringify(payload));
+  const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, data);
+  return btoa(JSON.stringify(payload)) + "." + btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
+async function verifyToken(token: string): Promise<Record<string, unknown> | null> {
+  try {
+    const [payloadB64, sigB64] = token.split(".");
+    if (!payloadB64 || !sigB64) return null;
+    const enc = new TextEncoder();
+    const secret = enc.encode(cloudConfig.apiKey || "nexus-cloud-dev-secret");
+    const data = enc.encode(atob(payloadB64));
+    const sig = Uint8Array.from(atob(sigB64), (c) => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+    const valid = await crypto.subtle.verify("HMAC", key, sig, data);
+    if (!valid) return null;
+    const p = JSON.parse(atob(payloadB64)) as Record<string, unknown>;
+    if (typeof p.exp === "number" && p.exp < Math.floor(Date.now() / 1000)) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+async function handleAuthLogin(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (!body || typeof body !== "object") return badRequest("Missing credentials");
+  const { username, password } = body as { username?: string; password?: string };
+  const adminUser = process.env.CLOUD_ADMIN_USER || "admin";
+  const adminPass = process.env.CLOUD_ADMIN_PASSWORD || "";
+  if (!adminPass) {
+    return json({ error: "Portal auth not configured — set CLOUD_ADMIN_PASSWORD in .env" }, 503);
+  }
+  if (!username || !password || username !== adminUser || password !== adminPass) {
+    return json({ error: "Invalid credentials" }, 401);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const token = await signToken({ sub: username, role: "admin", iat: now, exp: now + 86400 * 7 });
+  return json({ token, user: { username, role: "admin" } });
+}
+
+async function handleAuthMe(request: Request): Promise<Response> {
+  const header = request.headers.get("authorization");
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return json({ error: "Unauthorized" }, 401);
+  const payload = await verifyToken(token);
+  if (!payload) return json({ error: "Invalid or expired token" }, 401);
+  return json({ user: payload });
+}
+
+function handleDashboard(): Response {
+  const html = Bun.file(new URL("../../public/status.html", import.meta.url));
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+  });
 }
 
 function handleHealth(): Response {
@@ -103,6 +266,7 @@ function handleHealth(): Response {
 
 function handleLegacyStatus(): Response {
   const snapshot = controlPlaneService.snapshot();
+  const status = systemsApiService.describeSystemsApiStatus();
   const body: LegacyStatusResponse = {
     status: "online",
     project: architecture.project,
@@ -113,6 +277,8 @@ function handleLegacyStatus(): Response {
     workloads: snapshot.workloads.length,
     tools: systemsApiService.listSystemsApiTools().length,
     public_urls: systemsApiService.listSystemsApiPublicUrls().length,
+    node_trust_summary: status.trust.nodes,
+    peer_trust_summary: status.trust.peers,
     updated_at: new Date().toISOString(),
   };
   return json(body);
@@ -138,9 +304,122 @@ async function handleNodeRegister(request: Request): Promise<Response> {
   return json(response, 201);
 }
 
+async function handleNodeTrustAction(request: Request, pathname: string): Promise<Response> {
+  const trustPrefix = "/v1/nodes/";
+  if (!pathname.startsWith(trustPrefix) || !pathname.includes("/trust/")) return notFound();
+  const nodeAndAction = pathname.slice(trustPrefix.length);
+  const splitAt = nodeAndAction.indexOf("/trust/");
+  if (splitAt <= 0) return badRequest("Missing node id");
+
+  const nodeId = decodeURIComponent(nodeAndAction.slice(0, splitAt));
+  const action = nodeAndAction.slice(splitAt + "/trust/".length);
+  if (!nodeId) return badRequest("Missing node id");
+
+  const body = await readJson(request);
+  if (body !== null && !isNodeTrustActionRequest(body)) return badRequest("Invalid trust action payload");
+  const reason = (body as NodeTrustActionRequestDTO | null)?.reason?.trim() || "operator-action";
+  const actor = resolveAuditActor(request);
+  const before = controlPlaneService.getNode(nodeId);
+  if (!before) return notFound();
+
+  const node = action === "promote"
+    ? controlPlaneService.promoteNodeTrust(nodeId)
+    : action === "quarantine"
+    ? controlPlaneService.quarantineNodeTrust(nodeId)
+    : action === "revoke"
+    ? controlPlaneService.revokeNodeTrust(nodeId)
+    : null;
+
+  if (action !== "promote" && action !== "quarantine" && action !== "revoke") {
+    return badRequest("Unsupported trust action");
+  }
+  if (!node) return notFound();
+
+  appendNodeTrustAuditEvent({
+    action: action as NodeTrustBulkAction,
+    actor,
+    nodeId,
+    previousState: before.trustState,
+    nextState: node.trustState,
+    reason,
+  });
+
+  return json({ node } satisfies RegisterNodeResponse);
+}
+
+async function handleNodeTrustBulk(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (!isNodeTrustBulkRequest(body)) return badRequest("Missing bulk trust operations");
+
+  const actor = resolveAuditActor(request);
+  const results = body.operations.map((operation) => {
+    const existing = controlPlaneService.getNode(operation.nodeId);
+    if (!existing) {
+      return {
+        nodeId: operation.nodeId,
+        action: operation.action,
+        ok: false,
+        error: "Node not found",
+        reasonCode: "NODE_NOT_FOUND",
+      };
+    }
+
+    const node = operation.action === "promote"
+      ? controlPlaneService.promoteNodeTrust(operation.nodeId)
+      : operation.action === "quarantine"
+      ? controlPlaneService.quarantineNodeTrust(operation.nodeId)
+      : controlPlaneService.revokeNodeTrust(operation.nodeId);
+
+    if (!node) {
+      return {
+        nodeId: operation.nodeId,
+        action: operation.action,
+        ok: false,
+        error: "Node not found",
+        reasonCode: "NODE_NOT_FOUND",
+      };
+    }
+
+    appendNodeTrustAuditEvent({
+      action: operation.action,
+      actor,
+      nodeId: operation.nodeId,
+      previousState: existing.trustState,
+      nextState: node.trustState,
+      reason: operation.reason?.trim() || "operator-action",
+    });
+
+    return {
+      nodeId: operation.nodeId,
+      action: operation.action,
+      ok: true,
+      node,
+    };
+  });
+
+  const summary = {
+    total: results.length,
+    succeeded: results.filter((result) => result.ok).length,
+    failed: results.filter((result) => !result.ok).length,
+  };
+
+  return json({ results, summary } satisfies NodeTrustBulkResponseDTO);
+}
+
 function handleWorkloadsList(): Response {
   const body: WorkloadListResponse = { workloads: controlPlaneService.listWorkloads() };
   return json(body);
+}
+
+function handleWorkloadRun(workloadId: string): Response {
+  const result = dataPlaneService.runWorkload(workloadId);
+  if (!result) return notFound();
+  return json(result satisfies WorkloadRunResponse, result.ok ? 201 : 503);
+}
+
+function handleWorkloadStop(workloadId: string): Response {
+  const units = dataPlaneService.stopWorkload(workloadId);
+  return json({ units } satisfies WorkloadStopResponse);
 }
 
 async function handleWorkloadPlan(request: Request): Promise<Response> {
@@ -174,8 +453,42 @@ async function handlePeerTrust(request: Request, pathname: string): Promise<Resp
   return json(response, 201);
 }
 
-function handleSystemsTools(): Response {
-  return json({ tools: systemsApiService.listSystemsApiTools() } satisfies SystemsApiToolsResponseDTO);
+function parsePhantomComplianceFilter(url: URL): "all" | "failing" {
+  return url.searchParams.get("phantomCompliance") === "failing" || url.searchParams.get("status") === "failing" ? "failing" : "all";
+}
+
+function parseStatusCompactMode(url: URL): "none" | "trust" {
+  return url.searchParams.get("compact") === "trust" ? "trust" : "none";
+}
+
+function collectPhantomComplianceEntries(filter: "all" | "failing") {
+  const status = systemsApiService.describeSystemsApiStatus();
+  const toolsById = new Map(systemsApiService.listSystemsApiTools().map((tool) => [tool.id, tool] as const));
+  const failureByToolId = new Map(status.integrationFailures.map((failure) => [failure.toolId, failure] as const));
+  const claimedTools = systemsApiService.listSystemsApiTools().filter((tool) => tool.phantomSecurityProfile?.claimedSecured);
+
+  const entries = claimedTools
+    .map((tool) => {
+      const failure = failureByToolId.get(tool.id);
+      return {
+        tool,
+        compliant: !failure,
+        ...(failure ? { failure } : {}),
+      };
+    })
+    .filter((entry) => filter === "all" || !entry.compliant);
+
+  return { status, entries, failures: status.integrationFailures };
+}
+
+function handleSystemsTools(url: URL): Response {
+  const filter = parsePhantomComplianceFilter(url);
+  if (filter === "all") {
+    return json({ tools: systemsApiService.listSystemsApiTools() } satisfies SystemsApiToolsResponseDTO);
+  }
+
+  const { entries } = collectPhantomComplianceEntries("failing");
+  return json({ tools: entries.map((entry) => entry.tool) } satisfies SystemsApiToolsResponseDTO);
 }
 
 function handleSystemsEndpoints(): Response {
@@ -230,7 +543,7 @@ function handleSystemsToolHistory(toolId: string): Response {
 async function handleSystemsToolPatch(request: Request, toolId: string): Promise<Response> {
   const body = await readJson(request);
   if (!isSystemsApiToolPatchRequest(body)) return badRequest("Missing tool metadata fields");
-  if (body.name === undefined && body.description === undefined && body.mode === undefined && body.exposed === undefined && body.health === undefined && body.capabilities === undefined) {
+  if (body.name === undefined && body.description === undefined && body.mode === undefined && body.exposed === undefined && body.health === undefined && body.capabilities === undefined && body.upstreamUrl === undefined && body.phantomSecurityProfile === undefined) {
     return badRequest("Empty tool metadata patch");
   }
   const tool = systemsApiService.updateSystemsApiTool(toolId, body as SystemsApiToolPatchRequestDTO);
@@ -250,15 +563,117 @@ function handleSystemsToolDisable(toolId: string): Response {
   return json({ tool } satisfies SystemsApiToolResponseDTO);
 }
 
-function handleSystemsStatus(): Response {
+function handleSystemsStatus(request: Request, url: URL): Response {
+  if (parseStatusCompactMode(url) === "trust") {
+    const status = systemsApiService.describeSystemsApiStatus();
+    const compactBody: SystemsApiTrustSummaryResponseDTO = {
+      scope: "trust-lifecycle",
+      trust: status.trust,
+    };
+    return jsonWithConditionalEtag(request, compactBody);
+  }
+
+  const filter = parsePhantomComplianceFilter(url);
+  const tools = filter === "failing"
+    ? collectPhantomComplianceEntries("failing").entries.map((entry) => entry.tool)
+    : systemsApiService.listSystemsApiTools();
   const body: SystemsApiExposureStatusResponseDTO = toSystemsApiExposureStatusResponseDTO(
     systemsApiService.describeSystemsApiStatus(),
-    systemsApiService.listSystemsApiTools(),
+    tools,
     systemsApiService.listSystemsApiPublicUrls(),
     systemsApiService.listSystemsApiExposures(),
     systemsApiService.listSystemsApiDomainBindings(),
   );
+  return jsonWithConditionalEtag(request, body);
+}
+
+function handleSystemsPhantomCompliance(url: URL): Response {
+  const filter = parsePhantomComplianceFilter(url);
+  const { status, entries, failures } = collectPhantomComplianceEntries(filter);
+  const body: SystemsApiPhantomComplianceResponseDTO = {
+    scope: "phantom-security",
+    status: status.integrationStatus,
+    count: entries.length,
+    failingCount: failures.length,
+    entries,
+    failures,
+    updatedAt: new Date().toISOString(),
+  };
   return json(body);
+}
+
+function handleSystemsPhantomComplianceSummary(request: Request): Response {
+  const status = systemsApiService.describeSystemsApiStatus();
+  const body: SystemsApiPhantomComplianceSummaryResponseDTO = {
+    scope: "phantom-security",
+    status: status.integrationStatus,
+    claimedSecuredCount: status.phantomSecuredClaimedCount,
+    compliantCount: status.phantomSecuredCompliantCount,
+    failingCount: status.failedIntegrationCount,
+    updatedAt: new Date().toISOString(),
+  };
+  return jsonWithConditionalEtag(request, body);
+}
+
+function handleSystemsTrustSummary(request: Request): Response {
+  const status = systemsApiService.describeSystemsApiStatus();
+  const body: SystemsApiTrustSummaryResponseDTO = {
+    scope: "trust-lifecycle",
+    trust: status.trust,
+  };
+  return jsonWithConditionalEtag(request, body);
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Query the durable NDJSON audit log.
+ * Accepted query parameters: subjectId, source, level, kind, from, to, eventType, action, actor, limit.
+ */
+function handleAuditQuery(url: URL, subjectIdOverride?: string): Response {
+  const q = url.searchParams;
+  const filter: AuditFilter = {
+    subjectId: subjectIdOverride ?? q.get("subjectId") ?? undefined,
+    source: q.get("source") ?? undefined,
+    level: q.get("level") ?? undefined,
+    kind: q.get("kind") ?? undefined,
+    from: q.get("from") ?? undefined,
+    to: q.get("to") ?? undefined,
+    eventType: q.get("eventType") ?? undefined,
+    action: q.get("action") ?? undefined,
+    actor: q.get("actor") ?? undefined,
+  };
+  const rawLimit = q.get("limit");
+  if (rawLimit !== null) {
+    const parsed = parseInt(rawLimit, 10);
+    if (!isNaN(parsed) && parsed > 0) filter.limit = parsed;
+  }
+  const events = queryAuditLog(filter);
+  return json({ events, count: events.length });
+}
+
+function handleGuardianDecisions(): Response {
+  return json({ decisions: guardianService.listGuardianDecisions() } satisfies GuardianDecisionsResponse);
+}
+
+function handleGuardianDecisionAction(pathname: string): Response {
+  const suffix = pathname.slice("/api/v1/guardian/".length);
+  const [scope, encodedSubjectId, action] = suffix.split("/");
+  const subjectId = decodeURIComponent(encodedSubjectId ?? "");
+  if (!scope || !subjectId || !action) return notFound();
+  const typedScope = scope === "exposure" || scope === "domain" || scope === "runtime" ? scope : null;
+  if (!typedScope) return notFound();
+  const decision = action === "approve"
+    ? guardianService.approveGuardianDecision(typedScope, subjectId)
+    : action === "deny"
+      ? guardianService.denyGuardianDecision(typedScope, subjectId)
+      : action === "suspend"
+        ? guardianService.suspendGuardianDecision(typedScope, subjectId)
+        : action === "quarantine"
+          ? guardianService.quarantineGuardianDecision(typedScope, subjectId)
+          : null;
+  if (!decision) return notFound();
+  return json({ decision } satisfies GuardianDecisionResponse);
 }
 
 async function handleSystemsPublicUrl(request: Request): Promise<Response> {
@@ -375,7 +790,149 @@ async function handleSystemsToolRoute(request: Request, pathname: string): Promi
     const toolId = decodeURIComponent(suffix.slice(0, -"/disable".length));
     return toolId ? handleSystemsToolDisable(toolId) : badRequest("Missing tool id");
   }
+  if (request.method === "POST" && suffix.endsWith("/heartbeat")) {
+    const toolId = decodeURIComponent(suffix.slice(0, -"/heartbeat".length));
+    return toolId ? handleToolHeartbeat(request, toolId) : badRequest("Missing tool id");
+  }
+  if (request.method === "DELETE" && !suffix.includes("/")) {
+    const toolId = decodeURIComponent(suffix);
+    const tool = systemsApiService.deregisterSystemsApiTool(toolId);
+    if (!tool) return notFound();
+    return json({ tool });
+  }
   return notFound();
+}
+
+function handleSystemsRoutes(): Response {
+  const domain = getCloudDomain();
+  const routes = listSystemsApiRoutes();
+  const body: SystemsApiRoutesResponseDTO = {
+    domain,
+    routes,
+    count: routes.length,
+    updatedAt: new Date().toISOString(),
+  };
+  return json(body);
+}
+
+function handleSystemsRoutesCaddy(): Response {
+  const routes = listSystemsApiRoutes();
+  const caddyRoutes = routes.map((route) => ({
+    match: [{ host: [route.domain] }],
+    handle: [{
+      handler: "reverse_proxy",
+      upstreams: [{ dial: route.upstream.replace(/^https?:\/\//, "") }],
+    }],
+  }));
+  return json({ routes: caddyRoutes });
+}
+
+function handleFederationIdentity(): Response {
+  const id = getNodeIdentity();
+  return json({
+    did: id.did,
+    shortId: id.shortId,
+    publicKey: id.publicKey,
+    namingScheme: "@user:shortId",
+    exampleAddress: `@alice:${id.shortId}`,
+    addressNote:
+      "Addresses are scoped to this node. Only the holder of this node's private key can issue credentials in this namespace — no registrar, no cost, no squatting possible.",
+  });
+}
+
+function handleNodeAnnouncement(): Response {
+  return json(selfAnnouncement());
+}
+
+async function handleInboundPeerAnnounce(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (
+    typeof body !== "object" || body === null ||
+    typeof (body as Record<string, unknown>)["did"] !== "string" ||
+    typeof (body as Record<string, unknown>)["upstreamUrl"] !== "string"
+  ) {
+    return badRequest("Missing required fields: did, upstreamUrl");
+  }
+  const announcement = body as GossipAnnouncement;
+  const trustDecision = federationService.authorizeFederatedPeerAction(announcement.upstreamUrl);
+  if (!trustDecision.allowed) {
+    return json({
+      error: trustDecision.reason,
+      reasonCode: trustDecision.reasonCode,
+      requiredTrust: trustDecision.requiredTrust,
+      peerTrustState: trustDecision.peerTrustState ?? "unregistered",
+    }, 403);
+  }
+
+  const result = handleInboundAnnouncement(announcement);
+  return json(result);
+}
+
+async function handleUserRegister(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (typeof body !== "object" || body === null || typeof (body as Record<string, unknown>)["username"] !== "string") {
+    return badRequest("Missing required field: username");
+  }
+  const result = registerUser((body as Record<string, unknown>)["username"] as string);
+  if (!result.ok) return badRequest(result.error);
+  return json({ user: result.user }, 201);
+}
+
+function handleUserList(): Response {
+  return json({ users: listUsers() });
+}
+
+function handleWellKnown(): Response {
+  const domain = getCloudDomain();
+  const cloudUrl = cloudConfig.cloudUrl || `https://${domain}`;
+  const id = getNodeIdentity();
+  return json({
+    version: "v1",
+    nodeId: id.did,
+    shortId: id.shortId,
+    namingScheme: "@user:shortId",
+    domain,
+    apiBase: cloudUrl,
+    capabilities: [
+      "address-issuance",
+      "domain-binding",
+      "exposure-registry",
+      "routing-manifest",
+      "tool-registry",
+      "node-identity",
+    ],
+    endpoints: {
+      register: "/api/v1/tools",
+      heartbeat: "/api/v1/tools/:toolId/heartbeat",
+      addresses: "/api/v1/addresses",
+      exposures: "/api/v1/exposures",
+      domains: "/api/v1/domains",
+      publicUrl: "/api/v1/public-url",
+      routes: "/api/v1/routes",
+      routesCaddy: "/api/v1/routes/caddy",
+      status: "/api/v1/status",
+      compliance: "/api/v1/compliance/phantom",
+      complianceSummary: "/api/v1/compliance/phantom/summary",
+      trustSummary: "/api/v1/trust/summary",
+      topology: "/api/v1/topology",
+      identity: "/v1/federation/identity",
+    },
+  });
+}
+
+async function handleToolHeartbeat(request: Request, toolId: string): Promise<Response> {
+  const body = await readJson(request);
+  if (!isSystemsApiNodeHeartbeatRequest(body)) return badRequest("Missing heartbeat fields");
+  const tool = heartbeatSystemsApiTool(toolId, body);
+  if (!tool) return notFound();
+  return json({ tool } satisfies SystemsApiToolResponseDTO);
+}
+
+async function handleToolRegister(request: Request): Promise<Response> {
+  const body = await readJson(request);
+  if (!isSystemsApiToolRegistrationRequest(body)) return badRequest("Missing tool registration fields");
+  const tool = systemsApiService.registerSystemsApiTool(body as SystemsApiToolRegistrationRequestDTO);
+  return json({ tool } satisfies SystemsApiToolResponseDTO, 201);
 }
 
 async function handleSystemsAddressRoute(request: Request, pathname: string): Promise<Response> {
@@ -438,24 +995,172 @@ async function handleSystemsRoute(request: Request, pathname: string): Promise<R
   return notFound();
 }
 
+// ── Subdomain reverse proxy ────────────────────────────────────────────────────
+
+async function proxyToUpstream(request: Request, upstream: string): Promise<Response> {
+  const url = new URL(request.url);
+  const targetUrl = new URL(url.pathname + url.search, upstream);
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  headers.set("x-forwarded-host", url.host);
+  headers.set("x-forwarded-proto", "https");
+  try {
+    const res = await fetch(targetUrl.toString(), {
+      method: request.method,
+      headers,
+      body: ["GET", "HEAD"].includes(request.method) ? null : request.body,
+    });
+    return new Response(res.body, { status: res.status, headers: res.headers });
+  } catch {
+    return json({ error: "upstream unreachable" }, 502);
+  }
+}
+
+async function handleSubdomainProxy(request: Request, host: string): Promise<Response> {
+  const routes = listSystemsApiRoutes();
+  const route = routes.find((r) => r.domain.toLowerCase() === host);
+  if (!route) return json({ error: "no route for this domain" }, 404);
+  return proxyToUpstream(request, route.upstream);
+}
+
+// ── DNS bootstrap and sovereign zone ────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/dns/bootstrap
+ * Idempotent: creates or updates the two mandatory A records on Cloudflare:
+ *   nexus.cloud        → ip   (proxied)
+ *   *.nexus.cloud      → ip   (not proxied — Caddy handles TLS)
+ * Body: { ip?: string }  — falls back to SERVER_PUBLIC_IP env var.
+ * Requires CF_API_TOKEN and CF_ZONE_ID to be set.
+ */
+async function handleDnsBootstrap(request: Request): Promise<Response> {
+  if (!hasCloudflareDns()) {
+    return json({ error: "CF_API_TOKEN and CF_ZONE_ID are not configured" }, 501);
+  }
+  const body = (await readJson(request)) as { ip?: string } | null;
+  const result = await bootstrapDns(body?.ip);
+  const ok = result.root.ok && result.wildcard.ok;
+  return json({ ok, root: result.root, wildcard: result.wildcard }, ok ? 200 : 502);
+}
+
+/**
+ * GET /api/v1/dns/status
+ * Reports whether Cloudflare DNS integration is configured and what SERVER_PUBLIC_IP is set to.
+ */
+function handleDnsStatus(): Response {
+  return json({
+    cloudflareConfigured: hasCloudflareDns(),
+    serverIp: cloudConfig.serverIp || null,
+    cloudDomain: cloudConfig.cloudDomain,
+  });
+}
+
+/**
+ * GET /api/v1/routes/zone
+ * Returns a BIND/RFC 1035 zone file for the cloud domain, suitable for CoreDNS
+ * (sovereign mode) or any other authoritative nameserver.
+ * CoreDNS is configured to poll this—or mount the zone from a shared volume.
+ */
+function handleZoneFile(): Response {
+  const zone = generateZoneFile();
+  return new Response(zone, {
+    status: 200,
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+/**
+ * Caddy On-Demand TLS authorisation endpoint.
+ * Caddy calls GET /api/v1/routes/tls-ask?domain=alice.nexus.cloud before issuing
+ * a Let's Encrypt certificate for a new subdomain. Return 2xx to allow, 4xx to deny.
+ * This prevents cert-bomb attacks and avoids issuing certs for unknown domains.
+ */
+function handleTlsAsk(searchParams: URLSearchParams): Response {
+  const domain = searchParams.get("domain")?.trim().toLowerCase();
+  if (!domain) return badRequest("domain query parameter required");
+  const cloudDomain = cloudConfig.cloudDomain.toLowerCase();
+  if (!domain.endsWith(`.${cloudDomain}`)) return json({ allowed: false }, 403);
+  const routes = listSystemsApiRoutes();
+  const allowed = routes.some((r) => r.domain.toLowerCase() === domain);
+  if (!allowed) return json({ allowed: false }, 403);
+  return json({ allowed: true });
+}
+
 export async function handleApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
+
+  // Subdomain proxy: *.cloudDomain requests are routed to the registered upstream.
+  // This runs before CORS and auth so the upstream handles its own CORS/auth headers.
+  const host = (request.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  const cloudDomain = cloudConfig.cloudDomain.toLowerCase();
+  if (host !== cloudDomain && host.endsWith(`.${cloudDomain}`)) {
+    return handleSubdomainProxy(request, host);
+  }
+
+  // Handle CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: { ...corsHeaders(), "Access-Control-Max-Age": "86400" },
+    });
+  }
+
+  // Authenticate all mutating requests. /api/v1/deployments and /api/v1/auth/login handle their own auth.
+  if (["POST", "PATCH", "DELETE"].includes(request.method) && pathname !== "/api/v1/deployments" && pathname !== "/api/v1/auth/login") {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
+  }
+
+  if (request.method === "POST" && pathname === "/api/v1/auth/login") return handleAuthLogin(request);
+  if (request.method === "GET" && pathname === "/api/v1/auth/me") return handleAuthMe(request);
+  if (request.method === "GET" && (pathname === "/" || pathname === "/status")) return handleDashboard();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();
   if (request.method === "GET" && pathname === "/v1/architecture") return handleArchitecture();
   if (request.method === "GET" && pathname === "/v1/state") return handleState();
   if (request.method === "GET" && pathname === "/v1/nodes") return handleNodesList();
   if (request.method === "POST" && pathname === "/v1/nodes/register") return handleNodeRegister(request);
+  if (request.method === "POST" && pathname === "/v1/nodes/trust/bulk") return handleNodeTrustBulk(request);
+  if (request.method === "POST" && pathname.startsWith("/v1/nodes/") && pathname.includes("/trust/")) return handleNodeTrustAction(request, pathname);
   if (request.method === "GET" && pathname === "/v1/workloads") return handleWorkloadsList();
   if (request.method === "POST" && pathname === "/v1/workloads/plan") return handleWorkloadPlan(request);
+  if (request.method === "POST" && pathname.startsWith("/v1/workloads/") && pathname.endsWith("/run")) return handleWorkloadRun(decodeURIComponent(pathname.slice("/v1/workloads/".length, -"/run".length)));
+  if (request.method === "POST" && pathname.startsWith("/v1/workloads/") && pathname.endsWith("/stop")) return handleWorkloadStop(decodeURIComponent(pathname.slice("/v1/workloads/".length, -"/stop".length)));
   if (request.method === "GET" && pathname === "/v1/federation/peers") return handlePeersList();
   if (request.method === "POST" && pathname.startsWith("/v1/federation/peers/") && pathname.endsWith("/trust")) return handlePeerTrust(request, pathname);
-  if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools();
+  if (request.method === "GET" && pathname === "/v1/federation/identity") return handleFederationIdentity();
+  if (request.method === "GET" && pathname === "/v1/federation/announcement") return handleNodeAnnouncement();
+  if (request.method === "POST" && pathname === "/v1/federation/peers/announce") return handleInboundPeerAnnounce(request);
+  if (request.method === "GET" && pathname === "/api/v1/users") return handleUserList();
+  if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
+  if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools(url);
+  if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/endpoints") return handleSystemsEndpoints();
   if (request.method === "GET" && pathname === "/api/v1/capabilities") return handleSystemsCapabilities();
   if (request.method === "GET" && pathname === "/api/v1/summary") return handleSystemsSummary();
-  if (request.method === "GET" && pathname === "/api/v1/status") return handleSystemsStatus();
+  if (request.method === "GET" && pathname === "/api/v1/status") return handleSystemsStatus(request, url);
+  if (request.method === "GET" && pathname === "/api/v1/compliance/phantom") return handleSystemsPhantomCompliance(url);
+  if (request.method === "GET" && pathname === "/api/v1/compliance/phantom/summary") return handleSystemsPhantomComplianceSummary(request);
+  if (request.method === "GET" && pathname === "/api/v1/trust/summary") return handleSystemsTrustSummary(request);
+  if (request.method === "GET" && pathname === "/api/v1/routes") return handleSystemsRoutes();
+  if (request.method === "GET" && pathname === "/api/v1/routes/caddy") return handleSystemsRoutesCaddy();
+  if (request.method === "GET" && pathname === "/api/v1/guardian/decisions") return handleGuardianDecisions();
+  if (request.method === "POST" && pathname.startsWith("/api/v1/guardian/")) return handleGuardianDecisionAction(pathname);
+  if (request.method === "GET" && pathname === "/api/v1/audit") return handleAuditQuery(url);
+  if (request.method === "GET" && pathname.startsWith("/api/v1/audit/")) {
+    const subjectId = decodeURIComponent(pathname.slice("/api/v1/audit/".length));
+    return subjectId ? handleAuditQuery(url, subjectId) : badRequest("Missing subjectId");
+  }
+  if (request.method === "GET" && pathname === "/api/v1/routes/tls-ask") return handleTlsAsk(url.searchParams);
+  if (request.method === "GET" && pathname === "/api/v1/routes/zone") return handleZoneFile();
+  if (request.method === "GET" && pathname === "/.well-known/nexus-cloud") return handleWellKnown();
+  if (request.method === "GET" && pathname === "/api/v1/dns/status") return handleDnsStatus();
+  if (request.method === "POST" && pathname === "/api/v1/dns/bootstrap") return await handleDnsBootstrap(request);
   if (request.method === "GET" && pathname === "/api/v1/deployments/integration") return handleSystemsDeployIntegration();
   if (request.method === "POST" && pathname === "/api/v1/deployments") return handleSystemsDeploy(request);
   if (request.method === "POST" && pathname === "/api/v1/public-url") return handleSystemsPublicUrl(request);

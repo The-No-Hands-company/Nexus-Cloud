@@ -24,12 +24,16 @@ export async function createSystemsApiTestHarness(registry: SystemsApiRegistryDa
   const tempDir = await mkdtemp(join(tmpdir(), "nexus-cloud-tests-"));
   mkdirSync(join(tempDir, "data"), { recursive: true });
   writeFileSync(join(tempDir, "data", "systems-api-registry.json"), `${JSON.stringify(registry, null, 2)}\n`);
+  process.env.NEXUS_CLOUD_API_KEY = "";
+  process.env.NEXUS_CLOUD_DOMAIN = "nexus.local";
   process.chdir(tempDir);
 
   try {
     const routerModule = await import("../api/router");
     const systemsApiModule = await import("../systems-api");
+    const stateModule = await import("../state");
     systemsApiModule.resetSystemsApiRegistryForTests(registry);
+    stateModule.resetPlatformStateForTests();
 
     return {
       handleRequest: routerModule.handleRequest,

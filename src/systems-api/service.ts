@@ -8,12 +8,16 @@ import {
   getDomainVerificationChallenge,
   getExposure,
   getPublicUrl,
+  listActiveRoutes,
   listAddresses,
   listDomainBindings,
   listExposures,
   listPublicUrls,
   listToolHistory,
   listTools,
+  deregisterTool,
+  expireToolHeartbeat,
+  recordToolHeartbeat,
   registerSystemsApiTool as registerTool,
   requestDomainBinding,
   requestExposure,
@@ -24,12 +28,14 @@ import {
   updateTool as patchTool,
   verifyDomainBinding,
 } from "./registry";
+import { cloudConfig } from "../config";
 import { systemsApiDeployIntegration as deployIntegration } from "./deploy";
 import type {
   SystemsApiAddress,
   SystemsApiAddressKind,
   SystemsApiApp,
   SystemsApiAppIntegrationMode,
+  SystemsApiAppKind,
   SystemsApiCapability,
   SystemsApiConnection,
   SystemsApiConnectionKind,
@@ -38,10 +44,12 @@ import type {
   SystemsApiEndpoint,
   SystemsApiExposureRecord,
   SystemsApiMode,
+  SystemsApiPhantomSecurityProfile,
   SystemsApiPublicUrl,
   SystemsApiStatus,
   SystemsApiSummary,
   SystemsApiTool,
+  SystemsApiToolHealth,
   SystemsApiToolHistoryEntry,
   SystemsApiTopology,
 } from "./types";
@@ -52,13 +60,13 @@ const topologyApps: readonly SystemsApiApp[] = [
   {
     id: "nexus-cloud",
     name: "Nexus Cloud",
-    description: "The sovereign control plane, registry, policy, and orchestration hub.",
+    description: "The sovereign control plane, registry, policy, topology, and orchestration hub for the Nexus Systems ecosystem.",
     kind: "platform",
     integrationMode: "embedded",
     embeddedIn: null,
-    exposes: ["discovery", "status", "policy", "registry", "public-url", "deploy"],
-    consumes: ["vault", "network", "deploy", "hosting", "computer"],
-    requiredApis: ["Discovery API", "Systems Registry API", "Policy API", "Status API", "Exposure API", "Public URL API"],
+    exposes: ["discovery", "status", "policy", "registry", "topology", "public-url", "deploy"],
+    consumes: ["vault", "network", "deploy", "hosting", "forge", "ai", "computer"],
+    requiredApis: ["Discovery API", "Systems Registry API", "Policy API", "Status API", "Topology API", "Exposure API", "Public URL API"],
     standalone: true,
     cloudConnected: true,
     registeredAt: new Date(0).toISOString(),
@@ -69,8 +77,8 @@ const topologyApps: readonly SystemsApiApp[] = [
     name: "Nexus",
     description: "The collaboration and federation plane for messages, channels, and presence.",
     kind: "application",
-    integrationMode: "hybrid",
-    embeddedIn: null,
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
     exposes: ["messages", "channels", "presence", "federation"],
     consumes: ["identity", "policy", "storage", "search", "notifications", "exposure"],
     requiredApis: ["Messaging API", "Presence API", "Federation API", "Notification API"],
@@ -84,11 +92,26 @@ const topologyApps: readonly SystemsApiApp[] = [
     name: "Nexus AI",
     description: "The agent orchestration and tool intelligence layer.",
     kind: "application",
-    integrationMode: "hybrid",
-    embeddedIn: null,
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
     exposes: ["agents", "tool-routing", "workflows", "model-routing"],
     consumes: ["tool-registry", "vault", "identity", "status", "jobs", "deploy"],
     requiredApis: ["Tool Invocation API", "Agent Runtime API", "Model Routing API", "Job API"],
+    standalone: true,
+    cloudConnected: true,
+    registeredAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "nexusclaw",
+    name: "Nexusclaw",
+    description: "The multi-agent coordination layer for autonomous task graphs, baton passing, and specialist collaboration.",
+    kind: "application",
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
+    exposes: ["agent-graphs", "handoffs", "task-orchestration", "consensus"],
+    consumes: ["topology", "jobs", "ai-runtime", "forge", "deploy"],
+    requiredApis: ["Topology API", "Agent Runtime API", "Task Graph API", "Workflow API"],
     standalone: true,
     cloudConnected: true,
     registeredAt: new Date(0).toISOString(),
@@ -99,7 +122,7 @@ const topologyApps: readonly SystemsApiApp[] = [
     name: "Nexus Computer",
     description: "The edge execution layer for local devices, agents, and remote tasks.",
     kind: "edge",
-    integrationMode: "referenced",
+    integrationMode: "embedded",
     embeddedIn: "nexus-cloud",
     exposes: ["device-registry", "edge-heartbeat", "remote-task", "sync"],
     consumes: ["jobs", "identity", "vault", "network", "control-plane"],
@@ -114,11 +137,26 @@ const topologyApps: readonly SystemsApiApp[] = [
     name: "Nexus Deploy",
     description: "The build, release, and rollback delivery plane.",
     kind: "service",
-    integrationMode: "hybrid",
-    embeddedIn: null,
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
     exposes: ["build", "release", "rollback", "environment"],
     consumes: ["registry", "vault", "hosting", "network", "status"],
     requiredApis: ["Build API", "Release API", "Environment API", "Rollback API"],
+    standalone: true,
+    cloudConnected: true,
+    registeredAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "nexus-forge",
+    name: "Nexus Forge",
+    description: "The repository, issue, pull request, and AI-assisted development coordination plane.",
+    kind: "service",
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
+    exposes: ["repositories", "issues", "pull-requests", "agent-queue"],
+    consumes: ["ai", "cloud", "deploy", "vault", "identity"],
+    requiredApis: ["Repository API", "Issue API", "Pull Request API", "Agent Task API"],
     standalone: true,
     cloudConnected: true,
     registeredAt: new Date(0).toISOString(),
@@ -129,8 +167,8 @@ const topologyApps: readonly SystemsApiApp[] = [
     name: "Nexus Hosting",
     description: "The site, route, and public runtime exposure plane.",
     kind: "service",
-    integrationMode: "hybrid",
-    embeddedIn: null,
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
     exposes: ["sites", "routes", "assets", "public-exposure"],
     consumes: ["deploy", "cloud", "network", "vault", "storage"],
     requiredApis: ["Site Registration API", "Route Manifest API", "Publish API", "Public Address API"],
@@ -155,6 +193,21 @@ const topologyApps: readonly SystemsApiApp[] = [
     updatedAt: new Date(0).toISOString(),
   },
   {
+    id: "nexus-porter",
+    name: "Nexus Porter",
+    description: "The container, probe, port intelligence, and environment scanning utility layer.",
+    kind: "service",
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
+    exposes: ["scan", "probe", "report", "container-intel"],
+    consumes: ["network", "deploy", "hosting", "status"],
+    requiredApis: ["Probe API", "Network Scan API", "Container Report API", "Status API"],
+    standalone: true,
+    cloudConnected: true,
+    registeredAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
     id: "nexus-vault",
     name: "Nexus Vault",
     description: "The secrets, tokens, signing, and trust anchor.",
@@ -169,61 +222,111 @@ const topologyApps: readonly SystemsApiApp[] = [
     registeredAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
   },
+  {
+    id: "nit",
+    name: "Nit",
+    description: "The lightweight interface shell and rapid runtime for fast product surfaces inside the ecosystem.",
+    kind: "application",
+    integrationMode: "embedded",
+    embeddedIn: "nexus-cloud",
+    exposes: ["ui-shell", "widget-runtime", "rapid-surface"],
+    consumes: ["cloud", "identity", "status", "ai"],
+    requiredApis: ["UI Shell API", "Widget Runtime API", "Status API"],
+    standalone: true,
+    cloudConnected: true,
+    registeredAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom",
+    name: "Phantom",
+    description: "The protocol-level privacy and security overlay that hardens transport, metadata, and trust guarantees across the ecosystem.",
+    kind: "protocol",
+    integrationMode: "hybrid",
+    embeddedIn: null,
+    exposes: ["anonymous-routing", "pq-crypto", "oblivious-forwarding", "zk-proofing", "surveillance-resistance"],
+    consumes: ["network-research", "identity", "federation", "verification"],
+    requiredApis: ["Anonymous Transport API", "Federation API", "Cryptographic Capability API", "Proof Verification API"],
+    standalone: true,
+    cloudConnected: false,
+    registeredAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
 ];
 
 const topologyConnections: readonly SystemsApiConnection[] = [
   {
-    id: "cloud-owns-registry",
+    id: "cloud-manages-nexus",
     sourceAppId: "nexus-cloud",
     targetAppId: "nexus",
-    kind: "depends-on",
-    description: "Nexus Cloud is the registry and policy source of truth for Nexus.",
-    embedded: false,
-    createdAt: new Date(0).toISOString(),
-    updatedAt: new Date(0).toISOString(),
-  },
-  {
-    id: "cloud-owns-ai",
-    sourceAppId: "nexus-cloud",
-    targetAppId: "nexus-ai",
-    kind: "depends-on",
-    description: "Nexus AI discovers tools, jobs, and trust metadata through Nexus Cloud.",
-    embedded: false,
-    createdAt: new Date(0).toISOString(),
-    updatedAt: new Date(0).toISOString(),
-  },
-  {
-    id: "cloud-owns-computer",
-    sourceAppId: "nexus-cloud",
-    targetAppId: "nexus-computer",
-    kind: "routes-through",
-    description: "Nexus Computer receives edge tasks, sync, and device orchestration from Cloud.",
+    kind: "embedded-in",
+    description: "Nexus is embedded into Nexus Cloud as a first-class communications module.",
     embedded: true,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
   },
   {
-    id: "cloud-owns-deploy",
+    id: "cloud-manages-ai",
+    sourceAppId: "nexus-cloud",
+    targetAppId: "nexus-ai",
+    kind: "embedded-in",
+    description: "Nexus AI is embedded in Nexus Cloud as the shared intelligence runtime.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "cloud-references-claw",
+    sourceAppId: "nexus-cloud",
+    targetAppId: "nexusclaw",
+    kind: "references",
+    description: "Nexusclaw extends Cloud with agent-to-agent task choreography and specialist coordination.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "cloud-orchestrates-computer",
+    sourceAppId: "nexus-cloud",
+    targetAppId: "nexus-computer",
+    kind: "embedded-in",
+    description: "Nexus Computer is embedded in Nexus Cloud for edge task orchestration and sync.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "cloud-calls-deploy",
     sourceAppId: "nexus-cloud",
     targetAppId: "nexus-deploy",
-    kind: "depends-on",
-    description: "Nexus Deploy is the formal delivery backend for Cloud-triggered deployments.",
-    embedded: false,
+    kind: "embedded-in",
+    description: "Nexus Deploy is embedded in Nexus Cloud as the default release and rollout backend.",
+    embedded: true,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
   },
   {
-    id: "cloud-owns-hosting",
+    id: "cloud-connects-forge",
+    sourceAppId: "nexus-cloud",
+    targetAppId: "nexus-forge",
+    kind: "embedded-in",
+    description: "Nexus Forge is embedded in Nexus Cloud and uses Cloud for topology and automation context.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "cloud-connects-hosting",
     sourceAppId: "nexus-cloud",
     targetAppId: "nexus-hosting",
-    kind: "depends-on",
-    description: "Nexus Hosting consumes registry, exposure, and deployment state from Cloud.",
-    embedded: false,
+    kind: "embedded-in",
+    description: "Nexus Hosting is embedded in Nexus Cloud and consumes registry, exposure, and deployment state.",
+    embedded: true,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
   },
   {
-    id: "cloud-owns-network",
+    id: "cloud-embeds-network",
     sourceAppId: "nexus-cloud",
     targetAppId: "nexus-network",
     kind: "routes-through",
@@ -233,7 +336,17 @@ const topologyConnections: readonly SystemsApiConnection[] = [
     updatedAt: new Date(0).toISOString(),
   },
   {
-    id: "cloud-owns-vault",
+    id: "cloud-references-porter",
+    sourceAppId: "nexus-cloud",
+    targetAppId: "nexus-porter",
+    kind: "references",
+    description: "Nexus Porter gives Cloud operator-grade port, probe, and container intelligence.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "cloud-embeds-vault",
     sourceAppId: "nexus-cloud",
     targetAppId: "nexus-vault",
     kind: "depends-on",
@@ -243,12 +356,62 @@ const topologyConnections: readonly SystemsApiConnection[] = [
     updatedAt: new Date(0).toISOString(),
   },
   {
+    id: "cloud-references-nit",
+    sourceAppId: "nexus-cloud",
+    targetAppId: "nit",
+    kind: "references",
+    description: "Nit can surface lightweight ecosystem UI experiences inside or alongside Cloud.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "cloud-references-phantom",
+    sourceAppId: "nexus-cloud",
+    targetAppId: "phantom",
+    kind: "references",
+    description: "Phantom informs future sovereign transport and privacy-preserving federation paths for Cloud.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
     id: "ai-routes-to-tools",
     sourceAppId: "nexus-ai",
     targetAppId: "nexus",
-    kind: "references",
-    description: "Nexus AI invokes collaboration tools via the canonical Systems API surface.",
-    embedded: false,
+    kind: "depends-on",
+    description: "Nexus AI invokes communication and collaboration capabilities through Nexus.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "ai-delegates-to-claw",
+    sourceAppId: "nexus-ai",
+    targetAppId: "nexusclaw",
+    kind: "depends-on",
+    description: "Nexus AI can hand complex multi-agent coordination flows to Nexusclaw.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "computer-uses-ai",
+    sourceAppId: "nexus-computer",
+    targetAppId: "nexus-ai",
+    kind: "depends-on",
+    description: "Nexus Computer relies on Nexus AI for agent execution, tool selection, and remote assistance.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "forge-uses-ai",
+    sourceAppId: "nexus-forge",
+    targetAppId: "nexus-ai",
+    kind: "depends-on",
+    description: "Nexus Forge uses Nexus AI for reviews, generation, and queue-backed automation.",
+    embedded: true,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
   },
@@ -258,7 +421,17 @@ const topologyConnections: readonly SystemsApiConnection[] = [
     targetAppId: "nexus-deploy",
     kind: "depends-on",
     description: "Hosting consumes deployment outputs and release state from Deploy.",
-    embedded: false,
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "forge-uses-deploy",
+    sourceAppId: "nexus-forge",
+    targetAppId: "nexus-deploy",
+    kind: "depends-on",
+    description: "Nexus Forge can trigger or observe deployments through Nexus Deploy after repository events.",
+    embedded: true,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
   },
@@ -268,6 +441,196 @@ const topologyConnections: readonly SystemsApiConnection[] = [
     targetAppId: "nexus-hosting",
     kind: "routes-through",
     description: "Public reachability and tunnels should route through the network layer.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "network-routes-nexus",
+    sourceAppId: "nexus-network",
+    targetAppId: "nexus",
+    kind: "routes-through",
+    description: "Real-time communication and federation traffic for Nexus should traverse the network layer.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "porter-observes-deploy",
+    sourceAppId: "nexus-porter",
+    targetAppId: "nexus-deploy",
+    kind: "references",
+    description: "Nexus Porter can scan and report on runtime surfaces created by deployment workflows.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-informs-network",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-network",
+    kind: "secures",
+    description: "Phantom hardens Nexus Network transport and metadata resistance against surveillance and interception.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-cloud",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-cloud",
+    kind: "secures",
+    description: "Phantom provides protocol-level privacy and secure transport guarantees to Cloud control-plane interactions.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-nexus",
+    sourceAppId: "phantom",
+    targetAppId: "nexus",
+    kind: "secures",
+    description: "Phantom hardens collaboration traffic paths with oblivious routing and metadata resistance primitives.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-ai",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-ai",
+    kind: "secures",
+    description: "Phantom secures AI runtime communications with privacy-preserving protocol guarantees.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-claw",
+    sourceAppId: "phantom",
+    targetAppId: "nexusclaw",
+    kind: "secures",
+    description: "Phantom protects multi-agent coordination channels and baton-pass metadata paths.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-computer",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-computer",
+    kind: "secures",
+    description: "Phantom secures edge compute transport and remote task exchange surfaces.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-deploy",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-deploy",
+    kind: "secures",
+    description: "Phantom hardens deployment orchestration traffic and release control paths.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-forge",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-forge",
+    kind: "secures",
+    description: "Phantom secures repository and automation control-plane communication flows.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-hosting",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-hosting",
+    kind: "secures",
+    description: "Phantom protects hosting route, exposure, and runtime traffic against metadata leakage.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-porter",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-porter",
+    kind: "secures",
+    description: "Phantom secures probe and diagnostics transport to reduce observability-based attack surfaces.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-vault",
+    sourceAppId: "phantom",
+    targetAppId: "nexus-vault",
+    kind: "secures",
+    description: "Phantom adds privacy-preserving transport assurances to secrets and key-management interactions.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "phantom-secures-nit",
+    sourceAppId: "phantom",
+    targetAppId: "nit",
+    kind: "secures",
+    description: "Phantom provides secure and private protocol guarantees for lightweight runtime surfaces.",
+    embedded: false,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "ai-embedded-in-cloud",
+    sourceAppId: "nexus-ai",
+    targetAppId: "nexus-cloud",
+    kind: "embedded-in",
+    description: "Nexus AI is rendered as a shared embedded control surface inside Nexus Cloud.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "deploy-uses-ai",
+    sourceAppId: "nexus-deploy",
+    targetAppId: "nexus-ai",
+    kind: "depends-on",
+    description: "Nexus Deploy uses Nexus AI for pipeline generation, policy checks, and remediation suggestions.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "hosting-uses-ai",
+    sourceAppId: "nexus-hosting",
+    targetAppId: "nexus-ai",
+    kind: "depends-on",
+    description: "Nexus Hosting uses Nexus AI for smart routing guidance, diagnostics, and operator assistance.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "nexus-uses-ai",
+    sourceAppId: "nexus",
+    targetAppId: "nexus-ai",
+    kind: "depends-on",
+    description: "Nexus uses Nexus AI for assistants, moderation, and context-aware collaboration workflows.",
+    embedded: true,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "network-serves-ai",
+    sourceAppId: "nexus-network",
+    targetAppId: "nexus-ai",
+    kind: "routes-through",
+    description: "Nexus Network provides transport paths and tunnel reachability for AI service endpoints.",
     embedded: true,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
@@ -317,7 +680,9 @@ export type SystemsApiToolRegistrationInput = {
   exposed?: boolean;
   health?: import("./types").SystemsApiToolHealth;
   capabilities?: readonly string[];
+  phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
   publicUrl?: string;
+  upstreamUrl?: string;
 };
 
 export type SystemsApiToolPatchInput = {
@@ -327,16 +692,25 @@ export type SystemsApiToolPatchInput = {
   exposed?: boolean;
   health?: import("./types").SystemsApiToolHealth;
   capabilities?: readonly string[];
+  upstreamUrl?: string;
+  phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
 };
 
 const endpoints = [
   { method: "GET", path: "/api/v1/tools", description: "List registered tools" },
+  { method: "POST", path: "/api/v1/tools", description: "Register or upsert a tool" },
   { method: "GET", path: "/api/v1/tools/:toolId", description: "Inspect a registered tool" },
   { method: "GET", path: "/api/v1/tools/:toolId/history", description: "Inspect tool lifecycle history" },
   { method: "PATCH", path: "/api/v1/tools/:toolId", description: "Update registered tool metadata" },
   { method: "POST", path: "/api/v1/tools/:toolId/enable", description: "Enable a registered tool" },
   { method: "POST", path: "/api/v1/tools/:toolId/disable", description: "Disable a registered tool" },
+  { method: "POST", path: "/api/v1/tools/:toolId/heartbeat", description: "Update tool liveness and upstream URL" },
+  { method: "GET", path: "/api/v1/routes", description: "Live proxy routing table (domain → upstream)" },
+  { method: "GET", path: "/api/v1/routes/caddy", description: "Caddy admin API format routing config" },
+  { method: "GET", path: "/.well-known/nexus-cloud", description: "Nexus Cloud discovery document" },
   { method: "GET", path: "/api/v1/status", description: "Return normalized platform status" },
+  { method: "GET", path: "/api/v1/compliance/phantom", description: "List PHANTOM security compliance entries" },
+  { method: "GET", path: "/api/v1/compliance/phantom/summary", description: "Counts-only PHANTOM compliance summary" },
   { method: "POST", path: "/api/v1/public-url", description: "Request or refresh a public URL" },
   { method: "GET", path: "/api/v1/addresses", description: "List public address records" },
   { method: "GET", path: "/api/v1/addresses/:toolId", description: "Inspect public address records for a tool" },
@@ -457,6 +831,10 @@ export function revokeSystemsApiDomain(domain: string): SystemsApiDomainBinding 
   return revokeDomainBinding(domain);
 }
 
+export function deregisterSystemsApiTool(toolId: string): SystemsApiTool | null {
+  return deregisterTool(toolId);
+}
+
 export function registerSystemsApiTool(input: SystemsApiToolRegistrationInput): SystemsApiTool {
   return registerTool(input);
 }
@@ -514,6 +892,7 @@ export function describeSystemsApiTopology(): SystemsApiTopology {
 }
 
 export function describeSystemsApi(): SystemsApiSummary {
+
   const status = describeSystemsApiStatus();
   return {
     version: status.version,
@@ -533,7 +912,42 @@ export function describeSystemsApiDeployIntegration(): typeof deployIntegration 
 
 export const systemsApiDeployIntegration = deployIntegration;
 
+export function listSystemsApiRoutes() {
+  return listActiveRoutes();
+}
+
+export function heartbeatSystemsApiTool(toolId: string, patch: { upstreamUrl?: string; health?: SystemsApiToolHealth; phantomSecurityProfile?: SystemsApiPhantomSecurityProfile }): SystemsApiTool | null {
+  return recordToolHeartbeat(toolId, patch);
+}
+
+/**
+ * Mark tools as `offline` when they have previously heartbeated but have not
+ * done so within `thresholdMs` milliseconds. Tools that have never heartbeated
+ * since Cloud started are left untouched (they keep their persisted state).
+ * Returns the number of tools transitioned.
+ */
+export function applyHeartbeatExpiry(thresholdMs = 90_000): number {
+  const cutoff = Date.now() - thresholdMs;
+  let count = 0;
+  for (const tool of listTools()) {
+    if (tool.registrationStatus === "offline") continue;
+    if (!tool.lastHeartbeatAt) continue;
+    const lastHeartbeatMs = Date.parse(tool.lastHeartbeatAt);
+    if (Number.isNaN(lastHeartbeatMs)) continue;
+    if (lastHeartbeatMs < cutoff) {
+      expireToolHeartbeat(tool.id, new Date().toISOString());
+      count++;
+    }
+  }
+  return count;
+}
+
+export function getCloudDomain(): string {
+  return cloudConfig.cloudDomain;
+}
+
 export const systemsApiService = {
+  deregisterSystemsApiTool,
   describeSystemsApi,
   describeSystemsApiDeployIntegration,
   describeSystemsApiStatus,
@@ -570,4 +984,8 @@ export const systemsApiService = {
   revokeSystemsApiExposure,
   updateSystemsApiTool,
   verifySystemsApiDomain,
+  listSystemsApiRoutes,
+  heartbeatSystemsApiTool,
+  applyHeartbeatExpiry,
+  getCloudDomain,
 };

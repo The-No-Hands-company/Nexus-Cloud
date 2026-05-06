@@ -15,7 +15,38 @@ export type SystemsApiCapability = {
 
 export type SystemsApiToolHealth = "healthy" | "degraded" | "offline";
 
+export type SystemsApiToolRegistrationStatus = "registered" | "active" | "offline";
+
 export type SystemsApiToolExposure = "private" | "public" | "pending";
+
+export type SystemsApiPhantomProtectionLevel = "transitional" | "hardened" | "maximum";
+
+export type SystemsApiPhantomSecurityGuarantees = {
+  postQuantum: boolean;
+  fheTransport: boolean;
+  zkProofs: boolean;
+};
+
+export type SystemsApiPhantomSecurityMetadata = {
+  pqAlgorithms?: readonly string[];
+  fheScheme?: string;
+  zkProofSystem?: string;
+  proofAttestation?: string;
+  proofEndpoint?: string;
+  lastVerifiedAt?: string;
+};
+
+export type SystemsApiPhantomSecurityProfile = {
+  claimedSecured: boolean;
+  protectionLevel: SystemsApiPhantomProtectionLevel;
+  guarantees: SystemsApiPhantomSecurityGuarantees;
+  metadata?: SystemsApiPhantomSecurityMetadata;
+};
+
+export type SystemsApiIntegrationFailure = {
+  toolId: string;
+  reason: string;
+};
 
 export type SystemsApiTool = {
   id: string;
@@ -25,8 +56,14 @@ export type SystemsApiTool = {
   exposed: boolean;
   exposure: SystemsApiToolExposure;
   health: SystemsApiToolHealth;
+  registrationStatus: SystemsApiToolRegistrationStatus;
   capabilities: readonly string[];
+  phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
   publicUrl?: string;
+  /** The actual backend URL this tool is running on — used by the proxy routing table */
+  upstreamUrl?: string;
+  lastHeartbeatAt?: string;
+  heartbeatCount: number;
   registeredAt: string;
   updatedAt: string;
 };
@@ -36,6 +73,7 @@ export type SystemsApiToolHistoryAction =
   | "updated"
   | "enabled"
   | "disabled"
+  | "heartbeat-received"
   | "public-url-issued"
   | "public-url-revoked"
   | "address-issued"
@@ -54,7 +92,7 @@ export type SystemsApiToolHistoryEntry = {
   at: string;
 };
 
-export type SystemsApiExposureStatus = "requested" | "active" | "suspended" | "revoked";
+export type SystemsApiExposureStatus = "requested" | "active" | "suspended" | "quarantined" | "denied" | "revoked";
 
 export type SystemsApiExposureRecord = {
   id: string;
@@ -103,7 +141,7 @@ export type SystemsApiAddressRevokeRequest = {
   kind?: SystemsApiAddressKind;
 };
 
-export type SystemsApiDomainBindingStatus = "pending" | "verified" | "revoked" | "expired";
+export type SystemsApiDomainBindingStatus = "pending" | "verified" | "quarantined" | "denied" | "revoked" | "expired";
 
 export type SystemsApiDomainBinding = {
   domain: string;
@@ -136,6 +174,22 @@ export type SystemsApiRegistryMetadata = {
   ageSeconds: number | null;
 };
 
+export type SystemsApiTrustStateSummary = {
+  total: number;
+  pending: number;
+  verified: number;
+  trusted: number;
+  quarantined: number;
+  revoked: number;
+  expired: number;
+};
+
+export type SystemsApiTrustSummary = {
+  nodes: SystemsApiTrustStateSummary;
+  peers: SystemsApiTrustStateSummary;
+  updatedAt: string;
+};
+
 export type SystemsApiStatus = {
   version: SystemsApiVersion;
   mode: SystemsApiMode;
@@ -148,6 +202,12 @@ export type SystemsApiStatus = {
   activeExposureCount: number;
   domainCount: number;
   verifiedDomainCount: number;
+  phantomSecuredClaimedCount: number;
+  phantomSecuredCompliantCount: number;
+  failedIntegrationCount: number;
+  integrationStatus: "healthy" | "failing";
+  integrationFailures: readonly SystemsApiIntegrationFailure[];
+  trust: SystemsApiTrustSummary;
   registry: SystemsApiRegistryMetadata;
   updatedAt: string;
 };
@@ -167,7 +227,7 @@ export type SystemsApiSummary = {
   };
 };
 
-export type SystemsApiAppKind = "platform" | "application" | "service" | "edge" | "trust" | "network";
+export type SystemsApiAppKind = "platform" | "application" | "service" | "edge" | "trust" | "network" | "protocol";
 
 export type SystemsApiAppIntegrationMode = "embedded" | "hybrid" | "referenced" | "standalone";
 
@@ -187,7 +247,7 @@ export type SystemsApiApp = {
   updatedAt: string;
 };
 
-export type SystemsApiConnectionKind = "depends-on" | "references" | "routes-through" | "exposes" | "embedded-in";
+export type SystemsApiConnectionKind = "depends-on" | "references" | "routes-through" | "exposes" | "embedded-in" | "secures";
 
 export type SystemsApiConnection = {
   id: string;
@@ -216,6 +276,24 @@ export type SystemsApiTopology = {
 };
 
 export type SystemsApiExposureKind = SystemsApiAddressKind;
+
+export type SystemsApiRouteKind = "website" | "exposure" | "custom-domain" | "server";
+
+export type SystemsApiRouteSecurityTag = "phantom-hardened" | "transitional";
+
+/**
+ * A live routing entry: maps a public-facing domain to a backend upstream.
+ * Consumed by reverse proxies (Caddy, Nginx, Traefik) to route external traffic.
+ */
+export type SystemsApiRoute = {
+  domain: string;
+  upstream: string;
+  toolId: string;
+  kind: SystemsApiRouteKind;
+  securityTag: SystemsApiRouteSecurityTag;
+  phantomProtectionLevel: SystemsApiPhantomProtectionLevel;
+  status: "active";
+};
 
 export type SystemsApiDeployRequest = {
   toolId: string;

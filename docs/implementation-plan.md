@@ -4,21 +4,72 @@
 
 This is the living roadmap for Nexus Cloud. It is the shared map for how we keep building without losing context: what we are building, why it matters, what is in progress, and what comes next.
 
-Nexus Cloud is the control layer that lets Nexus Hosting, Nexus Chat, and future Nexus Systems tools expose safe public URLs, register domains, route traffic, and coordinate cloud services without depending on a hyperscaler.
+Nexus Cloud is the control layer that lets Nexus, Nexus AI, Nexus Hosting, Nexus Deploy, Nexus Forge, and the wider Nexus Systems ecosystem expose safe public URLs, register domains, route traffic, and coordinate cloud services without depending on a hyperscaler.
 
 ## Blueprint alignment
 
-This roadmap is grounded in `docs/BLUEPRINT.md`, which defines Nexus Cloud as the sovereign orchestrator and heart of the wider Nexus Systems ecosystem. The blueprint frames the platform as the central control plane, workload orchestrator, public access gateway, federation backbone, and unified platform layer for the 79+ core tools and future vertical branches.
+This roadmap is grounded in `docs/vision.md`, `docs/architecture.md`, and `docs/ecosystem-map.md`. Together they define Nexus Cloud as the sovereign orchestrator and heart of the wider Nexus Systems ecosystem: the central control plane, workload orchestrator, public access gateway, federation backbone, and unified platform layer for the current ecosystem and future vertical branches.
 
 That means this roadmap must always keep three responsibilities in view:
 
 - the **public access layer** for tunnels, custom domains, and HTTPS exposure
 - the **Systems API** as the canonical integration contract for tools and services
+- the **topology graph** as the canonical ecosystem map across deep and shallow integrations
 - **Nexus Guardian** as the policy, health, and safety layer around exposure and trust
+
+## Production readiness focus
+
+The project focus should now be feature-completeness and production readiness, not just ecosystem framing.
+
+The current codebase already has real control-plane and Systems API boundaries, but several platform-critical areas are still shallow:
+
+- `src/control-plane/` is the most mature subsystem and already supports node registration, quota checks, policy checks, and placement planning
+- `src/systems-api/` is the most mature integration surface and already supports registry, status, topology, domains, addresses, and exposure flows
+- `src/federation/` exists and exposes peer and trust summaries, but still needs stronger trust lifecycle handling
+- `src/observability/` is still minimal and mostly counts or records in-memory events
+- `src/data-plane/` is still mostly type scaffolding rather than runtime orchestration
+- `src/storage/` is still class metadata rather than real volume, snapshot, and recovery lifecycle management
+- `src/state.ts` remains a major production blocker because platform state is still memory-backed instead of durable
+
+For the next phase of the project, production readiness should take priority over adding more conceptual surface area.
+
+## Production readiness priorities
+
+| Priority | Area | Current state | Why it matters | Exit condition |
+| --- | --- | --- | --- | --- |
+| P0 | Durable state | In-memory state is still the platform source of truth | Restarts currently lose critical operational context | Nodes, workloads, exposure, peer, and audit state survive restart cleanly |
+| P0 | Guardian policy engine | Policy exists for placement and exposure framing, but approval and quarantine workflows are not complete | Public reachability cannot be treated as safe without explicit policy decisions | Every exposure and domain action is policy-backed, auditable, and reversible |
+| P0 | Auth and trust | API-key mutation auth exists, but broader operator/session/service trust flow is incomplete | Production control planes need stronger actor boundaries | Operator auth, service-to-service auth, and peer trust are explicit and testable |
+| P1 | Observability | Signals and event recording are minimal | Operators need a forensic trail and health visibility | Audit, metrics, logs, health summaries, and alerts are queryable and consistent |
+| P1 | Data plane | Runtime execution remains mostly abstract types | The platform is not feature complete until workloads can be enacted, not just planned | Workload lifecycle can progress through planned, running, failed, and stopped states |
+| P1 | Storage | Storage is still class metadata only | Workloads cannot be durable or recoverable without real storage lifecycle support | Volumes, attachments, snapshots, and retention policies are first-class |
+| P1 | Recovery and backup | No clear recovery path exists for state and exposure metadata | Production systems need rollback and disaster recovery | State backup, restore, and snapshot workflows are documented and exercised |
+| P2 | Federation hardening | Peer summaries exist, but trust renewal and signed request enforcement need to deepen | Federation without lifecycle and expiry handling is brittle | Trust records, expiry, renewal, and peer discovery become operationally safe |
+| P2 | Edge and tunnel hardening | Exposure flows exist, but route health, admission policy, and certificate lifecycle need completion | Public traffic handling must be safe and observable | External routes are health-aware, policy-aware, and certificate-aware |
+| P2 | Operator UX | Operator surface is still limited | Production systems need explainable control and visibility | Dashboard/API surfaces can explain state, decisions, and failures without reading code |
+| P3 | Ecosystem adapters | Topology understands the wider ecosystem, but runtime adapters remain shallow | The hub needs real adoption paths for other Nexus tools | Priority ecosystem tools can register, report health, and consume shared contracts |
 
 ## Guiding principle
 
 If a feature does not help us operate a self-hosted, federated, privacy-first cloud, it does not belong in the first pass.
+
+## Current ecosystem scope
+
+The current ecosystem inventory that Nexus Cloud should understand is:
+
+- Nexus Cloud
+- Nexus
+- Nexus AI
+- Nexusclaw
+- Nexus Computer
+- Nexus Deploy
+- Nexus Forge
+- Nexus Hosting
+- Nexus Network
+- Nexus Porter
+- Nexus Vault
+- Nit
+- Phantom
 
 ## Milestone board
 
@@ -425,6 +476,8 @@ This is the first batch of Nexus Systems tools that should enter the registry. T
 | What is the minimum data model needed for the first large batch of tools to register safely without overfitting the schema? | | | | |
 | Which status fields must be exposed immediately to hosting and chat, and which can wait until later? | | | | |
 | How should host routing behave when a tool is reachable through more than one surface? | | | | |
+| What is the durable state backend for Nexus Cloud: file-backed log, SQLite, Postgres, or layered local-first storage? | file-backed log, SQLite, Postgres, layered storage | | | |
+| Which runtime should ship first for the data plane: container-only, container plus function, or full multi-runtime from day one? | container-only, container+function, full multi-runtime | | | |
 
 ## Backlog principles
 

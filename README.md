@@ -1,10 +1,31 @@
 # Nexus Cloud
 
-Self-hosted, federated cloud infrastructure for The No Hands Company.
+Self-hosted, federated cloud infrastructure and ecosystem hub for The No Hands Company.
 
 ## Purpose
 
-This repository is the starting point for building a cloud layer that can be run by individuals or communities without relying on hyperscalers.
+This repository is the control layer for the Nexus Systems ecosystem. Nexus Cloud is where the ecosystem gets a shared control plane, a canonical topology map, stable discovery, public exposure contracts, and a place to coordinate deeper or shallower integrations across the rest of the stack without relying on hyperscalers.
+
+## Ecosystem scope
+
+Nexus Cloud currently treats these projects as the active Nexus Systems ecosystem under development:
+
+- Nexus Cloud
+- Nexus
+- Nexus AI
+- Nexusclaw
+- Nexus Computer
+- Nexus Deploy
+- Nexus Forge
+- Nexus Hosting
+- Nexus Network
+- Nexus Porter
+- Nexus Vault
+- Nit
+- Phantom
+
+The canonical ecosystem inventory and integration depth map lives in `docs/ecosystem-map.md`.
+The production-readiness backlog lives in `docs/production-readiness.md`.
 
 ## Architecture scaffold
 
@@ -15,9 +36,18 @@ This repository is the starting point for building a cloud layer that can be run
 - `src/storage/` holds storage classes and volume models
 - `src/observability/` holds metrics, logs, traces, and audit boundaries
 - `src/api/` defines the initial API surface
-- `src/systems-api/` defines the shared platform contract for tools and services
+- `src/systems-api/` defines the shared platform contract for tools, topology, and services
 - `docs/architecture.md` describes the first implementation cut
 - `docs/implementation-plan.md` is the living roadmap for current and future work
+
+## Overview model
+
+Nexus Cloud exposes two distinct views of the ecosystem:
+
+- The live tool registry for services that are actually registered, exposed, and heartbeat-aware right now
+- The canonical topology graph for the wider ecosystem, including projects that are integrated deeply, integrated shallowly, or still being wired up
+
+That split keeps runtime truth separate from product and architecture truth.
 
 ## Deploy integration
 
@@ -35,8 +65,8 @@ This repository is the starting point for building a cloud layer that can be run
 
 ## Next steps
 
-- Implement node registration and trust
-- Add a scheduler stub
-- Define workload and deployment models
-- Add a runnable API server skeleton
-- Expand the Systems API into tool discovery, status, auth, and exposure contracts
+- Keep the topology graph aligned with the real ecosystem inventory
+- Turn the production-readiness backlog into implementation phases
+- Replace in-memory platform state with durable state and recovery paths
+- Complete Guardian, observability, data-plane, and storage subsystems
+- Deepen live registration flows for tools that should move from referenced to active integration

@@ -2,9 +2,14 @@ import type { FederationTrust } from "../architecture";
 
 export type FederationPeerStatus = "unknown" | "healthy" | "degraded" | "blocked";
 
+export type FederationPeerTrustState = "pending" | "verified" | "trusted" | "quarantined" | "revoked" | "expired";
+
 export type FederationPeer = {
   domain: string;
   trust: FederationTrust;
+  trustState: FederationPeerTrustState;
+  trustUpdatedAt?: string;
+  trustExpiresAt?: string;
   status: FederationPeerStatus;
   lastSeenAt?: string;
   version?: string;
