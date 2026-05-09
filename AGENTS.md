@@ -1,11 +1,22 @@
 # Nexus Cloud
 
-This folder is the working area for the Nexus Cloud project: a self-hosted, federated cloud layer for The No Hands Company.
+Nexus-Cloud is the control plane and nerve system for the entire ecosystem.
 
-## Working notes
-- Keep project files inside this folder.
-- Prefer small, focused changes.
-- Reuse ideas from `file '/home/workspace/Nexus'` and `file '/home/workspace/nexus-deploy'` when useful, but do not mix their codebases unless explicitly intended.
-- Treat this as the main development workspace for the new project.
-- The current scaffold centers on control plane, data plane, federation, storage, observability, and an expanded API surface.
-- Testing convention: run `bun test src`, keep shared harnesses in `src/test/`, and prefer colocated `*.test.ts` for DTO/unit coverage.
+## Standards Enforcement
+
+- Follow ../docs/ENGINEERING_STANDARDS.md for runtime, API, observability, testing, and security requirements.
+- Preserve the architectural rule that service registration, heartbeat, topology, routing intent, and ecosystem coordination converge here.
+- Prefer event-driven integration over polling. If another service can emit a webhook, SSE update, queue event, or heartbeat, consume that instead of adding periodic polling loops.
+- Preserve local-first and degraded-mode behavior for downstream services: Nexus-Cloud coordinates the ecosystem but should not force every client into hard dependency on synchronous control-plane round-trips.
+
+## Repo Conventions
+
+- Runtime is Bun + strict TypeScript.
+- Biome is the required lint/format tool.
+- Keep cross-service payloads typed, versioned, and documented.
+- Avoid ad hoc JSON shapes or hidden env-var coupling between services.
+
+## Validation Target
+
+- `bun run check`
+- `bun test src`
