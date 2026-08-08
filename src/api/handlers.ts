@@ -112,6 +112,7 @@ import {
   toSystemsApiExposureResourcesResponseDTO,
   toSystemsApiExposureStatusResponseDTO,
 } from "./exposure-dto";
+import { databaseEnabled } from "../db";
 import { apiRoutes } from "./index";
 
 function corsHeaders(): Record<string, string> {
@@ -188,6 +189,27 @@ function badRequest(message: string): Response {
 
 function notFound(): Response {
   return json({ error: "Not found" }, 404);
+}
+
+/**
+ * Accounts live in Postgres, which is optional — without DATABASE_URL the pool
+ * is null and every user/session query dereferences it. That crashed the whole
+ * process: a single anonymous GET /api/v1/users took the control plane down,
+ * routing and all, because the throw escaped the request and killed the runtime.
+ *
+ * Answer 503 instead, and say which variable is missing. Callers get a real
+ * status, and an unconfigured account system can no longer be a denial of
+ * service against everything else Cloud serves.
+ */
+function databaseRequired(): Response | null {
+  if (databaseEnabled()) return null;
+  return json(
+    {
+      error: "Account features unavailable: Cloud has no database configured",
+      hint: "Set DATABASE_URL and apply src/db/migrations/0001_create_auth_tables.sql",
+    },
+    503,
+  );
 }
 
 /**
@@ -1460,8 +1482,9 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   }
 
   if (request.method === "POST" && pathname === "/api/v1/auth/login")
-    return handleAuthLogin(request);
-  if (request.method === "GET" && pathname === "/api/v1/auth/me") return handleAuthMe(request);
+    return databaseRequired() ?? handleAuthLogin(request);
+  if (request.method === "GET" && pathname === "/api/v1/auth/me")
+    return databaseRequired() ?? handleAuthMe(request);
   if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
     return handleDashboard();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
@@ -1511,8 +1534,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return handleNodeAnnouncement();
   if (request.method === "POST" && pathname === "/v1/federation/peers/announce")
     return handleInboundPeerAnnounce(request);
-  if (request.method === "GET" && pathname === "/api/v1/users") return handleUserList();
-  if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
+  if (request.method === "GET" && pathname === "/api/v1/users")
+    return databaseRequired() ?? handleUserList();
+  if (request.method === "POST" && pathname === "/api/v1/users")
+    return databaseRequired() ?? handleUserRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/tools")
     return handleSystemsTools(request, url);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);

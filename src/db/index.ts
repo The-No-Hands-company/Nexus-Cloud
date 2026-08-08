@@ -16,7 +16,10 @@ if (process.env.DATABASE_URL) {
     pool.on("error", (err: Error) => {
       console.error("[db] Unexpected pool error:", err.message);
     });
-  } catch {
+  } catch (err) {
+    // `catch {}` without a binding used to reference an unbound `err` here, so
+    // the only thing this handler could do was throw a ReferenceError over the
+    // top of the real failure.
     console.warn("[db] Failed to create pool:", err);
   }
 } else {
@@ -24,5 +27,10 @@ if (process.env.DATABASE_URL) {
 }
 
 export type DbPool = typeof pool;
+
+/** True when account features (users, sessions, login) can work at all. */
+export function databaseEnabled(): boolean {
+  return pool !== null;
+}
 
 export { pool };
