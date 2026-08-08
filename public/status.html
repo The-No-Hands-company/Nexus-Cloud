@@ -1467,6 +1467,20 @@ var HOME_APP_CATALOG = [
   }
 ];
 // Auth
+// Cloud withholds each tool's upstreamUrl — the private host:port a backend runs
+// on — from callers it cannot identify, because this dashboard is served on the
+// public cloud subdomain. Attaching the session token when we have one keeps the
+// signed-in view complete; signed-out visitors get everything except the
+// internal addresses.
+function ncFetch(url, options) {
+  var opts = options || {};
+  var token = localStorage.getItem('nc_token');
+  if (token) {
+    opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + token });
+  }
+  return fetch(url, opts);
+}
+
 async function checkAuth() {
   var token = localStorage.getItem('nc_token');
   if (!token) { showLogin(); return; }
@@ -1650,8 +1664,8 @@ function closeApp(id, e) {
 async function loadLauncher() {
   try {
     var [toolsRes, statusRes, auditRes] = await Promise.all([
-      fetch('/api/v1/tools'),
-      fetch('/api/v1/status'),
+      ncFetch('/api/v1/tools'),
+      ncFetch('/api/v1/status'),
       fetch('/api/v1/audit?eventType=node-trust-action&kind=audit&limit=6')
     ]);
 
@@ -2047,12 +2061,12 @@ async function loadDashboard() {
   var el = document.getElementById('dashboard-content');
   try {
     var [sr, ir, tr, ar] = await Promise.all([
-      fetch('/api/v1/status'),
+      ncFetch('/api/v1/status'),
       fetch('/v1/federation/identity'),
-      fetch('/api/v1/status?compact=trust'),
+      ncFetch('/api/v1/status?compact=trust'),
       fetch('/api/v1/audit?eventType=node-trust-action&kind=audit&limit=10')
     ]);
-    var [toolsR] = await Promise.all([fetch('/api/v1/tools')]);
+    var [toolsR] = await Promise.all([ncFetch('/api/v1/tools')]);
     if (!sr.ok) throw new Error('Status API returned HTTP ' + sr.status);
     if (!ir.ok) throw new Error('Identity API returned HTTP ' + ir.status);
     var status = await sr.json();
@@ -2224,7 +2238,7 @@ function renderAuditCard(payload) {
 async function loadToolsView() {
   var el = document.getElementById('tools-content');
   try {
-    var res = await fetch('/api/v1/tools');
+    var res = await ncFetch('/api/v1/tools');
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var data = await res.json();
     var tools = data.tools || data;

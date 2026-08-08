@@ -809,6 +809,48 @@ describe("API route handlers", () => {
     );
   });
 
+  test("hides tool upstream addresses from anonymous callers on /tools and /status", async () => {
+    systemsApiService.registerSystemsApiTool({
+      id: "tool-redact",
+      name: "Redact",
+      description: "Tool used to check upstream redaction",
+      upstreamUrl: "http://127.0.0.1:5399",
+      exposed: true,
+      health: "healthy",
+      capabilities: ["redaction.check"],
+    });
+
+    // The harness runs with no key, which disables auth instance-wide and so
+    // disables redaction with it. Configure one so the gate is exercised.
+    const previousKey = process.env.NEXUS_CLOUD_API_KEY;
+    const key = "upstream-redaction-test-key";
+    process.env.NEXUS_CLOUD_API_KEY = key;
+
+    const toolsOf = async (headers: Record<string, string>, path: string) => {
+      const res = await handleRequest(new Request(`http://localhost${path}`, { method: "GET", headers }));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { tools?: Array<Record<string, unknown>> };
+      return (body.tools ?? []).filter((t) => t.id === "tool-redact");
+    };
+
+    try {
+      for (const path of ["/api/v1/tools", "/api/v1/status"]) {
+        const anonymous = await toolsOf({}, path);
+        expect(anonymous.length).toBe(1);
+        // The record is still served — only the private address is withheld.
+        expect(anonymous[0]?.id).toBe("tool-redact");
+        expect(anonymous[0]?.name).toBe("Redact");
+        expect(anonymous[0]).not.toHaveProperty("upstreamUrl");
+
+        const authorized = await toolsOf({ "x-api-key": key }, path);
+        expect(authorized.length).toBe(1);
+        expect(authorized[0]?.upstreamUrl).toBe("http://127.0.0.1:5399");
+      }
+    } finally {
+      process.env.NEXUS_CLOUD_API_KEY = previousKey ?? "";
+    }
+  });
+
   test("requires the API key to read routing topology, but never for tls-ask", async () => {
     // The harness runs with no key, which disables auth entirely. Configure one
     // for this test so the gate is actually exercised.

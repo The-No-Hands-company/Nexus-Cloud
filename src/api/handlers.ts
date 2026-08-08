@@ -201,6 +201,43 @@ const TOPOLOGY_READ_PATHS: ReadonlySet<string> = new Set([
   "/api/v1/routes/zone",
 ]);
 
+/**
+ * True when the caller has proved identity — a valid API key, or a dashboard
+ * session from /api/v1/auth/login. Used to decide whether a response may carry
+ * internal topology.
+ *
+ * When no API key is configured `requiresApiKey()` is false and auth is disabled
+ * instance-wide, so there is nothing to redact against; that is the local-dev
+ * shape and the dashboard must keep working there.
+ */
+async function callerIsAuthenticated(request: Request): Promise<boolean> {
+  if (!requiresApiKey()) return true;
+  if (checkApiKey(request) === null) return true;
+  const header = request.headers.get("authorization");
+  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  if (!token) return false;
+  const session = await validateSession(token);
+  return session.ok;
+}
+
+/**
+ * Remove backend addresses from tools bound for an anonymous caller.
+ *
+ * `upstreamUrl` is the private host:port a tool actually runs on. Cloud answers
+ * publicly on cloud.<cloudDomain> and status.html reads /api/v1/tools and
+ * /api/v1/status without credentials, so returning the field unconditionally
+ * published the internal address of every backend — the same disclosure the
+ * /api/v1/routes gate closes, one endpoint away. The rest of each tool record is
+ * what the public dashboard renders, so only this field is dropped.
+ */
+function redactUpstreams<T extends { upstreamUrl?: string }>(
+  tools: readonly T[],
+  authenticated: boolean,
+): readonly T[] {
+  if (authenticated) return tools;
+  return tools.map(({ upstreamUrl: _dropped, ...rest }) => rest as T);
+}
+
 function checkApiKey(request: Request): Response | null {
   if (!requiresApiKey()) return null;
   const header = request.headers.get("authorization");
@@ -507,16 +544,19 @@ function collectPhantomComplianceEntries(filter: "all" | "failing") {
   return { status, entries, failures: status.integrationFailures };
 }
 
-function handleSystemsTools(url: URL): Response {
+async function handleSystemsTools(request: Request, url: URL): Promise<Response> {
+  const authenticated = await callerIsAuthenticated(request);
   const filter = parsePhantomComplianceFilter(url);
   if (filter === "all") {
     return json({
-      tools: systemsApiService.listSystemsApiTools(),
+      tools: redactUpstreams(systemsApiService.listSystemsApiTools(), authenticated),
     } satisfies SystemsApiToolsResponseDTO);
   }
 
   const { entries } = collectPhantomComplianceEntries("failing");
-  return json({ tools: entries.map((entry) => entry.tool) } satisfies SystemsApiToolsResponseDTO);
+  return json({
+    tools: redactUpstreams(entries.map((entry) => entry.tool), authenticated),
+  } satisfies SystemsApiToolsResponseDTO);
 }
 
 function handleSystemsEndpoints(): Response {
@@ -611,7 +651,7 @@ function handleSystemsToolDisable(toolId: string): Response {
   return json({ tool } satisfies SystemsApiToolResponseDTO);
 }
 
-function handleSystemsStatus(request: Request, url: URL): Response {
+async function handleSystemsStatus(request: Request, url: URL): Promise<Response> {
   if (parseStatusCompactMode(url) === "trust") {
     const status = systemsApiService.describeSystemsApiStatus();
     const compactBody: SystemsApiTrustSummaryResponseDTO = {
@@ -622,10 +662,12 @@ function handleSystemsStatus(request: Request, url: URL): Response {
   }
 
   const filter = parsePhantomComplianceFilter(url);
-  const tools =
+  const tools = redactUpstreams(
     filter === "failing"
       ? collectPhantomComplianceEntries("failing").entries.map((entry) => entry.tool)
-      : systemsApiService.listSystemsApiTools();
+      : systemsApiService.listSystemsApiTools(),
+    await callerIsAuthenticated(request),
+  );
   const body: SystemsApiExposureStatusResponseDTO = toSystemsApiExposureStatusResponseDTO(
     systemsApiService.describeSystemsApiStatus(),
     tools,
@@ -1471,7 +1513,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return handleInboundPeerAnnounce(request);
   if (request.method === "GET" && pathname === "/api/v1/users") return handleUserList();
   if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
-  if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools(url);
+  if (request.method === "GET" && pathname === "/api/v1/tools")
+    return handleSystemsTools(request, url);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/endpoints") return handleSystemsEndpoints();
   if (request.method === "GET" && pathname === "/api/v1/capabilities")
