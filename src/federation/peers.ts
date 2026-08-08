@@ -15,12 +15,18 @@ function readString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
-export function createPeerTrust(domain: string, trust?: FederationSignedRequest | Record<string, unknown>): FederationTrust {
+export function createPeerTrust(
+  domain: string,
+  trust?: FederationSignedRequest | Record<string, unknown>,
+): FederationTrust {
   return {
     identity: domain,
     issuer: readString(trust && "keyId" in trust ? trust.keyId : undefined, domain),
     audience: "nexus-cloud",
-    publicKeyHint: readString(trust && "signature" in trust ? trust.signature : undefined, "manual").slice(0, 16),
+    publicKeyHint: readString(
+      trust && "signature" in trust ? trust.signature : undefined,
+      "manual",
+    ).slice(0, 16),
     signatureScheme: "ed25519",
     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
   };
@@ -33,11 +39,13 @@ export function upsertPeer(
   did?: string,
 ): FederationPeer {
   const now = new Date().toISOString();
-  const hasSignedTrust = Boolean(trust && typeof trust === "object" && "signature" in trust && "keyId" in trust);
+  const hasSignedTrust = Boolean(
+    trust && typeof trust === "object" && "signature" in trust && "keyId" in trust,
+  );
   const trustState = hasSignedTrust ? "trusted" : "pending";
   const peer: FederationPeer = {
     domain,
-    did,
+    ...(did ? { did } : {}),
     trust: createPeerTrust(domain, trust),
     trustState,
     trustUpdatedAt: now,

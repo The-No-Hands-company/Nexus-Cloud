@@ -250,12 +250,64 @@ button { cursor: pointer; font: inherit; border: none; background: none; color: 
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .tile-footer { display: flex; align-items: center; gap: 6px; }
+.tile-pin-btn {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+.tile-pin-btn.pinned { color: var(--amber); border-color: rgba(251,191,36,0.25); background: var(--amber-dim); }
+.tile-order-btn {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.tile-order-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .status-dot.healthy { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
 .status-dot.degraded { background: var(--amber); }
 .status-dot.offline  { background: var(--red); }
 .status-dot.unknown  { background: var(--text-dim); }
 .status-label { font-size: 11px; color: var(--text-muted); }
+.home-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.home-search {
+  min-width: 220px;
+  max-width: 360px;
+  width: 100%;
+  background: var(--bg-layer);
+  border: 1px solid var(--border-md);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.home-search:focus { outline: none; border-color: rgba(34,197,94,0.35); }
+.quick-filter.active {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: rgba(34,197,94,0.25);
+}
+.quick-preset.active {
+  background: var(--blue-dim);
+  color: var(--blue);
+  border-color: rgba(96,165,250,0.25);
+}
+.app-tile.pinned-drag {
+  opacity: 0.55;
+}
+.app-tile.drag-over {
+  border-color: rgba(96,165,250,0.45);
+  box-shadow: 0 0 0 1px rgba(96,165,250,0.35) inset;
+}
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
 .empty-state .empty-icon { font-size: 28px; margin-bottom: 10px; }
 .empty-state p { color: var(--text-dim); margin-top: 4px; }
@@ -399,7 +451,7 @@ tr:hover td { background: var(--bg-hover); }
       <div class="nav-section">
         <div class="nav-item active" id="nav-launcher" onclick="navigate('launcher')">
           <span class="nav-ico">&#x229E;</span>
-          <span class="nav-label">Launcher</span>
+          <span class="nav-label">Home</span>
         </div>
       </div>
       <div id="open-apps-nav" style="display:none">
@@ -446,7 +498,7 @@ tr:hover td { background: var(--bg-hover); }
       <div class="topbar-breadcrumb">
         <span>Nexus Cloud</span>
         <span class="topbar-sep">/</span>
-        <span id="topbar-view-name">Launcher</span>
+        <span id="topbar-view-name">Home</span>
       </div>
       <div class="topbar-right">
         <button class="topbar-btn" title="Notifications">&#x1F514;</button>
@@ -463,50 +515,83 @@ tr:hover td { background: var(--bg-hover); }
       <div id="view-launcher" class="view active">
         <div class="launcher-hero">
           <h2>Good <span id="greeting-time">morning</span>, <span class="greet-name" id="greeting-name">Admin</span></h2>
-          <p>Your Nexus Cloud workspace</p>
+          <p>Your Nexus ecosystem command center</p>
         </div>
-        <div class="apps-section">
-          <h3>Registered Tools</h3>
-          <div class="app-grid" id="tools-grid"><div class="loading-state"><div class="spinner"></div></div></div>
+        <div class="apps-section" id="home-section-continue">
+          <h3>Continue</h3>
+          <div class="app-grid" id="home-continue-grid"><div class="loading-state"><div class="spinner"></div></div></div>
         </div>
-        <div class="apps-section">
-          <h3>Cloud Services</h3>
+        <div class="apps-section" id="home-section-pinned">
+          <h3>Pinned</h3>
+          <div class="app-grid" id="home-pinned-grid"><div class="loading-state"><div class="spinner"></div></div></div>
+        </div>
+        <div class="apps-section" id="home-section-quick-actions">
+          <h3>Quick Actions</h3>
+          <div class="home-toolbar" id="home-quick-actions">
+            <button class="open-app-btn quick-filter" data-filter="all" onclick="setHomeFilter('all')">All Apps</button>
+            <button class="open-app-btn quick-filter" data-filter="personal" onclick="setHomeFilter('personal')">Personal</button>
+            <button class="open-app-btn quick-filter" data-filter="build" onclick="setHomeFilter('build')">Build</button>
+            <button class="open-app-btn quick-filter" data-filter="runtime" onclick="setHomeFilter('runtime')">Runtime</button>
+            <button class="open-app-btn quick-filter" data-filter="trust" onclick="setHomeFilter('trust')">Trust</button>
+            <button class="open-app-btn" onclick="navigate('dashboard')">Cloud Health</button>
+            <input id="home-app-search" class="home-search" type="text" placeholder="Search ecosystem apps..." oninput="setHomeSearch(this.value)" />
+          </div>
+          <div class="home-toolbar" style="margin-top:10px">
+            <button class="open-app-btn quick-preset" data-preset="builder" onclick="setHomePreset('builder')">Builder Mode</button>
+            <button class="open-app-btn quick-preset" data-preset="operator" onclick="setHomePreset('operator')">Operator Mode</button>
+          </div>
+        </div>
+        <div class="apps-section" id="home-section-workflows">
+          <h3>Recommended Workflows</h3>
+          <div class="app-grid">
+            <div class="app-tile" onclick="openHomeApp('nexus-forge', lastLauncherTools)">
+              <div class="tile-icon" style="background:var(--orange-dim);color:var(--orange)">&#x2692;</div>
+              <div class="tile-name">Build New Feature</div>
+              <div class="tile-desc">Start in Forge and continue to Deploy when review is done.</div>
+              <div class="tile-footer"><span class="status-dot unknown"></span><span class="status-label">Forge First</span></div>
+            </div>
+            <div class="app-tile" onclick="openHomeApp('nexus-ai', lastLauncherTools)">
+              <div class="tile-icon" style="background:var(--purple-dim);color:var(--purple)">&#x2726;</div>
+              <div class="tile-name">Run AI Workflow</div>
+              <div class="tile-desc">Open Nexus AI to orchestrate cross-tool execution and assistance.</div>
+              <div class="tile-footer"><span class="status-dot unknown"></span><span class="status-label">AI Runtime</span></div>
+            </div>
+            <div class="app-tile" onclick="openHomeApp('nexus-hosting', lastLauncherTools)">
+              <div class="tile-icon" style="background:var(--blue-dim);color:var(--blue)">&#x2601;</div>
+              <div class="tile-name">Publish Service</div>
+              <div class="tile-desc">Launch Hosting and verify public exposure via Cloud contracts.</div>
+              <div class="tile-footer"><span class="status-dot unknown"></span><span class="status-label">Go Live</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="apps-section" id="home-section-ecosystem">
+          <h3>Ecosystem Apps</h3>
+          <div class="app-grid" id="home-ecosystem-grid"><div class="loading-state"><div class="spinner"></div></div></div>
+        </div>
+        <div class="apps-section" id="home-section-pulse">
+          <h3>Live Ecosystem Pulse</h3>
+          <div class="card" id="home-pulse-card"><div class="loading-state"><div class="spinner"></div></div></div>
+        </div>
+        <div class="apps-section" id="home-section-control-plane">
+          <h3>Control Plane</h3>
           <div class="app-grid">
             <div class="app-tile" onclick="navigate('dashboard')">
               <div class="tile-icon" style="background:rgba(34,197,94,0.1);color:var(--green)">&#x25C8;</div>
               <div class="tile-name">Dashboard</div>
-              <div class="tile-desc">Node status, health metrics, and cloud summary</div>
-              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
-            </div>
-            <div class="app-tile" onclick="navigate('tools')">
-              <div class="tile-icon" style="background:rgba(96,165,250,0.1);color:var(--blue)">&#x2699;</div>
-              <div class="tile-name">Tools</div>
-              <div class="tile-desc">Manage registered tools and their upstreams</div>
-              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
-            </div>
-            <div class="app-tile" onclick="navigate('users')">
-              <div class="tile-icon" style="background:rgba(167,139,250,0.1);color:var(--purple)">&#x25C9;</div>
-              <div class="tile-name">Users</div>
-              <div class="tile-desc">NS address registry and user management</div>
-              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+              <div class="tile-desc">Node status, metrics, trust lifecycle, and cloud summary</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Control</span></div>
             </div>
             <div class="app-tile" onclick="navigate('federation')">
               <div class="tile-icon" style="background:rgba(251,191,36,0.1);color:var(--amber)">&#x2B21;</div>
               <div class="tile-name">Federation</div>
-              <div class="tile-desc">Peer nodes and inter-cloud gossip discovery</div>
-              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+              <div class="tile-desc">Peer nodes, trust states, and discovery visibility</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Control</span></div>
             </div>
             <div class="app-tile" onclick="navigate('identity')">
               <div class="tile-icon" style="background:rgba(34,197,94,0.1);color:var(--green)">&#x25C7;</div>
               <div class="tile-name">Identity</div>
-              <div class="tile-desc">This node's permanent DID and NS address</div>
-              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
-            </div>
-            <div class="app-tile" onclick="navigate('api')">
-              <div class="tile-icon" style="background:rgba(96,165,250,0.1);color:var(--blue)">&#x2263;</div>
-              <div class="tile-name">API Docs</div>
-              <div class="tile-desc">Full route manifest for the Nexus Cloud API</div>
-              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Online</span></div>
+              <div class="tile-desc">Node DID, address, and trust anchor metadata</div>
+              <div class="tile-footer"><span class="status-dot healthy"></span><span class="status-label">Control</span></div>
             </div>
           </div>
         </div>
@@ -599,7 +684,788 @@ var currentToken = null;
 var currentView = 'launcher';
 var openApps = new Map();
 var loadedViews = new Set(['launcher']);
+var homeFilter = 'all';
+var homeSearch = '';
+var homePreset = 'builder';
+var lastLauncherTools = [];
+var draggedPinnedId = null;
 
+var HOME_APP_CATALOG = [
+  {
+    "id": "nexus-cloud",
+    "name": "Nexus Cloud",
+    "category": "platform",
+    "description": "Control plane, topology, registry, and orchestration hub",
+    "icon": "☁",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-systems-api",
+    "name": "Systems API",
+    "category": "platform",
+    "description": "Canonical integration contracts and SDK",
+    "icon": "🔌",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-guardian",
+    "name": "Guardian",
+    "category": "infrastructure",
+    "description": "Policy engine, threat detection, rule evaluation, alert dispatch",
+    "icon": "🛡",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-auth",
+    "name": "Auth",
+    "category": "infrastructure",
+    "description": "Identity, SSO, API keys, RBAC, OAuth2/OIDC",
+    "icon": "🔑",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-edge",
+    "name": "Edge",
+    "category": "infrastructure",
+    "description": "Ingress gateway, rate limiting, traffic metrics",
+    "icon": "⚡",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-tunnel",
+    "name": "Tunnel",
+    "category": "infrastructure",
+    "description": "HTTPS tunnel, reachability, TLS lifecycle",
+    "icon": "🔗",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-network",
+    "name": "Network",
+    "category": "infrastructure",
+    "description": "Connectivity, peer routing, federation fabric",
+    "icon": "🌐",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-vault",
+    "name": "Vault",
+    "category": "infrastructure",
+    "description": "Secrets, signing, and cryptographic trust",
+    "icon": "🔒",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-security",
+    "name": "Security",
+    "category": "infrastructure",
+    "description": "Threat detection, confidential computing, provenance",
+    "icon": "🔐",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-compliance",
+    "name": "Compliance",
+    "category": "infrastructure",
+    "description": "Data sovereignty, regulations, audit trails",
+    "icon": "📋",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-confidential",
+    "name": "Confidential",
+    "category": "infrastructure",
+    "description": "Confidential computing, TEE, privacy tech",
+    "icon": "🔏",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-provenance",
+    "name": "Provenance",
+    "category": "infrastructure",
+    "description": "Digital provenance and content authenticity",
+    "icon": "✅",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-files",
+    "name": "Files",
+    "category": "platform-services",
+    "description": "File storage, S3/Disk backends, versioning",
+    "icon": "📁",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-search",
+    "name": "Search",
+    "category": "platform-services",
+    "description": "Full-text search, FTS5 index, multi-source",
+    "icon": "🔍",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-monitor",
+    "name": "Monitor",
+    "category": "platform-services",
+    "description": "Metrics, alerting, service tracking, dashboard",
+    "icon": "📊",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-api",
+    "name": "API Gateway",
+    "category": "platform-services",
+    "description": "Unified API gateway, route management, proxy",
+    "icon": "🔀",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-warehouse",
+    "name": "Warehouse",
+    "category": "platform-services",
+    "description": "Inventory storage service",
+    "icon": "🏭",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-deploy",
+    "name": "Deploy",
+    "category": "platform-services",
+    "description": "Build, release, and rollback delivery",
+    "icon": "🚀",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-hosting",
+    "name": "Hosting",
+    "category": "platform-services",
+    "description": "Site, route, and public runtime exposure",
+    "icon": "☁",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus",
+    "name": "Nexus",
+    "category": "communication",
+    "description": "Privacy-first communication and collaboration",
+    "icon": "💬",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-team-chat",
+    "name": "Team Chat",
+    "category": "communication",
+    "description": "Advanced team messaging, channels, threads",
+    "icon": "💭",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-meet",
+    "name": "Meet",
+    "category": "communication",
+    "description": "Video conferencing, recording, AI transcription",
+    "icon": "📹",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-email",
+    "name": "Email",
+    "category": "communication",
+    "description": "Private sovereign email with AI filtering",
+    "icon": "📧",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-presence",
+    "name": "Presence",
+    "category": "communication",
+    "description": "Real-time presence and availability",
+    "icon": "🟢",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-ai",
+    "name": "Nexus AI",
+    "category": "ai",
+    "description": "Agent orchestration and tool intelligence",
+    "icon": "✦",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-ai-hub",
+    "name": "AI Hub",
+    "category": "ai",
+    "description": "Local AI models, agents, RAG pipelines",
+    "icon": "🧠",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-agents",
+    "name": "Agents",
+    "category": "ai",
+    "description": "Multi-agent system builder and orchestrator",
+    "icon": "🤖",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-inference",
+    "name": "Inference",
+    "category": "ai",
+    "description": "Optimized AI inference and supercomputing",
+    "icon": "⚙",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexusclaw",
+    "name": "Nexusclaw",
+    "category": "ai",
+    "description": "Multi-agent coordination and task graphs",
+    "icon": "🦾",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-forge",
+    "name": "Forge",
+    "category": "dev",
+    "description": "Repository, PR, and issue platform",
+    "icon": "⚒",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-ide",
+    "name": "IDE",
+    "category": "dev",
+    "description": "Cloud-based code editor with AI",
+    "icon": "💻",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-testing",
+    "name": "Testing",
+    "category": "dev",
+    "description": "Unit, integration, E2E test orchestration",
+    "icon": "🧪",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-code-review",
+    "name": "Code Review",
+    "category": "dev",
+    "description": "AI-powered code review and quality",
+    "icon": "👁",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-computer",
+    "name": "Computer",
+    "category": "dev",
+    "description": "Personal cloud workspace and edge execution",
+    "icon": "🖥",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-terminal",
+    "name": "Terminal",
+    "category": "dev",
+    "description": "Web-based SSH terminal with AI assist",
+    "icon": "⬛",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexuslang",
+    "name": "Nexuslang",
+    "category": "dev",
+    "description": "Natural-language programming language",
+    "icon": "📜",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-notes",
+    "name": "Notes",
+    "category": "productivity",
+    "description": "Collaborative note-taking, markdown",
+    "icon": "📝",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-tasks",
+    "name": "Tasks",
+    "category": "productivity",
+    "description": "Kanban project management, boards",
+    "icon": "📋",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-calendar",
+    "name": "Calendar",
+    "category": "productivity",
+    "description": "Shared calendars, CalDAV, reminders",
+    "icon": "📅",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-wiki",
+    "name": "Wiki",
+    "category": "productivity",
+    "description": "Wikipedia-like knowledge platform",
+    "icon": "📚",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-planner",
+    "name": "Planner",
+    "category": "productivity",
+    "description": "Personal and team planner with AI",
+    "icon": "📐",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-office",
+    "name": "Office",
+    "category": "productivity",
+    "description": "Collaborative documents and spreadsheets",
+    "icon": "📄",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-forms",
+    "name": "Forms",
+    "category": "productivity",
+    "description": "Form builder and data collection",
+    "icon": "📩",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-automate",
+    "name": "Automate",
+    "category": "productivity",
+    "description": "Workflow automation engine",
+    "icon": "⚡",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-book",
+    "name": "Book",
+    "category": "productivity",
+    "description": "Personal library, ebook manager, AI summaries",
+    "icon": "📖",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-pdf",
+    "name": "PDF",
+    "category": "productivity",
+    "description": "PDF toolkit: merge, sign, OCR, AI",
+    "icon": "📑",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-photos",
+    "name": "Photos",
+    "category": "media",
+    "description": "Photo/video backup, AI tagging, albums",
+    "icon": "📷",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-media",
+    "name": "Media",
+    "category": "media",
+    "description": "Media streaming server for movies/TV/music",
+    "icon": "🎬",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-music",
+    "name": "Music",
+    "category": "media",
+    "description": "Browser-based DAW, recording, mixing",
+    "icon": "🎵",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-radio-live",
+    "name": "Radio Live",
+    "category": "media",
+    "description": "Internet radio and live streaming",
+    "icon": "📻",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-video",
+    "name": "Video",
+    "category": "media",
+    "description": "Browser-based video editor, effects, subtitles",
+    "icon": "🎞",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-graphic",
+    "name": "Graphic",
+    "category": "media",
+    "description": "Graphic design suite, vectors, photo editing",
+    "icon": "🎨",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-draw",
+    "name": "Draw",
+    "category": "media",
+    "description": "Real-time collaborative whiteboard",
+    "icon": "✏",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-design",
+    "name": "Design",
+    "category": "media",
+    "description": "UI/UX design tool, prototyping",
+    "icon": "📱",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-content",
+    "name": "Content",
+    "category": "media",
+    "description": "AI content creation studio",
+    "icon": "✨",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-crm",
+    "name": "CRM",
+    "category": "business",
+    "description": "Customer relationship management",
+    "icon": "🤝",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-sales",
+    "name": "Sales",
+    "category": "business",
+    "description": "Sales automation and pipeline",
+    "icon": "💼",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-hr",
+    "name": "HR",
+    "category": "business",
+    "description": "Human resources, onboarding, payroll",
+    "icon": "👥",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-accounting",
+    "name": "Accounting",
+    "category": "business",
+    "description": "Bookkeeping, invoicing, AI reconciliation",
+    "icon": "🧾",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-contracts",
+    "name": "Contracts",
+    "category": "business",
+    "description": "Contract creation, signing, AI review",
+    "icon": "📝",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-billing",
+    "name": "Billing",
+    "category": "business",
+    "description": "Invoicing, subscriptions, payments",
+    "icon": "💳",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-analytics",
+    "name": "Analytics",
+    "category": "business",
+    "description": "BI dashboards, AI-powered queries",
+    "icon": "📈",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-insights",
+    "name": "Insights",
+    "category": "business",
+    "description": "AI data analysis and reporting",
+    "icon": "💡",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-survey",
+    "name": "Survey",
+    "category": "business",
+    "description": "Survey and feedback collection",
+    "icon": "📊",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-seo",
+    "name": "SEO",
+    "category": "business",
+    "description": "SEO monitoring and optimization",
+    "icon": "🔎",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-finance",
+    "name": "Finance",
+    "category": "business",
+    "description": "Personal budgeting, AI categorization",
+    "icon": "💰",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-spend",
+    "name": "Spend",
+    "category": "business",
+    "description": "SaaS spend management, optimization",
+    "icon": "💸",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-store",
+    "name": "Store",
+    "category": "business",
+    "description": "E-commerce, digital products",
+    "icon": "🛒",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-market",
+    "name": "Market",
+    "category": "business",
+    "description": "Community marketplace, trading",
+    "icon": "🏪",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-learn",
+    "name": "Learn",
+    "category": "learning",
+    "description": "Learning management system, courses",
+    "icon": "🎓",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-tutor",
+    "name": "Tutor",
+    "category": "learning",
+    "description": "Personal AI tutor, adaptive learning",
+    "icon": "🧑‍🏫",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-academy",
+    "name": "Academy",
+    "category": "learning",
+    "description": "Training platform, progress tracking",
+    "icon": "🏫",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-health",
+    "name": "Health",
+    "category": "wellness",
+    "description": "Health and medical records, AI insights",
+    "icon": "❤",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-fitness",
+    "name": "Fitness",
+    "category": "wellness",
+    "description": "Fitness tracking, workouts, logging",
+    "icon": "🏃",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-nutrition",
+    "name": "Nutrition",
+    "category": "wellness",
+    "description": "Meal planning, recipes, AI suggestions",
+    "icon": "🥗",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-mind",
+    "name": "Mind",
+    "category": "wellness",
+    "description": "Mental wellness journal, meditation",
+    "icon": "🧘",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-game",
+    "name": "Game",
+    "category": "gaming",
+    "description": "Game server hosting, federation",
+    "icon": "🎮",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-play",
+    "name": "Play",
+    "category": "gaming",
+    "description": "Browser game library and streaming",
+    "icon": "▶",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-arcade",
+    "name": "Arcade",
+    "category": "gaming",
+    "description": "Retro/emulator gaming platform",
+    "icon": "🕹",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-engine",
+    "name": "Engine",
+    "category": "gaming",
+    "description": "2D+3D game engine, physics, AI",
+    "icon": "🎯",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-modeling",
+    "name": "Modeling",
+    "category": "specialized",
+    "description": "3D/CAD parametric modeling, AI-assisted",
+    "icon": "📐",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-database",
+    "name": "Database",
+    "category": "specialized",
+    "description": "Visual database designer and GUI",
+    "icon": "🗄",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-vertical",
+    "name": "Vertical",
+    "category": "specialized",
+    "description": "Industry-specific module framework",
+    "icon": "🏗",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-social",
+    "name": "Social",
+    "category": "specialized",
+    "description": "Fediverse, private community posting",
+    "icon": "🐘",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "nexus-home",
+    "name": "Home",
+    "category": "specialized",
+    "description": "Smart home, IoT integration",
+    "icon": "🏠",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  },
+  {
+    "id": "phantom",
+    "name": "Phantom",
+    "category": "specialized",
+    "description": "Protocol-level privacy and security overlay",
+    "icon": "🛡",
+    "bg": "var(--bg-hover)",
+    "color": "var(--text)"
+  }
+];
 // Auth
 async function checkAuth() {
   var token = localStorage.getItem('nc_token');
@@ -629,6 +1495,7 @@ function showShell() {
   document.getElementById('sidebar-username').textContent = name;
   document.getElementById('topbar-username').textContent = name;
   document.getElementById('greeting-name').textContent = name[0].toUpperCase() + name.slice(1);
+  loadHomePreset();
   updateGreeting();
   loadLauncher();
 }
@@ -675,7 +1542,7 @@ function showLoginError(msg) {
 
 // Navigation
 var VIEW_LABELS = {
-  launcher: 'Launcher', dashboard: 'Dashboard', tools: 'Tools',
+  launcher: 'Home', dashboard: 'Dashboard', tools: 'Tools',
   users: 'Users', federation: 'Federation', identity: 'Identity', api: 'API'
 };
 
@@ -782,40 +1649,397 @@ function closeApp(id, e) {
 // Launcher
 async function loadLauncher() {
   try {
-    var res = await fetch('/api/v1/tools');
-    var data = await res.json();
-    var tools = data.tools || data;
-    renderToolsGrid(Array.isArray(tools) ? tools : []);
+    var [toolsRes, statusRes, auditRes] = await Promise.all([
+      fetch('/api/v1/tools'),
+      fetch('/api/v1/status'),
+      fetch('/api/v1/audit?eventType=node-trust-action&kind=audit&limit=6')
+    ]);
+
+    var toolsData = toolsRes.ok ? await toolsRes.json() : { tools: [] };
+    var statusData = statusRes.ok ? await statusRes.json() : {};
+    var auditData = auditRes.ok ? await auditRes.json() : { events: [] };
+    var tools = toolsData.tools || toolsData;
+    lastLauncherTools = Array.isArray(tools) ? tools : [];
+
+    renderContinueGrid(lastLauncherTools);
+    renderPinnedGrid(lastLauncherTools);
+    renderEcosystemGrid(lastLauncherTools, homeFilter, homeSearch);
+    renderPulseFeed(statusData, auditData, lastLauncherTools);
+    updateQuickActionButtons();
   } catch {
-    document.getElementById('tools-grid').innerHTML = '<div class="empty-state">' +
-      '<div class="empty-icon">&#x2699;</div><p>No tools registered yet.</p>' +
-      '<p>Start Nexus-Hosting, Nexus AI, or Nexus Chat to see them here.</p></div>';
+    document.getElementById('home-continue-grid').innerHTML = '<div class="empty-state">' +
+      '<div class="empty-icon">&#x23F5;</div><p>No recent apps yet.</p>' +
+      '<p>Open an app to populate your Continue section.</p></div>';
+    renderPinnedGrid([]);
+    renderEcosystemGrid([], homeFilter, homeSearch);
+    document.getElementById('home-pulse-card').innerHTML = '<div class="empty-state">' +
+      '<div class="empty-icon">&#x1F4E1;</div><p>No pulse data available yet.</p>' +
+      '<p>Start ecosystem services to see live events and health signals.</p></div>';
+    updateQuickActionButtons();
   }
 }
 
-function renderToolsGrid(tools) {
-  var grid = document.getElementById('tools-grid');
-  if (!tools.length) {
-    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2699;</div>' +
-      '<p>No tools registered yet.</p><p>Start your NS services to see them here.</p></div>';
+function setHomeFilter(filter) {
+  homeFilter = filter;
+  renderEcosystemGrid(lastLauncherTools, homeFilter, homeSearch);
+  updateQuickActionButtons();
+}
+
+function setHomeSearch(term) {
+  homeSearch = String(term || '').trim().toLowerCase();
+  renderEcosystemGrid(lastLauncherTools, homeFilter, homeSearch);
+}
+
+function updateQuickActionButtons() {
+  document.querySelectorAll('.quick-filter').forEach(function(btn) {
+    var filter = btn.getAttribute('data-filter');
+    if (filter === homeFilter) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+  document.querySelectorAll('.quick-preset').forEach(function(btn) {
+    var preset = btn.getAttribute('data-preset');
+    if (preset === homePreset) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+}
+
+function getCurrentUserStorageSuffix() {
+  return (currentUser && currentUser.sub) ? String(currentUser.sub).toLowerCase() : 'guest';
+}
+
+function getHomePresetStorageKey() {
+  return 'nc_home_preset:' + getCurrentUserStorageSuffix();
+}
+
+function loadHomePreset() {
+  try {
+    var saved = localStorage.getItem(getHomePresetStorageKey());
+    homePreset = saved === 'operator' ? 'operator' : 'builder';
+  } catch {
+    homePreset = 'builder';
+  }
+  applyHomePresetLayout();
+}
+
+function setHomePreset(preset) {
+  homePreset = (preset === 'operator') ? 'operator' : 'builder';
+  try {
+    localStorage.setItem(getHomePresetStorageKey(), homePreset);
+  } catch {}
+  applyHomePresetLayout();
+  updateQuickActionButtons();
+}
+
+function applyHomePresetLayout() {
+  var launcher = document.getElementById('view-launcher');
+  if (!launcher) return;
+
+  var sectionOrder = homePreset === 'operator'
+    ? [
+        'home-section-continue',
+        'home-section-pinned',
+        'home-section-quick-actions',
+        'home-section-control-plane',
+        'home-section-pulse',
+        'home-section-ecosystem',
+        'home-section-workflows'
+      ]
+    : [
+        'home-section-continue',
+        'home-section-pinned',
+        'home-section-quick-actions',
+        'home-section-workflows',
+        'home-section-ecosystem',
+        'home-section-pulse',
+        'home-section-control-plane'
+      ];
+
+  sectionOrder.forEach(function(id) {
+    var section = document.getElementById(id);
+    if (section) launcher.appendChild(section);
+  });
+
+  if (homePreset === 'operator' && homeFilter === 'build') {
+    homeFilter = 'all';
+  }
+  if (homePreset === 'builder' && homeFilter === 'all') {
+    homeFilter = 'build';
+  }
+}
+
+function getLastUsedMap() {
+  try {
+    var raw = localStorage.getItem('nc_last_used_apps');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberAppUse(appId) {
+  try {
+    var lastUsed = getLastUsedMap();
+    lastUsed[appId] = new Date().toISOString();
+    localStorage.setItem('nc_last_used_apps', JSON.stringify(lastUsed));
+  } catch {}
+}
+
+function getPinnedSet() {
+  var order = getPinnedOrder();
+  return new Set(order);
+}
+
+function getPinnedOrderStorageKey() {
+  return 'nc_pinned_apps:' + getCurrentUserStorageSuffix();
+}
+
+function getPinnedOrder() {
+  try {
+    var raw = localStorage.getItem(getPinnedOrderStorageKey());
+    var parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePinnedOrder(order) {
+  localStorage.setItem(getPinnedOrderStorageKey(), JSON.stringify(order));
+}
+
+function togglePinnedApp(appId, event) {
+  if (event) event.stopPropagation();
+  var order = getPinnedOrder();
+  var idx = order.indexOf(appId);
+  if (idx >= 0) order.splice(idx, 1);
+  else order.push(appId);
+  savePinnedOrder(order);
+  renderPinnedGrid(lastLauncherTools);
+  renderEcosystemGrid(lastLauncherTools, homeFilter, homeSearch);
+}
+
+function movePinnedApp(appId, direction, event) {
+  if (event) event.stopPropagation();
+  var delta = direction === 'left' ? -1 : 1;
+  var order = getPinnedOrder();
+  var from = order.indexOf(appId);
+  if (from < 0) return;
+  var to = from + delta;
+  if (to < 0 || to >= order.length) return;
+  var moved = order[from];
+  order.splice(from, 1);
+  order.splice(to, 0, moved);
+  savePinnedOrder(order);
+  renderPinnedGrid(lastLauncherTools);
+}
+
+function handlePinnedDragStart(event) {
+  var id = event.currentTarget && event.currentTarget.getAttribute('data-app-id');
+  if (!id) return;
+  draggedPinnedId = id;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', id);
+  event.currentTarget.classList.add('pinned-drag');
+}
+
+function handlePinnedDragEnd(event) {
+  draggedPinnedId = null;
+  document.querySelectorAll('#home-pinned-grid .app-tile').forEach(function(tile) {
+    tile.classList.remove('drag-over');
+    tile.classList.remove('pinned-drag');
+  });
+}
+
+function handlePinnedDragOver(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  event.currentTarget.classList.add('drag-over');
+}
+
+function handlePinnedDragLeave(event) {
+  event.currentTarget.classList.remove('drag-over');
+}
+
+function reorderPinnedApps(targetId) {
+  if (!draggedPinnedId || !targetId || draggedPinnedId === targetId) return;
+  var order = getPinnedOrder();
+  var from = order.indexOf(draggedPinnedId);
+  var to = order.indexOf(targetId);
+  if (from < 0 || to < 0) return;
+  order.splice(from, 1);
+  order.splice(to, 0, draggedPinnedId);
+  savePinnedOrder(order);
+}
+
+function handlePinnedDrop(event) {
+  event.preventDefault();
+  var targetId = event.currentTarget && event.currentTarget.getAttribute('data-app-id');
+  reorderPinnedApps(targetId);
+  renderPinnedGrid(lastLauncherTools);
+  event.currentTarget.classList.remove('drag-over');
+}
+
+function renderContinueGrid(tools) {
+  var grid = document.getElementById('home-continue-grid');
+  var lastUsed = getLastUsedMap();
+  var recent = Object.keys(lastUsed)
+    .map(function(id) { return { id: id, ts: new Date(lastUsed[id]).getTime() }; })
+    .filter(function(x) { return !Number.isNaN(x.ts); })
+    .sort(function(a, b) { return b.ts - a.ts; })
+    .slice(0, 6);
+
+  if (!recent.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x23F5;</div>' +
+      '<p>No recent apps yet.</p><p>Open any app from Ecosystem Apps to populate this section.</p></div>';
     return;
   }
+
+  var byId = {};
+  HOME_APP_CATALOG.forEach(function(app) { byId[app.id] = app; });
   grid.innerHTML = '';
-  tools.forEach(function(tool) {
-    var meta = capMeta(tool.capabilities);
-    var h = tool.health || tool.status;
-    var statusCls = h === 'healthy' ? 'healthy' : h === 'degraded' ? 'degraded' : 'offline';
+  recent.forEach(function(entry) {
+    var app = byId[entry.id];
+    if (!app) return;
     var tile = document.createElement('div');
     tile.className = 'app-tile';
-    tile.innerHTML = '<div class="tile-icon" style="background:' + meta.bg + ';color:' + meta.color + '">' + meta.icon + '</div>' +
-      '<div class="tile-name">' + esc(tool.name) + '</div>' +
-      '<div class="tile-desc">' + esc(tool.description || meta.label) + '</div>' +
-      '<div class="tile-footer"><span class="status-dot ' + statusCls + '"></span>' +
-      '<span class="status-label">' + esc(h || 'unknown') + '</span>' +
-      (tool.upstreamUrl ? '<span style="margin-left:auto;font-size:11px;color:var(--text-dim)">&#x2197;</span>' : '') + '</div>';
-    tile.addEventListener('click', (function(t){ return function(){ openTool(t); }; })(tool));
+    tile.innerHTML = '<div class="tile-icon" style="background:' + app.bg + ';color:' + app.color + '">' + app.icon + '</div>' +
+      '<div class="tile-name">' + esc(app.name) + '</div>' +
+      '<div class="tile-desc">Last used ' + esc(timeAgo(lastUsed[entry.id])) + '</div>' +
+      '<div class="tile-footer"><span class="status-dot unknown"></span><span class="status-label">Resume</span></div>';
+    tile.addEventListener('click', (function(id){ return function(){ openHomeApp(id, tools); }; })(app.id));
     grid.appendChild(tile);
   });
+}
+
+function renderPinnedGrid(tools) {
+  var grid = document.getElementById('home-pinned-grid');
+  var pinnedOrder = getPinnedOrder();
+  if (!pinnedOrder.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x2606;</div>' +
+      '<p>No pinned apps yet.</p><p>Use the star on any ecosystem app card to pin it here.</p></div>';
+    return;
+  }
+
+  var byId = {};
+  HOME_APP_CATALOG.forEach(function(app) { byId[app.id] = app; });
+  grid.innerHTML = '';
+  pinnedOrder.forEach(function(id, index) {
+    var app = byId[id];
+    if (!app) return;
+    var tile = document.createElement('div');
+    tile.className = 'app-tile';
+    tile.setAttribute('data-app-id', app.id);
+    tile.setAttribute('draggable', 'true');
+    tile.innerHTML = '<div class="tile-icon" style="background:' + app.bg + ';color:' + app.color + '">' + app.icon + '</div>' +
+      '<div class="tile-name">' + esc(app.name) + '</div>' +
+      '<div class="tile-desc">' + esc(app.description) + '</div>' +
+      '<div class="tile-footer"><span class="status-dot unknown"></span><span class="status-label">Pinned</span>' +
+      '<button class="tile-order-btn" aria-label="Move ' + esc(app.name) + ' left"' + (index === 0 ? ' disabled' : '') + ' onclick="movePinnedApp(\'' + esc(app.id) + '\', \'left\', event)">&#x2190;</button>' +
+      '<button class="tile-order-btn" aria-label="Move ' + esc(app.name) + ' right"' + (index === pinnedOrder.length - 1 ? ' disabled' : '') + ' onclick="movePinnedApp(\'' + esc(app.id) + '\', \'right\', event)">&#x2192;</button>' +
+      '<button class="tile-pin-btn pinned" onclick="togglePinnedApp(\'' + esc(app.id) + '\', event)">&#9733;</button></div>';
+    tile.addEventListener('dragstart', handlePinnedDragStart);
+    tile.addEventListener('dragend', handlePinnedDragEnd);
+    tile.addEventListener('dragover', handlePinnedDragOver);
+    tile.addEventListener('dragleave', handlePinnedDragLeave);
+    tile.addEventListener('drop', handlePinnedDrop);
+    tile.addEventListener('click', (function(appId){ return function(){ openHomeApp(appId, tools); }; })(app.id));
+    grid.appendChild(tile);
+  });
+}
+
+function renderEcosystemGrid(tools, filter, query) {
+  var grid = document.getElementById('home-ecosystem-grid');
+  var normalized = (filter || 'all').toLowerCase();
+  var searchQuery = String(query || '').trim().toLowerCase();
+  var pinned = getPinnedSet();
+  var filteredApps = HOME_APP_CATALOG.filter(function(app) {
+    var byCategory = normalized === 'all' ? true : app.category === normalized;
+    if (!byCategory) return false;
+    if (!searchQuery) return true;
+    return app.name.toLowerCase().includes(searchQuery) || app.description.toLowerCase().includes(searchQuery) || app.category.toLowerCase().includes(searchQuery);
+  });
+
+  if (!filteredApps.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x25A6;</div>' +
+      '<p>No apps match this filter.</p><p>Try another category or clear search.</p></div>';
+    return;
+  }
+
+  var byName = {};
+  (tools || []).forEach(function(tool) { byName[(tool.name || '').toLowerCase()] = tool; });
+  grid.innerHTML = '';
+
+  filteredApps.forEach(function(app) {
+    var tool = byName[app.name.toLowerCase()];
+    var h = tool ? (tool.health || tool.status || 'unknown') : 'unregistered';
+    var statusCls = h === 'healthy' ? 'healthy' : h === 'degraded' ? 'degraded' : h === 'offline' ? 'offline' : 'unknown';
+    var statusLabel = h === 'unregistered' ? 'cataloged' : h;
+
+    var tile = document.createElement('div');
+    tile.className = 'app-tile';
+    tile.innerHTML = '<div class="tile-icon" style="background:' + app.bg + ';color:' + app.color + '">' + app.icon + '</div>' +
+      '<div class="tile-name">' + esc(app.name) + '</div>' +
+      '<div class="tile-desc">' + esc(app.description) + '</div>' +
+      '<div class="tile-footer"><span class="status-dot ' + statusCls + '"></span>' +
+      '<span class="status-label">' + esc(statusLabel) + '</span>' +
+      '<span style="font-size:10px;color:var(--text-dim);text-transform:uppercase">' + esc(app.category) + '</span>' +
+      '<button class="tile-pin-btn' + (pinned.has(app.id) ? ' pinned' : '') + '" onclick="togglePinnedApp(\'' + esc(app.id) + '\', event)">' + (pinned.has(app.id) ? '&#9733;' : '&#9734;') + '</button></div>';
+    tile.addEventListener('click', (function(id){ return function(){ openHomeApp(id, tools); }; })(app.id));
+    grid.appendChild(tile);
+  });
+}
+
+function renderPulseFeed(statusPayload, auditPayload, tools) {
+  var card = document.getElementById('home-pulse-card');
+  var toolsState = statusPayload && statusPayload.tools ? statusPayload.tools : { total: (tools || []).length, healthy: 0, degraded: 0, offline: 0 };
+  var peersState = statusPayload && statusPayload.peers ? statusPayload.peers : { total: 0 };
+  var usersState = statusPayload && statusPayload.users ? statusPayload.users : { total: 0 };
+  var events = auditPayload && Array.isArray(auditPayload.events) ? auditPayload.events.slice(0, 4) : [];
+
+  var eventLines = events.length
+    ? events.map(function(ev) {
+        var md = ev.metadata || {};
+        var action = md.action || ev.eventType || 'event';
+        var who = md.actor || 'system';
+        return '<div style="padding:10px 0;border-top:1px solid var(--border)">' +
+          '<div style="font-size:12px;color:var(--text);font-weight:600">' + esc(action) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted)">by ' + esc(who) + ' • ' + esc(timeAgo(ev.timestamp || new Date().toISOString())) + '</div>' +
+        '</div>';
+      }).join('')
+    : '<div style="padding:10px 0;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted)">No recent trust events.</div>';
+
+  card.innerHTML = '<div style="padding:16px 18px">' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">' +
+      '<div class="stat-card" style="margin:0"><div class="stat-val" style="font-size:20px">' + esc(toolsState.total || 0) + '</div><div class="stat-label">Apps Registered</div></div>' +
+      '<div class="stat-card" style="margin:0"><div class="stat-val" style="font-size:20px">' + esc(toolsState.healthy || 0) + '</div><div class="stat-label">Healthy</div></div>' +
+      '<div class="stat-card" style="margin:0"><div class="stat-val" style="font-size:20px">' + esc(peersState.total || peersState.known || 0) + '</div><div class="stat-label">Peers</div></div>' +
+      '<div class="stat-card" style="margin:0"><div class="stat-val" style="font-size:20px">' + esc(usersState.total || 0) + '</div><div class="stat-label">Users</div></div>' +
+    '</div>' +
+    '<div style="margin-top:12px;font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em">Recent Events</div>' +
+    eventLines +
+    '</div>';
+}
+
+function openHomeApp(appId, tools) {
+  rememberAppUse(appId);
+  if (appId === 'nexus-cloud') {
+    navigate('dashboard');
+    return;
+  }
+
+  var lower = String(appId || '').toLowerCase();
+  var match = (tools || []).find(function(t) {
+    var nameId = String(t.name || '').toLowerCase().replace(/\s+/g, '-');
+    var toolId = String(t.id || '').toLowerCase();
+    return toolId === lower || nameId === lower;
+  });
+
+  if (match) {
+    openTool(match);
+    return;
+  }
+
+  navigate('tools');
 }
 
 // Dashboard

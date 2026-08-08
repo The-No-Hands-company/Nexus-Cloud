@@ -1,9 +1,9 @@
 import { mutateState, snapshot as snapshotState, state } from "../state";
-import { evaluatePlacementPolicy, type PolicyDecision } from "./policy";
-import { evaluateQuota, type QuotaDecision } from "./quota";
 import { upsertWorkload } from "./placement";
-import { planWorkload as buildPlacementPlan } from "./scheduler";
+import { type PolicyDecision, evaluatePlacementPolicy } from "./policy";
+import { type QuotaDecision, evaluateQuota } from "./quota";
 import { registerNode as addNode } from "./registration";
+import { planWorkload as buildPlacementPlan } from "./scheduler";
 import type { NodeRegistrationRequest, NodeSpec, PlacementPlan, WorkloadSpec } from "./types";
 
 export type NodeTrustSummary = {

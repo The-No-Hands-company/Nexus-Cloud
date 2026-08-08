@@ -1,5 +1,5 @@
-import type { NodeRegistrationRequest, NodeSpec } from "./types";
 import { mutateState } from "../state";
+import type { NodeRegistrationRequest, NodeSpec } from "./types";
 
 function trustExpiryDate(ttlHours: number): string {
   return new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
@@ -35,11 +35,15 @@ export function registerNode(nodes: NodeSpec[], input: NodeRegistrationRequest):
   return node;
 }
 
-export function refreshNodeHeartbeat(node: NodeSpec, lastSeenAt = new Date().toISOString()): NodeSpec {
+export function refreshNodeHeartbeat(
+  node: NodeSpec,
+  lastSeenAt = new Date().toISOString(),
+): NodeSpec {
   return {
     ...node,
     lastSeenAt,
-    trustState: node.trustState === "expired" || node.trustState === "pending" ? "trusted" : node.trustState,
+    trustState:
+      node.trustState === "expired" || node.trustState === "pending" ? "trusted" : node.trustState,
     trustUpdatedAt: lastSeenAt,
     trustExpiresAt: trustExpiryDate(nodeTrustTtlHours()),
     status: node.status === "offline" ? "pending" : node.status,

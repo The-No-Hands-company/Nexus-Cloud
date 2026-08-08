@@ -7,7 +7,11 @@ export type ControlPlaneIdentity = {
   expiresAt: string;
 };
 
-export function createControlPlaneIdentity(subject: string, issuer = "nexus-cloud", audience = "nexus-control-plane"): ControlPlaneIdentity {
+export function createControlPlaneIdentity(
+  subject: string,
+  issuer = "nexus-cloud",
+  audience = "nexus-control-plane",
+): ControlPlaneIdentity {
   const issuedAt = new Date();
   return {
     subject,
@@ -19,6 +23,9 @@ export function createControlPlaneIdentity(subject: string, issuer = "nexus-clou
   };
 }
 
-export function isControlPlaneIdentityExpired(identity: ControlPlaneIdentity, at = new Date()): boolean {
+export function isControlPlaneIdentityExpired(
+  identity: ControlPlaneIdentity,
+  at = new Date(),
+): boolean {
   return at.getTime() > Date.parse(identity.expiresAt);
 }

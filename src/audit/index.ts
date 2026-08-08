@@ -96,15 +96,25 @@ export function queryAuditLog(filter: AuditFilter = {}): ObservabilityEvent[] {
     return [];
   }
 
-  if (filter.subjectId !== undefined) entries = entries.filter((e) => e.subjectId === filter.subjectId);
+  if (filter.subjectId !== undefined)
+    entries = entries.filter((e) => e.subjectId === filter.subjectId);
   if (filter.source !== undefined) entries = entries.filter((e) => e.source === filter.source);
   if (filter.level !== undefined) entries = entries.filter((e) => e.level === filter.level);
   if (filter.kind !== undefined) entries = entries.filter((e) => e.kind === filter.kind);
-  if (filter.from !== undefined) entries = entries.filter((e) => e.timestamp >= filter.from!);
-  if (filter.to !== undefined) entries = entries.filter((e) => e.timestamp <= filter.to!);
-  if (filter.eventType !== undefined) entries = entries.filter((e) => e.metadata?.eventType === filter.eventType);
-  if (filter.action !== undefined) entries = entries.filter((e) => e.metadata?.action === filter.action);
-  if (filter.actor !== undefined) entries = entries.filter((e) => e.metadata?.actor === filter.actor);
+  if (filter.from !== undefined) {
+    const from = filter.from;
+    entries = entries.filter((e) => e.timestamp >= from);
+  }
+  if (filter.to !== undefined) {
+    const to = filter.to;
+    entries = entries.filter((e) => e.timestamp <= to);
+  }
+  if (filter.eventType !== undefined)
+    entries = entries.filter((e) => e.metadata?.eventType === filter.eventType);
+  if (filter.action !== undefined)
+    entries = entries.filter((e) => e.metadata?.action === filter.action);
+  if (filter.actor !== undefined)
+    entries = entries.filter((e) => e.metadata?.actor === filter.actor);
 
   // newest first
   entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));

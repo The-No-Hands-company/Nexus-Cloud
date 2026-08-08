@@ -92,7 +92,13 @@ export type SystemsApiToolHistoryEntry = {
   at: string;
 };
 
-export type SystemsApiExposureStatus = "requested" | "active" | "suspended" | "quarantined" | "denied" | "revoked";
+export type SystemsApiExposureStatus =
+  | "requested"
+  | "active"
+  | "suspended"
+  | "quarantined"
+  | "denied"
+  | "revoked";
 
 export type SystemsApiExposureRecord = {
   id: string;
@@ -141,7 +147,13 @@ export type SystemsApiAddressRevokeRequest = {
   kind?: SystemsApiAddressKind;
 };
 
-export type SystemsApiDomainBindingStatus = "pending" | "verified" | "quarantined" | "denied" | "revoked" | "expired";
+export type SystemsApiDomainBindingStatus =
+  | "pending"
+  | "verified"
+  | "quarantined"
+  | "denied"
+  | "revoked"
+  | "expired";
 
 export type SystemsApiDomainBinding = {
   domain: string;
@@ -227,7 +239,14 @@ export type SystemsApiSummary = {
   };
 };
 
-export type SystemsApiAppKind = "platform" | "application" | "service" | "edge" | "trust" | "network" | "protocol";
+export type SystemsApiAppKind =
+  | "platform"
+  | "application"
+  | "service"
+  | "edge"
+  | "trust"
+  | "network"
+  | "protocol";
 
 export type SystemsApiAppIntegrationMode = "embedded" | "hybrid" | "referenced" | "standalone";
 
@@ -247,7 +266,13 @@ export type SystemsApiApp = {
   updatedAt: string;
 };
 
-export type SystemsApiConnectionKind = "depends-on" | "references" | "routes-through" | "exposes" | "embedded-in" | "secures";
+export type SystemsApiConnectionKind =
+  | "depends-on"
+  | "references"
+  | "routes-through"
+  | "exposes"
+  | "embedded-in"
+  | "secures";
 
 export type SystemsApiConnection = {
   id: string;

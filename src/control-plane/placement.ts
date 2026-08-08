@@ -1,5 +1,5 @@
-import type { WorkloadSpec } from "./types";
 import { mutateState } from "../state";
+import type { WorkloadSpec } from "./types";
 
 export function upsertWorkload(workloads: WorkloadSpec[], workload: WorkloadSpec): WorkloadSpec {
   mutateState(() => {

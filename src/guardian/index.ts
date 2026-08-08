@@ -1,5 +1,5 @@
-import { mutateState, state, type GuardianDecision, type GuardianStatus } from "../state";
 import { recordEvent, upsertHealthCheck } from "../observability";
+import { type GuardianDecision, type GuardianStatus, mutateState, state } from "../state";
 import type { SystemsApiTool } from "../systems-api";
 
 export type GuardianScope = "exposure" | "domain" | "runtime";
@@ -69,13 +69,15 @@ function createDecisionRecord(input: {
     actor: input.actor ?? "system",
     createdAt: timestamp,
     updatedAt: timestamp,
-    metadata: input.metadata,
+    ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
   };
 }
 
 function upsertDecision(decision: GuardianDecision): GuardianDecision {
   mutateState((draft) => {
-    const existingIndex = draft.guardianDecisions.findIndex((item) => item.scope === decision.scope && item.subjectId === decision.subjectId);
+    const existingIndex = draft.guardianDecisions.findIndex(
+      (item) => item.scope === decision.scope && item.subjectId === decision.subjectId,
+    );
     if (existingIndex >= 0) {
       draft.guardianDecisions[existingIndex] = decision;
     } else {
@@ -84,18 +86,24 @@ function upsertDecision(decision: GuardianDecision): GuardianDecision {
   });
   recordEvent({
     kind: "audit",
-    level: decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn",
+    level:
+      decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn",
     source: "guardian",
     subjectId: decision.subjectId,
     message: `Guardian ${decision.status} ${decision.scope} for ${decision.toolId}: ${decision.reason}`,
     timestamp: decision.updatedAt,
-    metadata: decision.metadata,
+    ...(decision.metadata !== undefined ? { metadata: decision.metadata } : {}),
   });
   upsertHealthCheck({
     id: `guardian:${decision.subjectId}`,
     component: "guardian",
     subject: decision.subjectId,
-    status: decision.status === "approved" ? "healthy" : decision.status === "denied" ? "offline" : "degraded",
+    status:
+      decision.status === "approved"
+        ? "healthy"
+        : decision.status === "denied"
+          ? "offline"
+          : "degraded",
     summary: `${decision.scope} ${decision.status}`,
     checkedAt: decision.updatedAt,
     details: { toolId: decision.toolId, reason: decision.reason },
@@ -107,15 +115,24 @@ export function listGuardianDecisions(): readonly GuardianDecision[] {
   return state.guardianDecisions;
 }
 
-export function getGuardianDecision(scope: GuardianScope, subjectId: string): GuardianDecision | null {
-  return state.guardianDecisions.find((item) => item.scope === scope && item.subjectId === subjectId) ?? null;
+export function getGuardianDecision(
+  scope: GuardianScope,
+  subjectId: string,
+): GuardianDecision | null {
+  return (
+    state.guardianDecisions.find((item) => item.scope === scope && item.subjectId === subjectId) ??
+    null
+  );
 }
 
 export function evaluateGuardianRequest(input: GuardianEvaluationInput): GuardianEvaluation {
   if (!input.tool) {
     return { status: "denied", reason: "Tool not found" };
   }
-  if ((input.scope === "exposure" || input.scope === "domain") && input.tool.registrationStatus === "offline") {
+  if (
+    (input.scope === "exposure" || input.scope === "domain") &&
+    input.tool.registrationStatus === "offline"
+  ) {
     return {
       status: "denied",
       reason: "Tool registration is offline",
@@ -123,12 +140,20 @@ export function evaluateGuardianRequest(input: GuardianEvaluationInput): Guardia
     };
   }
   if (!input.tool.upstreamUrl?.trim()) {
-    return { status: "quarantined", reason: "Tool has no upstream URL", metadata: { upstream: "missing" } };
+    return {
+      status: "quarantined",
+      reason: "Tool has no upstream URL",
+      metadata: { upstream: "missing" },
+    };
   }
 
   const upstreamHost = extractHostname(input.tool.upstreamUrl);
   if (!upstreamHost) {
-    return { status: "quarantined", reason: "Tool upstream URL hostname is invalid", metadata: { upstreamUrl: input.tool.upstreamUrl } };
+    return {
+      status: "quarantined",
+      reason: "Tool upstream URL hostname is invalid",
+      metadata: { upstreamUrl: input.tool.upstreamUrl },
+    };
   }
   if (!isLocalOrPrivateHost(upstreamHost) && !hasTrustedPeerForHost(upstreamHost)) {
     return {
@@ -142,10 +167,18 @@ export function evaluateGuardianRequest(input: GuardianEvaluationInput): Guardia
     return { status: "denied", reason: "Tool is offline", metadata: { health: input.tool.health } };
   }
   if (input.tool.health === "degraded") {
-    return { status: "quarantined", reason: "Tool is degraded and requires review", metadata: { health: input.tool.health } };
+    return {
+      status: "quarantined",
+      reason: "Tool is degraded and requires review",
+      metadata: { health: input.tool.health },
+    };
   }
   if (input.desiredHost && /(^localhost$|\.localhost$|\s)/i.test(input.desiredHost)) {
-    return { status: "quarantined", reason: "Desired host is not valid for public admission", metadata: { desiredHost: input.desiredHost } };
+    return {
+      status: "quarantined",
+      reason: "Desired host is not valid for public admission",
+      metadata: { desiredHost: input.desiredHost },
+    };
   }
   return { status: "approved", reason: "Policy checks passed" };
 }
@@ -162,28 +195,68 @@ export function recordGuardianDecision(input: {
   return upsertDecision(createDecisionRecord(input));
 }
 
-export function approveGuardianDecision(scope: GuardianScope, subjectId: string, reason = "Approved by operator"): GuardianDecision | null {
+export function approveGuardianDecision(
+  scope: GuardianScope,
+  subjectId: string,
+  reason = "Approved by operator",
+): GuardianDecision | null {
   const existing = getGuardianDecision(scope, subjectId);
   if (!existing) return null;
-  return upsertDecision({ ...existing, status: "approved", reason, actor: "operator", updatedAt: now() });
+  return upsertDecision({
+    ...existing,
+    status: "approved",
+    reason,
+    actor: "operator",
+    updatedAt: now(),
+  });
 }
 
-export function denyGuardianDecision(scope: GuardianScope, subjectId: string, reason = "Denied by operator"): GuardianDecision | null {
+export function denyGuardianDecision(
+  scope: GuardianScope,
+  subjectId: string,
+  reason = "Denied by operator",
+): GuardianDecision | null {
   const existing = getGuardianDecision(scope, subjectId);
   if (!existing) return null;
-  return upsertDecision({ ...existing, status: "denied", reason, actor: "operator", updatedAt: now() });
+  return upsertDecision({
+    ...existing,
+    status: "denied",
+    reason,
+    actor: "operator",
+    updatedAt: now(),
+  });
 }
 
-export function suspendGuardianDecision(scope: GuardianScope, subjectId: string, reason = "Suspended by operator"): GuardianDecision | null {
+export function suspendGuardianDecision(
+  scope: GuardianScope,
+  subjectId: string,
+  reason = "Suspended by operator",
+): GuardianDecision | null {
   const existing = getGuardianDecision(scope, subjectId);
   if (!existing) return null;
-  return upsertDecision({ ...existing, status: "suspended", reason, actor: "operator", updatedAt: now() });
+  return upsertDecision({
+    ...existing,
+    status: "suspended",
+    reason,
+    actor: "operator",
+    updatedAt: now(),
+  });
 }
 
-export function quarantineGuardianDecision(scope: GuardianScope, subjectId: string, reason = "Quarantined by operator"): GuardianDecision | null {
+export function quarantineGuardianDecision(
+  scope: GuardianScope,
+  subjectId: string,
+  reason = "Quarantined by operator",
+): GuardianDecision | null {
   const existing = getGuardianDecision(scope, subjectId);
   if (!existing) return null;
-  return upsertDecision({ ...existing, status: "quarantined", reason, actor: "operator", updatedAt: now() });
+  return upsertDecision({
+    ...existing,
+    status: "quarantined",
+    reason,
+    actor: "operator",
+    updatedAt: now(),
+  });
 }
 
 export const guardianService = {

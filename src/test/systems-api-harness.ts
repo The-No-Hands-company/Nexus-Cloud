@@ -19,11 +19,16 @@ export type SystemsApiTestHarness = {
   cleanup: () => void;
 };
 
-export async function createSystemsApiTestHarness(registry: SystemsApiRegistryData = emptySystemsApiRegistry): Promise<SystemsApiTestHarness> {
+export async function createSystemsApiTestHarness(
+  registry: SystemsApiRegistryData = emptySystemsApiRegistry,
+): Promise<SystemsApiTestHarness> {
   const originalCwd = process.cwd();
   const tempDir = await mkdtemp(join(tmpdir(), "nexus-cloud-tests-"));
   mkdirSync(join(tempDir, "data"), { recursive: true });
-  writeFileSync(join(tempDir, "data", "systems-api-registry.json"), `${JSON.stringify(registry, null, 2)}\n`);
+  writeFileSync(
+    join(tempDir, "data", "systems-api-registry.json"),
+    `${JSON.stringify(registry, null, 2)}\n`,
+  );
   process.env.NEXUS_CLOUD_API_KEY = "";
   process.env.NEXUS_CLOUD_DOMAIN = "nexus.local";
   process.chdir(tempDir);

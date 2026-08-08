@@ -16,7 +16,7 @@ import type { NodeSpec, WorkloadSpec } from "./control-plane";
 import type { DataPlaneUnit } from "./data-plane";
 import type { FederationPeer } from "./federation";
 import type { HealthCheck, ObservabilityEvent } from "./observability";
-import type { StorageVolume } from "./storage";
+import type { SharedStoragePool, StorageVolume } from "./storage";
 
 export type GuardianStatus = "approved" | "denied" | "suspended" | "quarantined" | "revoked";
 
@@ -39,6 +39,7 @@ export type PlatformState = {
   peers: FederationPeer[];
   events: ObservabilityEvent[];
   volumes: StorageVolume[];
+  sharedStoragePools: SharedStoragePool[];
   units: DataPlaneUnit[];
   healthChecks: HealthCheck[];
   guardianDecisions: GuardianDecision[];
@@ -75,6 +76,7 @@ const EMPTY_STATE: PlatformState = {
   peers: [],
   events: [],
   volumes: [],
+  sharedStoragePools: [],
   units: [],
   healthChecks: [],
   guardianDecisions: [],
@@ -113,14 +115,38 @@ function fsyncDirectory(path: string): void {
 
 function cloneState(next: PlatformState): PlatformState {
   return {
-    nodes: next.nodes.map((item) => ({ ...item, labels: { ...item.labels }, capacity: { ...item.capacity } })),
-    workloads: next.workloads.map((item) => ({ ...item, env: { ...item.env }, ports: [...item.ports], storage: [...item.storage] })),
+    nodes: next.nodes.map((item) => ({
+      ...item,
+      labels: { ...item.labels },
+      capacity: { ...item.capacity },
+    })),
+    workloads: next.workloads.map((item) => ({
+      ...item,
+      env: { ...item.env },
+      ports: [...item.ports],
+      storage: [...item.storage],
+    })),
     peers: next.peers.map((item) => ({ ...item, trust: { ...item.trust } })),
-    events: next.events.map((item) => ({ ...item, metadata: item.metadata ? { ...item.metadata } : undefined })),
+    events: next.events.map((item) => ({
+      ...item,
+      ...(item.metadata ? { metadata: { ...item.metadata } } : {}),
+    })),
     volumes: next.volumes.map((item) => ({ ...item })),
-    units: next.units.map((item) => ({ ...item, ports: item.ports ? [...item.ports] : undefined, env: item.env ? { ...item.env } : undefined, mounts: item.mounts ? item.mounts.map((mount) => ({ ...mount })) : undefined })),
-    healthChecks: next.healthChecks.map((item) => ({ ...item, details: item.details ? { ...item.details } : undefined })),
-    guardianDecisions: next.guardianDecisions.map((item) => ({ ...item, metadata: item.metadata ? { ...item.metadata } : undefined })),
+    sharedStoragePools: (next.sharedStoragePools ?? []).map((item) => ({ ...item })),
+    units: next.units.map((item) => ({
+      ...item,
+      ...(item.ports ? { ports: [...item.ports] } : {}),
+      ...(item.env ? { env: { ...item.env } } : {}),
+      ...(item.mounts ? { mounts: item.mounts.map((mount) => ({ ...mount })) } : {}),
+    })),
+    healthChecks: next.healthChecks.map((item) => ({
+      ...item,
+      ...(item.details ? { details: { ...item.details } } : {}),
+    })),
+    guardianDecisions: next.guardianDecisions.map((item) => ({
+      ...item,
+      ...(item.metadata ? { metadata: { ...item.metadata } } : {}),
+    })),
   };
 }
 
@@ -136,27 +162,50 @@ function sanitizeNodeSpec(value: unknown): NodeSpec | null {
   const zone = typeof value.zone === "string" ? value.zone : "";
   if (!id || !name || !region || !zone || !isRecord(value.capacity)) return null;
   const cpu = typeof value.capacity.cpu === "number" ? value.capacity.cpu : Number.NaN;
-  const memoryMb = typeof value.capacity.memoryMb === "number" ? value.capacity.memoryMb : Number.NaN;
-  const storageGb = typeof value.capacity.storageGb === "number" ? value.capacity.storageGb : Number.NaN;
-  if (!Number.isFinite(cpu) || !Number.isFinite(memoryMb) || !Number.isFinite(storageGb)) return null;
+  const memoryMb =
+    typeof value.capacity.memoryMb === "number" ? value.capacity.memoryMb : Number.NaN;
+  const storageGb =
+    typeof value.capacity.storageGb === "number" ? value.capacity.storageGb : Number.NaN;
+  if (!Number.isFinite(cpu) || !Number.isFinite(memoryMb) || !Number.isFinite(storageGb))
+    return null;
 
   return {
     id,
     name,
     region,
     zone,
-    labels: isRecord(value.labels) ? Object.fromEntries(Object.entries(value.labels).filter(([, item]) => typeof item === "string")) as Record<string, string> : {},
+    labels: isRecord(value.labels)
+      ? (Object.fromEntries(
+          Object.entries(value.labels).filter(([, item]) => typeof item === "string"),
+        ) as Record<string, string>)
+      : {},
     capacity: {
       cpu,
       memoryMb,
       storageGb,
-      ...(typeof value.capacity.publicIpv4 === "string" ? { publicIpv4: value.capacity.publicIpv4 } : {}),
+      ...(typeof value.capacity.publicIpv4 === "string"
+        ? { publicIpv4: value.capacity.publicIpv4 }
+        : {}),
     },
-    status: value.status === "pending" || value.status === "ready" || value.status === "draining" || value.status === "offline" ? value.status : "pending",
-    trustState: value.trustState === "pending" || value.trustState === "verified" || value.trustState === "trusted" || value.trustState === "quarantined" || value.trustState === "revoked" || value.trustState === "expired" ? value.trustState : "pending",
-    trustExpiresAt: typeof value.trustExpiresAt === "string" ? value.trustExpiresAt : undefined,
-    trustUpdatedAt: typeof value.trustUpdatedAt === "string" ? value.trustUpdatedAt : undefined,
-    lastSeenAt: typeof value.lastSeenAt === "string" ? value.lastSeenAt : undefined,
+    status:
+      value.status === "pending" ||
+      value.status === "ready" ||
+      value.status === "draining" ||
+      value.status === "offline"
+        ? value.status
+        : "pending",
+    trustState:
+      value.trustState === "pending" ||
+      value.trustState === "verified" ||
+      value.trustState === "trusted" ||
+      value.trustState === "quarantined" ||
+      value.trustState === "revoked" ||
+      value.trustState === "expired"
+        ? value.trustState
+        : "pending",
+    ...(typeof value.trustExpiresAt === "string" ? { trustExpiresAt: value.trustExpiresAt } : {}),
+    ...(typeof value.trustUpdatedAt === "string" ? { trustUpdatedAt: value.trustUpdatedAt } : {}),
+    ...(typeof value.lastSeenAt === "string" ? { lastSeenAt: value.lastSeenAt } : {}),
   };
 }
 
@@ -173,30 +222,60 @@ function sanitizeFederationPeer(value: unknown): FederationPeer | null {
       identity: trustIdentity,
       issuer: typeof value.trust.issuer === "string" ? value.trust.issuer : trustIdentity,
       audience: typeof value.trust.audience === "string" ? value.trust.audience : "nexus-cloud",
-      publicKeyHint: typeof value.trust.publicKeyHint === "string" ? value.trust.publicKeyHint : "manual",
-      signatureScheme: typeof value.trust.signatureScheme === "string" ? value.trust.signatureScheme : "ed25519",
-      expiresAt: typeof value.trust.expiresAt === "string" ? value.trust.expiresAt : new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+      publicKeyHint:
+        typeof value.trust.publicKeyHint === "string" ? value.trust.publicKeyHint : "manual",
+      signatureScheme:
+        typeof value.trust.signatureScheme === "string" ? value.trust.signatureScheme : "ed25519",
+      expiresAt:
+        typeof value.trust.expiresAt === "string"
+          ? value.trust.expiresAt
+          : new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
     },
-    trustState: value.trustState === "pending" || value.trustState === "verified" || value.trustState === "trusted" || value.trustState === "quarantined" || value.trustState === "revoked" || value.trustState === "expired" ? value.trustState : "pending",
-    trustUpdatedAt: typeof value.trustUpdatedAt === "string" ? value.trustUpdatedAt : undefined,
-    trustExpiresAt: typeof value.trustExpiresAt === "string" ? value.trustExpiresAt : undefined,
-    status: value.status === "unknown" || value.status === "healthy" || value.status === "degraded" || value.status === "blocked" ? value.status : "unknown",
-    lastSeenAt: typeof value.lastSeenAt === "string" ? value.lastSeenAt : undefined,
-    version: typeof value.version === "string" ? value.version : undefined,
+    trustState:
+      value.trustState === "pending" ||
+      value.trustState === "verified" ||
+      value.trustState === "trusted" ||
+      value.trustState === "quarantined" ||
+      value.trustState === "revoked" ||
+      value.trustState === "expired"
+        ? value.trustState
+        : "pending",
+    ...(typeof value.trustUpdatedAt === "string" ? { trustUpdatedAt: value.trustUpdatedAt } : {}),
+    ...(typeof value.trustExpiresAt === "string" ? { trustExpiresAt: value.trustExpiresAt } : {}),
+    status:
+      value.status === "unknown" ||
+      value.status === "healthy" ||
+      value.status === "degraded" ||
+      value.status === "blocked"
+        ? value.status
+        : "unknown",
+    ...(typeof value.lastSeenAt === "string" ? { lastSeenAt: value.lastSeenAt } : {}),
+    ...(typeof value.version === "string" ? { version: value.version } : {}),
   };
 }
 
 function sanitizeState(value: unknown): PlatformState {
   if (!isRecord(value)) return cloneState(EMPTY_STATE);
   return {
-    nodes: Array.isArray(value.nodes) ? value.nodes.map(sanitizeNodeSpec).filter((item): item is NodeSpec => item !== null) : [],
-    workloads: Array.isArray(value.workloads) ? value.workloads as WorkloadSpec[] : [],
-    peers: Array.isArray(value.peers) ? value.peers.map(sanitizeFederationPeer).filter((item): item is FederationPeer => item !== null) : [],
-    events: Array.isArray(value.events) ? value.events as ObservabilityEvent[] : [],
-    volumes: Array.isArray(value.volumes) ? value.volumes as StorageVolume[] : [],
-    units: Array.isArray(value.units) ? value.units as DataPlaneUnit[] : [],
-    healthChecks: Array.isArray(value.healthChecks) ? value.healthChecks as HealthCheck[] : [],
-    guardianDecisions: Array.isArray(value.guardianDecisions) ? value.guardianDecisions as GuardianDecision[] : [],
+    nodes: Array.isArray(value.nodes)
+      ? value.nodes.map(sanitizeNodeSpec).filter((item): item is NodeSpec => item !== null)
+      : [],
+    workloads: Array.isArray(value.workloads) ? (value.workloads as WorkloadSpec[]) : [],
+    peers: Array.isArray(value.peers)
+      ? value.peers
+          .map(sanitizeFederationPeer)
+          .filter((item): item is FederationPeer => item !== null)
+      : [],
+    events: Array.isArray(value.events) ? (value.events as ObservabilityEvent[]) : [],
+    volumes: Array.isArray(value.volumes) ? (value.volumes as StorageVolume[]) : [],
+    sharedStoragePools: Array.isArray(value.sharedStoragePools)
+      ? (value.sharedStoragePools as SharedStoragePool[])
+      : [],
+    units: Array.isArray(value.units) ? (value.units as DataPlaneUnit[]) : [],
+    healthChecks: Array.isArray(value.healthChecks) ? (value.healthChecks as HealthCheck[]) : [],
+    guardianDecisions: Array.isArray(value.guardianDecisions)
+      ? (value.guardianDecisions as GuardianDecision[])
+      : [],
   };
 }
 
@@ -234,7 +313,10 @@ function readStateCandidate(path: string, source: StateCandidate["source"]): Sta
   }
 }
 
-function writeSnapshotAtomic(next: PlatformState, options: { backupCurrentPrimary: boolean }): void {
+function writeSnapshotAtomic(
+  next: PlatformState,
+  options: { backupCurrentPrimary: boolean },
+): void {
   ensureStorageDir();
   const payload = `${JSON.stringify(next, null, 2)}\n`;
 
@@ -278,6 +360,17 @@ function loadStateWithRecovery(): { state: PlatformState; recovery: PlatformStat
   const winner = candidates[0];
 
   let repaired = false;
+  if (!winner) {
+    return {
+      state: cloneState(EMPTY_STATE),
+      recovery: {
+        source: "empty",
+        recovered: false,
+        repaired: false,
+        recoveredAt: new Date().toISOString(),
+      },
+    };
+  }
   if (winner.source !== "primary" || !existsSync(STATE_PATH)) {
     try {
       writeSnapshotAtomic(winner.state, { backupCurrentPrimary: false });

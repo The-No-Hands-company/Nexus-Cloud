@@ -48,12 +48,20 @@ describe("public address issuance flow", () => {
     expect(addressesList.status).toBe(200);
     const addressesJson = await addressesList.json();
     expect(Array.isArray(addressesJson.addresses)).toBe(true);
-    expect(addressesJson.addresses.some((item: any) => item.toolId === toolId && item.kind === "website")).toBe(true);
+    expect(
+      addressesJson.addresses.some(
+        (item: any) => item.toolId === toolId && item.kind === "website",
+      ),
+    ).toBe(true);
 
     const exposuresList = await handleRequest(new Request("http://localhost/api/v1/exposures"));
     expect(exposuresList.status).toBe(200);
     const exposuresJson = await exposuresList.json();
-    expect(exposuresJson.exposures.some((item: any) => item.target.toolId === toolId && item.target.status === "active")).toBe(true);
+    expect(
+      exposuresJson.exposures.some(
+        (item: any) => item.target.toolId === toolId && item.target.status === "active",
+      ),
+    ).toBe(true);
 
     const domainResponse = await handleRequest(
       new Request("http://localhost/api/v1/domains", {
@@ -69,7 +77,9 @@ describe("public address issuance flow", () => {
     expect(domainTarget.status).toBe("pending");
     expect(domainTarget.publicUrl).toBe(publicUrlBody.publicUrl.url);
 
-    const domainFetch = await handleRequest(new Request("http://localhost/api/v1/domains/example.com"));
+    const domainFetch = await handleRequest(
+      new Request("http://localhost/api/v1/domains/example.com"),
+    );
     expect(domainFetch.status).toBe(200);
     const domainFetchJson = await domainFetch.json();
     expect(domainFetchJson.domain?.target.status).toBe("pending");

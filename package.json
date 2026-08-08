@@ -8,7 +8,7 @@
     "start": "bun run src/index.ts",
     "dev:ecosystem": "bash ../scripts/ecosystem-local.sh start",
     "stop:ecosystem": "bash ../scripts/ecosystem-local.sh stop",
-    "status:ecosystem": "bash ../scripts/ecosystem-local.sh status",
+    "status:ecosystem": "bash ../scripts/ecosystem-local.sh stop",
     "health:ecosystem": "bash ../scripts/ecosystem-local.sh health",
     "typecheck": "bunx tsc --noEmit",
     "lint": "biome check src",
@@ -16,8 +16,12 @@
     "check": "bun run typecheck && bun run lint",
     "test": "bun test src"
   },
+  "dependencies": {
+    "pg": "^8.22.0"
+  },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@types/pg": "^8.11.6",
     "bun-types": "^1.3.11",
     "typescript": "^5.8.3"
   }

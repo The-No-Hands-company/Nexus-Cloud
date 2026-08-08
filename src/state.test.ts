@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,12 +30,14 @@ function createSeedState(nodeId: string) {
 }
 
 async function importFreshStateModule(tag: string) {
-  return await import(`./state.ts?case=${encodeURIComponent(`${tag}-${Date.now()}-${Math.random()}`)}`);
+  return await import(
+    `./state.ts?case=${encodeURIComponent(`${tag}-${Date.now()}-${Math.random()}`)}`
+  );
 }
 
 afterEach(() => {
   process.chdir(originalCwd);
-  delete process.env.NEXUS_CLOUD_STATE_PATH;
+  process.env.NEXUS_CLOUD_STATE_PATH = undefined;
 });
 
 describe("platform state durability", () => {

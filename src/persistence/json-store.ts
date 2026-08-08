@@ -67,7 +67,11 @@ function fsyncDirectory(path: string): void {
   }
 }
 
-function readCandidate<T>(path: string, source: JsonStoreCandidate<T>["source"], sanitize: (value: unknown) => T): JsonStoreCandidate<T> | null {
+function readCandidate<T>(
+  path: string,
+  source: JsonStoreCandidate<T>["source"],
+  sanitize: (value: unknown) => T,
+): JsonStoreCandidate<T> | null {
   if (!existsSync(path)) return null;
   try {
     const stats = statSync(path);
@@ -82,7 +86,11 @@ function readCandidate<T>(path: string, source: JsonStoreCandidate<T>["source"],
   }
 }
 
-export function writeJsonStoreAtomic<T>(path: string, value: T, options: { backupCurrentPrimary: boolean }): void {
+export function writeJsonStoreAtomic<T>(
+  path: string,
+  value: T,
+  options: { backupCurrentPrimary: boolean },
+): void {
   const tempPath = `${path}.tmp`;
   const backupPath = `${path}.bak`;
   mkdirSync(dirname(path), { recursive: true });
@@ -131,6 +139,17 @@ export function loadJsonStoreWithRecovery<T>(
 
   candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
   const winner = candidates[0];
+  if (!winner) {
+    return {
+      value: emptyValue,
+      recovery: {
+        source: "empty",
+        recovered: false,
+        repaired: false,
+        recoveredAt: new Date().toISOString(),
+      },
+    };
+  }
 
   let repaired = false;
   if (winner.source !== "primary" || !existsSync(path)) {

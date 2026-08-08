@@ -21,15 +21,18 @@ export async function requestSystemsApiDeploy(
   token: string,
   input: SystemsApiDeployRequest,
 ): Promise<{ status: number; data: SystemsApiDeployResponse | null }> {
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${systemsApiDeployIntegration.endpoint}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      accept: "application/json",
+  const response = await fetch(
+    `${baseUrl.replace(/\/$/, "")}${systemsApiDeployIntegration.endpoint}`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  });
+  );
   const data = await response.json().catch(() => null);
   return { status: response.status, data: data as SystemsApiDeployResponse | null };
 }

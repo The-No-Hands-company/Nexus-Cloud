@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { type PlatformState, resetPlatformStateForTests } from "../state";
 import { dataPlaneService } from "./service";
-import { resetPlatformStateForTests, type PlatformState } from "../state";
 
 function seedState(runtime: "container" | "function" = "container"): void {
   const seeded: PlatformState = {
@@ -13,6 +13,7 @@ function seedState(runtime: "container" | "function" = "container"): void {
         labels: {},
         capacity: { cpu: 4, memoryMb: 8192, storageGb: 100 },
         status: "ready",
+        trustState: "verified",
       },
     ],
     workloads: [
@@ -32,6 +33,7 @@ function seedState(runtime: "container" | "function" = "container"): void {
     peers: [],
     events: [],
     volumes: [],
+    sharedStoragePools: [],
     units: [],
     healthChecks: [],
     guardianDecisions: [],
@@ -47,7 +49,7 @@ afterEach(() => {
 describe("data-plane runtime adapter", () => {
   test("returns failed when no container runtime is available", () => {
     seedState("container");
-    dataPlaneService.setCommandRunnerForTests(((command: string, args?: readonly string[]) => {
+    dataPlaneService.setCommandRunnerForTests(((_command: string, args?: readonly string[]) => {
       if (args?.[0] === "--version") {
         return { status: 1, stdout: "", stderr: "missing" } as any;
       }

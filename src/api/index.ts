@@ -25,16 +25,8 @@ export const cloudContract = {
     "/api/v1/compliance/phantom/summary",
     "/api/v1/summary",
   ],
-  issuance: [
-    "/api/v1/public-url",
-    "/api/v1/addresses",
-    "/api/v1/exposures",
-    "/api/v1/domains",
-  ],
-  deployBridge: [
-    "/api/v1/deployments",
-    "/api/v1/deployments/integration",
-  ],
+  issuance: ["/api/v1/public-url", "/api/v1/addresses", "/api/v1/exposures", "/api/v1/domains"],
+  deployBridge: ["/api/v1/deployments", "/api/v1/deployments/integration"],
 } as const;
 
 export const apiSurface = {

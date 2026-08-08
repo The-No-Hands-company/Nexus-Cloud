@@ -1,5 +1,9 @@
-import type { SystemsApiDomainBinding, SystemsApiDomainBindingStatus, SystemsApiDomainVerificationChallenge } from "./types";
 import { buildCanonicalUrl } from "./exposure";
+import type {
+  SystemsApiDomainBinding,
+  SystemsApiDomainBindingStatus,
+  SystemsApiDomainVerificationChallenge,
+} from "./types";
 
 export type SystemsApiDomainBindingInput = {
   toolId: string;
@@ -17,7 +21,12 @@ export function buildVerificationToken(domain: string, toolId: string): string {
   return `verify_${toolId}_${normalizedDomain}_${crypto.randomUUID().slice(0, 8)}`;
 }
 
-export function createDomainBinding(input: SystemsApiDomainBindingInput, publicUrl: string, status: SystemsApiDomainBindingStatus = "pending", at = new Date().toISOString()): SystemsApiDomainBinding {
+export function createDomainBinding(
+  input: SystemsApiDomainBindingInput,
+  publicUrl: string,
+  status: SystemsApiDomainBindingStatus = "pending",
+  at = new Date().toISOString(),
+): SystemsApiDomainBinding {
   const token = buildVerificationToken(input.domain, input.toolId);
   return {
     domain: input.domain,
@@ -29,23 +38,36 @@ export function createDomainBinding(input: SystemsApiDomainBindingInput, publicU
     verificationExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
     status,
     requestedAt: at,
-    verifiedAt: status === "verified" ? at : undefined,
-    revokedAt: status === "revoked" ? at : undefined,
+    ...(status === "verified" ? { verifiedAt: at } : {}),
+    ...(status === "revoked" ? { revokedAt: at } : {}),
     updatedAt: at,
   };
 }
 
-export function issueDomainVerificationChallenge(binding: SystemsApiDomainBinding): SystemsApiDomainVerificationChallenge {
+export function issueDomainVerificationChallenge(
+  binding: SystemsApiDomainBinding,
+): SystemsApiDomainVerificationChallenge {
   return {
     domain: binding.domain,
     token: binding.verificationToken,
     issuedAt: binding.verificationIssuedAt,
     expiresAt: binding.verificationExpiresAt,
-    status: binding.status === "verified" ? "verified" : binding.status === "revoked" ? "revoked" : new Date(binding.verificationExpiresAt).getTime() < Date.now() ? "expired" : "pending",
+    status:
+      binding.status === "verified"
+        ? "verified"
+        : binding.status === "revoked"
+          ? "revoked"
+          : new Date(binding.verificationExpiresAt).getTime() < Date.now()
+            ? "expired"
+            : "pending",
   };
 }
 
-export function verifyDomainBinding(binding: SystemsApiDomainBinding, token: string, at = new Date().toISOString()): SystemsApiDomainBinding | null {
+export function verifyDomainBinding(
+  binding: SystemsApiDomainBinding,
+  token: string,
+  at = new Date().toISOString(),
+): SystemsApiDomainBinding | null {
   if (binding.verificationToken !== token) {
     return null;
   }
@@ -58,7 +80,10 @@ export function verifyDomainBinding(binding: SystemsApiDomainBinding, token: str
   };
 }
 
-export function revokeDomainBinding(binding: SystemsApiDomainBinding, at = new Date().toISOString()): SystemsApiDomainBinding {
+export function revokeDomainBinding(
+  binding: SystemsApiDomainBinding,
+  at = new Date().toISOString(),
+): SystemsApiDomainBinding {
   return {
     ...binding,
     status: "revoked",

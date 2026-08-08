@@ -1,4 +1,3 @@
-import type { FederationTrust } from "../architecture";
 import { getNodeIdentity } from "../identity";
 import { mutateState, state } from "../state";
 import type { FederationPeer, FederationSignedRequest } from "./index";
@@ -27,7 +26,10 @@ export type PeerTrustSummary = {
 
 export type FederatedActionDecision = {
   allowed: boolean;
-  reasonCode: "FEDERATION_PEER_UNREGISTERED" | "FEDERATION_PEER_TRUST_INSUFFICIENT" | "FEDERATION_OK";
+  reasonCode:
+    | "FEDERATION_PEER_UNREGISTERED"
+    | "FEDERATION_PEER_TRUST_INSUFFICIENT"
+    | "FEDERATION_OK";
   reason: string;
   requiredTrust: "verified" | "trusted";
   peerTrustState?: FederationPeer["trustState"];
@@ -44,7 +46,9 @@ function normalizePeerIdentityHost(identity: string): string {
   try {
     return new URL(trimmed).hostname.toLowerCase();
   } catch {
-    return trimmed.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].toLowerCase();
+    const stripped = trimmed.replace(/^https?:\/\//, "");
+    const firstSegment = stripped.split("/")[0] ?? stripped;
+    return (firstSegment.split(":")[0] ?? firstSegment).toLowerCase();
   }
 }
 
@@ -63,8 +67,8 @@ export function describeFederation(): FederationSummary {
     signedRequests: true,
     identityFormat: "@user:shortId",
     peerCount: state.peers.length,
-    nodeId,
-    shortId,
+    ...(nodeId ? { nodeId } : {}),
+    ...(shortId ? { shortId } : {}),
   };
 }
 
@@ -72,7 +76,10 @@ export function listPeers(): FederationPeer[] {
   return state.peers;
 }
 
-export function trustPeer(domain: string, trust?: FederationSignedRequest | Record<string, unknown>): FederationPeer {
+export function trustPeer(
+  domain: string,
+  trust?: FederationSignedRequest | Record<string, unknown>,
+): FederationPeer {
   return persistPeer(state.peers, domain, trust);
 }
 
@@ -83,7 +90,11 @@ export function listTrustedPeers(): FederationPeer[] {
 export function authorizeFederatedPeerAction(upstreamUrl: string): FederatedActionDecision {
   const requiredTrust = requiredFederationTrustLevel();
   const incomingHost = normalizePeerIdentityHost(upstreamUrl);
-  const peer = state.peers.find((item) => normalizePeerIdentityHost(item.trust.identity) === incomingHost || item.domain.toLowerCase() === incomingHost);
+  const peer = state.peers.find(
+    (item) =>
+      normalizePeerIdentityHost(item.trust.identity) === incomingHost ||
+      item.domain.toLowerCase() === incomingHost,
+  );
   if (!peer) {
     return {
       allowed: false,
@@ -93,9 +104,10 @@ export function authorizeFederatedPeerAction(upstreamUrl: string): FederatedActi
     };
   }
 
-  const allowed = requiredTrust === "verified"
-    ? peer.trustState === "verified" || peer.trustState === "trusted"
-    : peer.trustState === "trusted";
+  const allowed =
+    requiredTrust === "verified"
+      ? peer.trustState === "verified" || peer.trustState === "trusted"
+      : peer.trustState === "trusted";
   if (!allowed) {
     return {
       allowed: false,

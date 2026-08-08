@@ -10,6 +10,7 @@ function resetState(): void {
     peers: [],
     events: [],
     volumes: [],
+    sharedStoragePools: [],
     units: [],
     healthChecks: [],
     guardianDecisions: [],
@@ -31,7 +32,9 @@ describe("trust lifecycle", () => {
     expect(node.trustState).toBe("verified");
     expect(node.trustExpiresAt).toEqual(expect.any(String));
 
-    const expired = controlPlaneService.applyNodeTrustExpiry(new Date(Date.now() + 1000 * 60 * 60 * 24 * 10));
+    const expired = controlPlaneService.applyNodeTrustExpiry(
+      new Date(Date.now() + 1000 * 60 * 60 * 24 * 10),
+    );
     expect(expired).toBe(1);
 
     const after = controlPlaneService.listNodes()[0];
@@ -54,7 +57,9 @@ describe("trust lifecycle", () => {
     expect(peer.trustState).toBe("trusted");
     expect(peer.trustExpiresAt).toEqual(expect.any(String));
 
-    const expired = federationService.applyPeerTrustExpiry(new Date(Date.now() + 1000 * 60 * 60 * 24 * 10));
+    const expired = federationService.applyPeerTrustExpiry(
+      new Date(Date.now() + 1000 * 60 * 60 * 24 * 10),
+    );
     expect(expired).toBe(1);
 
     const after = federationService.listPeers()[0];
@@ -105,7 +110,8 @@ describe("trust lifecycle", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.plan.decisions.length).toBe(1);
-      expect(result.plan.decisions[0].nodeId).toBe(trustedNode.id);
+      const decision = result.plan.decisions[0];
+      if (decision) expect(decision.nodeId).toBe(trustedNode.id);
     }
   });
 });

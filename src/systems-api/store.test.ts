@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const originalCwd = process.cwd();
 
 async function importFreshStoreModule(tag: string) {
-  return await import(`./store.ts?case=${encodeURIComponent(`${tag}-${Date.now()}-${Math.random()}`)}`);
+  return await import(
+    `./store.ts?case=${encodeURIComponent(`${tag}-${Date.now()}-${Math.random()}`)}`
+  );
 }
 
 describe("systems api registry durability", () => {

@@ -14,14 +14,27 @@ export type PolicyDecision = {
 
 export function evaluatePlacementPolicy(workload: WorkloadSpec, nodes: NodeSpec[]): PolicyDecision {
   if (workload.replicas < 1) {
-    return { allowed: false, reasonCode: "POLICY_INVALID_REPLICAS", reason: "Workload must request at least one replica" };
+    return {
+      allowed: false,
+      reasonCode: "POLICY_INVALID_REPLICAS",
+      reason: "Workload must request at least one replica",
+    };
   }
 
   if (nodes.length === 0) {
-    return { allowed: false, reasonCode: "POLICY_NO_REGISTERED_NODES", reason: "No nodes are registered" };
+    return {
+      allowed: false,
+      reasonCode: "POLICY_NO_REGISTERED_NODES",
+      reason: "No nodes are registered",
+    };
   }
 
-  const trustEligibleNodes = nodes.filter((node) => node.trustState !== "quarantined" && node.trustState !== "revoked" && node.trustState !== "expired");
+  const trustEligibleNodes = nodes.filter(
+    (node) =>
+      node.trustState !== "quarantined" &&
+      node.trustState !== "revoked" &&
+      node.trustState !== "expired",
+  );
   if (trustEligibleNodes.length === 0) {
     return {
       allowed: false,

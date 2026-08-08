@@ -1,11 +1,12 @@
 import type { NodeSpec, PlacementPlan, WorkloadSpec } from "./types";
 
 export function planWorkload(nodes: NodeSpec[], workload: WorkloadSpec): PlacementPlan {
-  const readyNodes = nodes.filter((node) =>
-    node.status === "ready"
-    && node.trustState !== "quarantined"
-    && node.trustState !== "revoked"
-    && node.trustState !== "expired"
+  const readyNodes = nodes.filter(
+    (node) =>
+      node.status === "ready" &&
+      node.trustState !== "quarantined" &&
+      node.trustState !== "revoked" &&
+      node.trustState !== "expired",
   );
   if (readyNodes.length === 0) {
     return { workloadId: workload.id, decisions: [] };

@@ -25,10 +25,11 @@
  *   - Keep handleInboundAnnouncement() as a compatibility shim for HTTP-only nodes.
  */
 
-import { getNodeIdentity } from "../identity";
 import { cloudConfig } from "../config";
-import { state } from "../state";
-import type { FederationPeer } from "./index";
+import { getNodeIdentity } from "../identity";
+import { mutateState, state } from "../state";
+import { listPools } from "../storage";
+import type { SharedStoragePoolSummary } from "./index";
 import { upsertPeer } from "./peers";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -42,6 +43,8 @@ export type GossipAnnouncement = {
   upstreamUrl: string;
   /** Optional: semver of the Nexus Cloud instance */
   version?: string;
+  /** Optional: storage pools this node is sharing */
+  storagePools?: SharedStoragePoolSummary[];
 };
 
 export type GossipPeerList = {
@@ -64,10 +67,27 @@ function persistPeers(): void {
 
 export function selfAnnouncement(): GossipAnnouncement {
   const id = getNodeIdentity();
-  const upstreamUrl =
-    cloudConfig.cloudUrl ||
-    `http://localhost:${process.env["PORT"] ?? "8787"}`;
-  return { did: id.did, shortId: id.shortId, upstreamUrl };
+  const upstreamUrl = cloudConfig.cloudUrl || `http://localhost:${process.env["PORT"] ?? "8787"}`;
+  const pools = listPools();
+  const poolSummaries: SharedStoragePoolSummary[] = pools
+    .filter((p) => p.status === "active")
+    .map(
+      (p): SharedStoragePoolSummary => ({
+        id: p.id,
+        name: p.name,
+        endpoint: p.endpoint,
+        region: p.region,
+        totalCapacityGb: p.totalCapacityGb,
+        availableCapacityGb: p.availableCapacityGb,
+        status: p.status,
+        replicationFactor: p.replicationFactor,
+        tags: p.tags,
+        ownerNodeId: p.ownerNodeId,
+        ownerNodeDid: p.ownerNodeDid,
+        ...(p.lastHeartbeatAt ? { lastHeartbeatAt: p.lastHeartbeatAt } : {}),
+      }),
+    );
+  return { did: id.did, shortId: id.shortId, upstreamUrl, storagePools: poolSummaries };
 }
 
 // ─── Inbound handling ─────────────────────────────────────────────────────────
@@ -81,17 +101,67 @@ export function handleInboundAnnouncement(ann: GossipAnnouncement): GossipPeerLi
   // Don't add ourselves as a peer
   if (ann.did && ann.upstreamUrl && ann.did !== selfDid) {
     upsertPeer(state.peers, ann.upstreamUrl, undefined, ann.did);
+    // Store storage pools on the peer
+    if (ann.storagePools && ann.storagePools.length > 0) {
+      const pools = ann.storagePools;
+      mutateState((draft) => {
+        const peer = draft.peers.find((p) => p.did === ann.did);
+        if (peer) {
+          peer.storagePools = pools;
+        }
+      });
+    }
     persistPeers();
   }
 
   return {
     peers: state.peers
-      .filter(p => p.did && p.trust.identity && p.did !== selfDid)
-      .map(p => ({
-        did: p.did!,
-        shortId: p.did!.split(":")[2]?.slice(1, 9) ?? "",
-        upstreamUrl: p.trust.identity,
-      })),
+      .filter((p) => p.did && p.trust.identity && p.did !== selfDid)
+      .map((p) => {
+        const did = p.did as string;
+        return {
+          did,
+          shortId: did.split(":")[2]?.slice(1, 9) ?? "",
+          upstreamUrl: p.trust.identity,
+          ...(p.storagePools ? { storagePools: p.storagePools } : {}),
+        };
+      }),
+  };
+}
+
+// ─── Bootstrap peer auto-trust ──────────────────────────────────────────────────
+
+/**
+ * Register a bootstrap peer announcement with "verified" trust immediately,
+ * skipping the normal trust check. Bootstrap peers are explicitly listed by
+ * the operator in BOOTSTRAP_PEERS, so they are pre-trusted.
+ */
+export function handleInboundBootstrapAnnouncement(ann: GossipAnnouncement): GossipPeerList {
+  const selfDid = getNodeIdentity().did;
+  if (ann.did && ann.upstreamUrl && ann.did !== selfDid) {
+    upsertPeer(state.peers, ann.upstreamUrl, undefined, ann.did);
+    mutateState((draft) => {
+      const peer = draft.peers.find((p) => p.trust.identity === ann.upstreamUrl);
+      if (peer && peer.trustState === "pending") {
+        peer.trustState = "verified";
+        peer.status = "healthy";
+        peer.trustUpdatedAt = new Date().toISOString();
+      }
+    });
+    persistPeers();
+  }
+
+  return {
+    peers: state.peers
+      .filter((p) => p.did && p.trust.identity && p.did !== selfDid)
+      .map((p) => {
+        const did = p.did as string;
+        return {
+          did,
+          shortId: did.split(":")[2]?.slice(1, 9) ?? "",
+          upstreamUrl: p.trust.identity,
+        };
+      }),
   };
 }
 
@@ -137,7 +207,7 @@ export async function bootstrapPeers(): Promise<void> {
   const raw = process.env["BOOTSTRAP_PEERS"] ?? "";
   const urls = raw
     .split(",")
-    .map(s => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean);
 
   if (urls.length === 0) return;

@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import type { SystemsApiDomainBinding, SystemsApiExposureRecord, SystemsApiPublicUrl, SystemsApiStatus, SystemsApiTool } from "../systems-api";
-import { toSystemsApiExposureResourceDTO, toSystemsApiExposureStatusResponseDTO, toSystemsApiExposureTargetDTO } from "./exposure-dto";
+import type {
+  SystemsApiDomainBinding,
+  SystemsApiExposureRecord,
+  SystemsApiPublicUrl,
+  SystemsApiStatus,
+  SystemsApiTool,
+} from "../systems-api";
+import {
+  toSystemsApiExposureResourceDTO,
+  toSystemsApiExposureStatusResponseDTO,
+  toSystemsApiExposureTargetDTO,
+} from "./exposure-dto";
 
 const timestamp = "2026-04-08T00:00:00.000Z";
 const revokedAt = "2026-04-08T01:00:00.000Z";
@@ -39,14 +49,17 @@ const verifiedDomain: SystemsApiDomainBinding = {
   updatedAt: revokedAt,
 };
 
+const {
+  verifiedAt: _pendingVerifiedAt,
+  revokedAt: _pendingRevokedAt,
+  ...pendingDomainBase
+} = verifiedDomain;
 const pendingDomain: SystemsApiDomainBinding = {
-  ...verifiedDomain,
+  ...pendingDomainBase,
   domain: "beta.example.com",
   publicUrl: "https://beta.example.com",
   verificationToken: "token-beta",
   status: "pending",
-  verifiedAt: undefined,
-  revokedAt: undefined,
   updatedAt: timestamp,
 };
 
@@ -60,6 +73,8 @@ const tool: SystemsApiTool = {
   health: "healthy",
   capabilities: ["exposure.lifecycle"],
   publicUrl: "https://alpha.example.com",
+  registrationStatus: "active",
+  heartbeatCount: 0,
   registeredAt: timestamp,
   updatedAt: timestamp,
 };
@@ -84,6 +99,32 @@ const status: SystemsApiStatus = {
   activeExposureCount: 1,
   domainCount: 2,
   verifiedDomainCount: 1,
+  phantomSecuredClaimedCount: 0,
+  phantomSecuredCompliantCount: 0,
+  failedIntegrationCount: 0,
+  integrationStatus: "healthy",
+  integrationFailures: [],
+  trust: {
+    nodes: {
+      total: 0,
+      pending: 0,
+      verified: 0,
+      trusted: 0,
+      quarantined: 0,
+      revoked: 0,
+      expired: 0,
+    },
+    peers: {
+      total: 0,
+      pending: 0,
+      verified: 0,
+      trusted: 0,
+      quarantined: 0,
+      revoked: 0,
+      expired: 0,
+    },
+    updatedAt: timestamp,
+  },
   registry: {
     path: "/tmp/registry.json",
     exists: true,

@@ -1,7 +1,9 @@
 import { cloudConfig } from "../config";
 import type { SystemsApiDeployRequest, SystemsApiDeployResponse } from "../systems-api";
 
-export async function requestManagedDeploy(input: SystemsApiDeployRequest): Promise<{ status: number; data: SystemsApiDeployResponse | null }> {
+export async function requestManagedDeploy(
+  input: SystemsApiDeployRequest,
+): Promise<{ status: number; data: SystemsApiDeployResponse | null }> {
   const response = await fetch(`${cloudConfig.deployUrl.replace(/\/$/, "")}/api/v1/deployments`, {
     method: "POST",
     headers: {

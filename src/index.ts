@@ -1,10 +1,10 @@
-import { architecture } from "./architecture";
 import { apiRoutes, apiSurface } from "./api";
+import { architecture } from "./architecture";
 import { controlPlane, controlPlaneService } from "./control-plane";
 import { dataPlane } from "./data-plane";
 import { federation } from "./federation";
 import { observability } from "./observability";
-import { server, port } from "./server";
+import { port, server } from "./server";
 import { storage } from "./storage";
 import { systemsApiService } from "./systems-api";
 

@@ -1,3 +1,4 @@
+import { cloudConfig } from "../config";
 import type { SystemsApiExposureRecord, SystemsApiExposureStatus } from "./types";
 
 export type SystemsApiExposureRequestInput = {
@@ -6,40 +7,55 @@ export type SystemsApiExposureRequestInput = {
 };
 
 export function buildPublicUrl(toolId: string, desiredHost?: string): string {
-  const host = desiredHost?.trim() || `${toolId}.nexus.local`;
+  const host = desiredHost?.trim() || `${toolId}.${cloudConfig.cloudDomain}`;
   return host.startsWith("http://") || host.startsWith("https://") ? host : `https://${host}`;
 }
 
 export function buildCanonicalUrl(toolId: string): string {
-  return `https://${toolId}.nexus.local`;
+  return `https://${toolId}.${cloudConfig.cloudDomain}`;
 }
 
-export function createExposureRecord(input: SystemsApiExposureRequestInput, publicUrl: string, status: SystemsApiExposureStatus = "requested", at = new Date().toISOString()): SystemsApiExposureRecord {
+export function createExposureRecord(
+  input: SystemsApiExposureRequestInput,
+  publicUrl: string,
+  status: SystemsApiExposureStatus = "requested",
+  at = new Date().toISOString(),
+): SystemsApiExposureRecord {
   return {
     id: `exp_${crypto.randomUUID()}`,
     toolId: input.toolId,
     canonicalUrl: buildCanonicalUrl(input.toolId),
     publicUrl,
-    desiredHost: input.desiredHost,
+    ...(input.desiredHost !== undefined ? { desiredHost: input.desiredHost } : {}),
     status,
     requestedAt: at,
-    activatedAt: status === "active" ? at : undefined,
-    revokedAt: status === "revoked" ? at : undefined,
+    ...(status === "active" ? { activatedAt: at } : {}),
+    ...(status === "revoked" ? { revokedAt: at } : {}),
     updatedAt: at,
   };
 }
 
-export function transitionExposureRecord(record: SystemsApiExposureRecord, status: SystemsApiExposureStatus, publicUrl = record.publicUrl, at = new Date().toISOString()): SystemsApiExposureRecord {
+export function transitionExposureRecord(
+  record: SystemsApiExposureRecord,
+  status: SystemsApiExposureStatus,
+  publicUrl = record.publicUrl,
+  at = new Date().toISOString(),
+): SystemsApiExposureRecord {
+  const activatedAt = status === "active" ? (record.activatedAt ?? at) : record.activatedAt;
+  const revokedAt = status === "revoked" ? at : record.revokedAt;
   return {
     ...record,
     publicUrl,
     status,
-    activatedAt: status === "active" ? record.activatedAt ?? at : record.activatedAt,
-    revokedAt: status === "revoked" ? at : record.revokedAt,
+    ...(activatedAt !== undefined ? { activatedAt } : {}),
+    ...(revokedAt !== undefined ? { revokedAt } : {}),
     updatedAt: at,
   };
 }
 
-export function revokeExposureRecord(record: SystemsApiExposureRecord, at = new Date().toISOString()): SystemsApiExposureRecord {
+export function revokeExposureRecord(
+  record: SystemsApiExposureRecord,
+  at = new Date().toISOString(),
+): SystemsApiExposureRecord {
   return transitionExposureRecord(record, "revoked", record.publicUrl, at);
 }

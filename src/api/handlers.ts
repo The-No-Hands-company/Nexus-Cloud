@@ -1,72 +1,93 @@
-import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
 import { createHash } from "node:crypto";
 import { architecture } from "../architecture";
-import { queryAuditLog, type AuditFilter } from "../audit";
+import { type AuditFilter, queryAuditLog } from "../audit";
+import { bootstrapDns, hasCloudflareDns } from "../cloudflare-dns";
+import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane, dataPlaneService } from "../data-plane";
-import { federationService } from "../federation";
-import { guardianService } from "../guardian";
-import { observabilityService, recordEvent } from "../observability";
-import { storage } from "../storage";
-import { systemsApiService, heartbeatSystemsApiTool, listSystemsApiRoutes, getCloudDomain } from "../systems-api";
-import { describeSystemsApiDeployIntegration, systemsApiDeployIntegration } from "../systems-api/deploy";
-import { bootstrapDns, hasCloudflareDns } from "../cloudflare-dns";
 import { generateZoneFile } from "../dns-zone";
-import { getNodeIdentity } from "../identity";
-import { registerUser, listUsers } from "../users";
-import { selfAnnouncement, handleInboundAnnouncement, type GossipAnnouncement } from "../federation";
-import { apiRoutes } from "./index";
+import { federationService } from "../federation";
 import {
-  type ArchitectureResponse,
+  type GossipAnnouncement,
+  handleInboundAnnouncement,
+  handleInboundBootstrapAnnouncement,
+  selfAnnouncement,
+} from "../federation";
+import { guardianService } from "../guardian";
+import { getNodeIdentity } from "../identity";
+import { observabilityService, recordEvent } from "../observability";
+import {
+  checkStorageBackend,
+  createVolume,
+  deleteVolume,
+  drainPool,
+  getPool,
+  getVolume,
+  listFederatedPools,
+  listPools,
+  listVolumes,
+  registerPool,
+  removePool,
+  storage,
+  updatePoolHeartbeat,
+} from "../storage";
+import {
+  getCloudDomain,
+  heartbeatSystemsApiTool,
+  listSystemsApiRoutes,
+  systemsApiService,
+} from "../systems-api";
+import {
+  describeSystemsApiDeployIntegration,
+  systemsApiDeployIntegration,
+} from "../systems-api/deploy";
+import {
+  authenticateUser,
+  createSession,
+  listUsers,
+  registerUser,
+  validateSession,
+} from "../users";
+import {
+  type GuardianDecisionResponse,
+  type GuardianDecisionsResponse,
   type HealthResponse,
   type LegacyStatusResponse,
   type NodeListResponse,
   type NodeTrustActionRequestDTO,
   type NodeTrustBulkAction,
-  type NodeTrustBulkRequestDTO,
   type NodeTrustBulkResponseDTO,
+  type NodeTrustBulkResultDTO,
   type PeerListResponse,
   type PlanWorkloadErrorResponse,
   type PlanWorkloadSuccessResponse,
   type RegisterNodeResponse,
-  type StateResponse,
-  type GuardianDecisionResponse,
-  type GuardianDecisionsResponse,
-  type SystemsApiAddressesResponseDTO,
-  type SystemsApiAddressRequestDTO,
-  type SystemsApiAddressRevokeRequestDTO,
   type SystemsApiAddressResponseDTO,
+  type SystemsApiAddressesResponseDTO,
   type SystemsApiAppsResponseDTO,
   type SystemsApiCapabilitiesResponseDTO,
   type SystemsApiConnectionsResponseDTO,
-  type SystemsApiDeployRequestDTO,
   type SystemsApiDeployResponseDTO,
-  type SystemsApiDomainBindingRequestDTO,
   type SystemsApiDomainResponseDTO,
-  type SystemsApiDomainVerificationRequestDTO,
   type SystemsApiDomainVerificationResponseDTO,
   type SystemsApiEndpointsResponseDTO,
+  type SystemsApiExposureResponseDTO,
   type SystemsApiPhantomComplianceResponseDTO,
   type SystemsApiPhantomComplianceSummaryResponseDTO,
-  type SystemsApiTrustSummaryResponseDTO,
-  type SystemsApiExposureRequestDTO,
-  type SystemsApiExposureResponseDTO,
-  type SystemsApiExposuresResponseDTO,
-  type SystemsApiPublicUrlRequestDTO,
   type SystemsApiPublicUrlResponseDTO,
-  type SystemsApiStatusResponseDTO,
+  type SystemsApiRoutesResponseDTO,
   type SystemsApiSummaryResponseDTO,
-  type SystemsApiTopologyResponseDTO,
   type SystemsApiToolHistoryResponseDTO,
   type SystemsApiToolPatchRequestDTO,
+  type SystemsApiToolRegistrationRequestDTO,
   type SystemsApiToolResponseDTO,
   type SystemsApiToolsResponseDTO,
+  type SystemsApiTopologyResponseDTO,
+  type SystemsApiTrustSummaryResponseDTO,
   type TrustPeerResponse,
   type WorkloadListResponse,
   type WorkloadRunResponse,
   type WorkloadStopResponse,
-  type SystemsApiRoutesResponseDTO,
-  type SystemsApiToolRegistrationRequestDTO,
   isNodeTrustActionRequest,
   isNodeTrustBulkRequest,
   isRegisterNodeRequest,
@@ -84,13 +105,14 @@ import {
   isWorkloadPlanRequest,
 } from "./dto";
 import {
+  type SystemsApiExposureStatusResponseDTO,
   toSystemsApiDomainResourceDTO,
   toSystemsApiDomainResourcesResponseDTO,
   toSystemsApiExposureResourceDTO,
   toSystemsApiExposureResourcesResponseDTO,
   toSystemsApiExposureStatusResponseDTO,
-  type SystemsApiExposureStatusResponseDTO,
 } from "./exposure-dto";
+import { apiRoutes } from "./index";
 
 function corsHeaders(): Record<string, string> {
   return {
@@ -127,7 +149,8 @@ function jsonWithConditionalEtag(request: Request, data: unknown, status = 200):
 }
 
 function resolveAuditActor(request: Request): string {
-  const explicitActor = request.headers.get("x-nexus-actor")?.trim() || request.headers.get("x-actor")?.trim();
+  const explicitActor =
+    request.headers.get("x-nexus-actor")?.trim() || request.headers.get("x-actor")?.trim();
   if (explicitActor) return explicitActor;
   return "system:api-key";
 }
@@ -167,6 +190,17 @@ function notFound(): Response {
   return json({ error: "Not found" }, 404);
 }
 
+/**
+ * GET endpoints that disclose internal topology and therefore require the API
+ * key, even though they only read. `tls-ask` is intentionally absent — Caddy
+ * cannot authenticate during a handshake. See the gate in `handleApiRequest`.
+ */
+const TOPOLOGY_READ_PATHS: ReadonlySet<string> = new Set([
+  "/api/v1/routes",
+  "/api/v1/routes/caddy",
+  "/api/v1/routes/zone",
+]);
+
 function checkApiKey(request: Request): Response | null {
   if (!requiresApiKey()) return null;
   const header = request.headers.get("authorization");
@@ -188,58 +222,32 @@ async function readJson(request: Request): Promise<unknown | null> {
 }
 
 // ── Portal auth helpers ───────────────────────────────────────────────────────
-async function signToken(payload: Record<string, unknown>): Promise<string> {
-  const enc = new TextEncoder();
-  const secret = enc.encode(cloudConfig.apiKey || "nexus-cloud-dev-secret");
-  const data = enc.encode(JSON.stringify(payload));
-  const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, data);
-  return btoa(JSON.stringify(payload)) + "." + btoa(String.fromCharCode(...new Uint8Array(sig)));
-}
-
-async function verifyToken(token: string): Promise<Record<string, unknown> | null> {
-  try {
-    const [payloadB64, sigB64] = token.split(".");
-    if (!payloadB64 || !sigB64) return null;
-    const enc = new TextEncoder();
-    const secret = enc.encode(cloudConfig.apiKey || "nexus-cloud-dev-secret");
-    const data = enc.encode(atob(payloadB64));
-    const sig = Uint8Array.from(atob(sigB64), (c) => c.charCodeAt(0));
-    const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-    const valid = await crypto.subtle.verify("HMAC", key, sig, data);
-    if (!valid) return null;
-    const p = JSON.parse(atob(payloadB64)) as Record<string, unknown>;
-    if (typeof p.exp === "number" && p.exp < Math.floor(Date.now() / 1000)) return null;
-    return p;
-  } catch {
-    return null;
-  }
-}
 
 async function handleAuthLogin(request: Request): Promise<Response> {
   const body = await readJson(request);
   if (!body || typeof body !== "object") return badRequest("Missing credentials");
   const { username, password } = body as { username?: string; password?: string };
-  const adminUser = process.env.CLOUD_ADMIN_USER || "admin";
-  const adminPass = process.env.CLOUD_ADMIN_PASSWORD || "";
-  if (!adminPass) {
-    return json({ error: "Portal auth not configured — set CLOUD_ADMIN_PASSWORD in .env" }, 503);
-  }
-  if (!username || !password || username !== adminUser || password !== adminPass) {
+
+  if (!username || !password) {
     return json({ error: "Invalid credentials" }, 401);
   }
-  const now = Math.floor(Date.now() / 1000);
-  const token = await signToken({ sub: username, role: "admin", iat: now, exp: now + 86400 * 7 });
-  return json({ token, user: { username, role: "admin" } });
+
+  const authResult = await authenticateUser(username, password);
+  if (!authResult.ok) {
+    return json({ error: authResult.error }, 401);
+  }
+
+  const token = await createSession(authResult.user.id);
+  return json({ token, user: authResult.user });
 }
 
 async function handleAuthMe(request: Request): Promise<Response> {
   const header = request.headers.get("authorization");
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return json({ error: "Unauthorized" }, 401);
-  const payload = await verifyToken(token);
-  if (!payload) return json({ error: "Invalid or expired token" }, 401);
-  return json({ user: payload });
+  const sessionResult = await validateSession(token);
+  if (!sessionResult.ok) return json({ error: sessionResult.error }, 401);
+  return json({ user: sessionResult.user });
 }
 
 function handleDashboard(): Response {
@@ -316,19 +324,21 @@ async function handleNodeTrustAction(request: Request, pathname: string): Promis
   if (!nodeId) return badRequest("Missing node id");
 
   const body = await readJson(request);
-  if (body !== null && !isNodeTrustActionRequest(body)) return badRequest("Invalid trust action payload");
+  if (body !== null && !isNodeTrustActionRequest(body))
+    return badRequest("Invalid trust action payload");
   const reason = (body as NodeTrustActionRequestDTO | null)?.reason?.trim() || "operator-action";
   const actor = resolveAuditActor(request);
   const before = controlPlaneService.getNode(nodeId);
   if (!before) return notFound();
 
-  const node = action === "promote"
-    ? controlPlaneService.promoteNodeTrust(nodeId)
-    : action === "quarantine"
-    ? controlPlaneService.quarantineNodeTrust(nodeId)
-    : action === "revoke"
-    ? controlPlaneService.revokeNodeTrust(nodeId)
-    : null;
+  const node =
+    action === "promote"
+      ? controlPlaneService.promoteNodeTrust(nodeId)
+      : action === "quarantine"
+        ? controlPlaneService.quarantineNodeTrust(nodeId)
+        : action === "revoke"
+          ? controlPlaneService.revokeNodeTrust(nodeId)
+          : null;
 
   if (action !== "promote" && action !== "quarantine" && action !== "revoke") {
     return badRequest("Unsupported trust action");
@@ -352,7 +362,7 @@ async function handleNodeTrustBulk(request: Request): Promise<Response> {
   if (!isNodeTrustBulkRequest(body)) return badRequest("Missing bulk trust operations");
 
   const actor = resolveAuditActor(request);
-  const results = body.operations.map((operation) => {
+  const results: NodeTrustBulkResultDTO[] = body.operations.map((operation) => {
     const existing = controlPlaneService.getNode(operation.nodeId);
     if (!existing) {
       return {
@@ -364,11 +374,12 @@ async function handleNodeTrustBulk(request: Request): Promise<Response> {
       };
     }
 
-    const node = operation.action === "promote"
-      ? controlPlaneService.promoteNodeTrust(operation.nodeId)
-      : operation.action === "quarantine"
-      ? controlPlaneService.quarantineNodeTrust(operation.nodeId)
-      : controlPlaneService.revokeNodeTrust(operation.nodeId);
+    const node =
+      operation.action === "promote"
+        ? controlPlaneService.promoteNodeTrust(operation.nodeId)
+        : operation.action === "quarantine"
+          ? controlPlaneService.quarantineNodeTrust(operation.nodeId)
+          : controlPlaneService.revokeNodeTrust(operation.nodeId);
 
     if (!node) {
       return {
@@ -427,7 +438,11 @@ async function handleWorkloadPlan(request: Request): Promise<Response> {
   if (!isWorkloadPlanRequest(body)) return badRequest("Missing workload fields");
   const result = controlPlaneService.planWorkload(body);
   if (!result.ok) {
-    const response: PlanWorkloadErrorResponse = { error: result.error, policy: result.policy, quota: result.quota ?? null };
+    const response: PlanWorkloadErrorResponse = {
+      error: result.error,
+      policy: result.policy,
+      quota: result.quota ?? null,
+    };
     return json(response, result.status);
   }
   const response: PlanWorkloadSuccessResponse = {
@@ -445,7 +460,9 @@ function handlePeersList(): Response {
 }
 
 async function handlePeerTrust(request: Request, pathname: string): Promise<Response> {
-  const domain = decodeURIComponent(pathname.slice("/v1/federation/peers/".length, -"/trust".length));
+  const domain = decodeURIComponent(
+    pathname.slice("/v1/federation/peers/".length, -"/trust".length),
+  );
   if (!domain) return badRequest("Missing peer domain");
   const trust = await readJson(request);
   if (!isTrustPeerRequest(trust)) return badRequest("Missing trust fields");
@@ -454,7 +471,10 @@ async function handlePeerTrust(request: Request, pathname: string): Promise<Resp
 }
 
 function parsePhantomComplianceFilter(url: URL): "all" | "failing" {
-  return url.searchParams.get("phantomCompliance") === "failing" || url.searchParams.get("status") === "failing" ? "failing" : "all";
+  return url.searchParams.get("phantomCompliance") === "failing" ||
+    url.searchParams.get("status") === "failing"
+    ? "failing"
+    : "all";
 }
 
 function parseStatusCompactMode(url: URL): "none" | "trust" {
@@ -463,9 +483,15 @@ function parseStatusCompactMode(url: URL): "none" | "trust" {
 
 function collectPhantomComplianceEntries(filter: "all" | "failing") {
   const status = systemsApiService.describeSystemsApiStatus();
-  const toolsById = new Map(systemsApiService.listSystemsApiTools().map((tool) => [tool.id, tool] as const));
-  const failureByToolId = new Map(status.integrationFailures.map((failure) => [failure.toolId, failure] as const));
-  const claimedTools = systemsApiService.listSystemsApiTools().filter((tool) => tool.phantomSecurityProfile?.claimedSecured);
+  const _toolsById = new Map(
+    systemsApiService.listSystemsApiTools().map((tool) => [tool.id, tool] as const),
+  );
+  const failureByToolId = new Map(
+    status.integrationFailures.map((failure) => [failure.toolId, failure] as const),
+  );
+  const claimedTools = systemsApiService
+    .listSystemsApiTools()
+    .filter((tool) => tool.phantomSecurityProfile?.claimedSecured);
 
   const entries = claimedTools
     .map((tool) => {
@@ -484,7 +510,9 @@ function collectPhantomComplianceEntries(filter: "all" | "failing") {
 function handleSystemsTools(url: URL): Response {
   const filter = parsePhantomComplianceFilter(url);
   if (filter === "all") {
-    return json({ tools: systemsApiService.listSystemsApiTools() } satisfies SystemsApiToolsResponseDTO);
+    return json({
+      tools: systemsApiService.listSystemsApiTools(),
+    } satisfies SystemsApiToolsResponseDTO);
   }
 
   const { entries } = collectPhantomComplianceEntries("failing");
@@ -492,15 +520,21 @@ function handleSystemsTools(url: URL): Response {
 }
 
 function handleSystemsEndpoints(): Response {
-  return json({ endpoints: systemsApiService.listSystemsApiEndpoints() } satisfies SystemsApiEndpointsResponseDTO);
+  return json({
+    endpoints: systemsApiService.listSystemsApiEndpoints(),
+  } satisfies SystemsApiEndpointsResponseDTO);
 }
 
 function handleSystemsCapabilities(): Response {
-  return json({ capabilities: systemsApiService.listSystemsApiCapabilities() } satisfies SystemsApiCapabilitiesResponseDTO);
+  return json({
+    capabilities: systemsApiService.listSystemsApiCapabilities(),
+  } satisfies SystemsApiCapabilitiesResponseDTO);
 }
 
 function handleSystemsSummary(): Response {
-  return json({ summary: systemsApiService.describeSystemsApi() } satisfies SystemsApiSummaryResponseDTO);
+  return json({
+    summary: systemsApiService.describeSystemsApi(),
+  } satisfies SystemsApiSummaryResponseDTO);
 }
 
 function handleSystemsDeployIntegration(): Response {
@@ -537,16 +571,30 @@ function handleSystemsTool(toolId: string): Response {
 function handleSystemsToolHistory(toolId: string): Response {
   const tool = systemsApiService.getSystemsApiTool(toolId);
   if (!tool) return notFound();
-  return json({ history: systemsApiService.listSystemsApiToolHistory(toolId) } satisfies SystemsApiToolHistoryResponseDTO);
+  return json({
+    history: systemsApiService.listSystemsApiToolHistory(toolId),
+  } satisfies SystemsApiToolHistoryResponseDTO);
 }
 
 async function handleSystemsToolPatch(request: Request, toolId: string): Promise<Response> {
   const body = await readJson(request);
   if (!isSystemsApiToolPatchRequest(body)) return badRequest("Missing tool metadata fields");
-  if (body.name === undefined && body.description === undefined && body.mode === undefined && body.exposed === undefined && body.health === undefined && body.capabilities === undefined && body.upstreamUrl === undefined && body.phantomSecurityProfile === undefined) {
+  if (
+    body.name === undefined &&
+    body.description === undefined &&
+    body.mode === undefined &&
+    body.exposed === undefined &&
+    body.health === undefined &&
+    body.capabilities === undefined &&
+    body.upstreamUrl === undefined &&
+    body.phantomSecurityProfile === undefined
+  ) {
     return badRequest("Empty tool metadata patch");
   }
-  const tool = systemsApiService.updateSystemsApiTool(toolId, body as SystemsApiToolPatchRequestDTO);
+  const tool = systemsApiService.updateSystemsApiTool(
+    toolId,
+    body as SystemsApiToolPatchRequestDTO,
+  );
   if (!tool) return notFound();
   return json({ tool } satisfies SystemsApiToolResponseDTO);
 }
@@ -574,9 +622,10 @@ function handleSystemsStatus(request: Request, url: URL): Response {
   }
 
   const filter = parsePhantomComplianceFilter(url);
-  const tools = filter === "failing"
-    ? collectPhantomComplianceEntries("failing").entries.map((entry) => entry.tool)
-    : systemsApiService.listSystemsApiTools();
+  const tools =
+    filter === "failing"
+      ? collectPhantomComplianceEntries("failing").entries.map((entry) => entry.tool)
+      : systemsApiService.listSystemsApiTools();
   const body: SystemsApiExposureStatusResponseDTO = toSystemsApiExposureStatusResponseDTO(
     systemsApiService.describeSystemsApiStatus(),
     tools,
@@ -632,28 +681,38 @@ function handleSystemsTrustSummary(request: Request): Response {
  */
 function handleAuditQuery(url: URL, subjectIdOverride?: string): Response {
   const q = url.searchParams;
-  const filter: AuditFilter = {
-    subjectId: subjectIdOverride ?? q.get("subjectId") ?? undefined,
-    source: q.get("source") ?? undefined,
-    level: q.get("level") ?? undefined,
-    kind: q.get("kind") ?? undefined,
-    from: q.get("from") ?? undefined,
-    to: q.get("to") ?? undefined,
-    eventType: q.get("eventType") ?? undefined,
-    action: q.get("action") ?? undefined,
-    actor: q.get("actor") ?? undefined,
-  };
+  const filter: AuditFilter = {};
+  const subjectId = subjectIdOverride ?? q.get("subjectId") ?? undefined;
+  if (subjectId !== undefined) filter.subjectId = subjectId;
+  const source = q.get("source");
+  if (source !== null) filter.source = source;
+  const level = q.get("level");
+  if (level !== null) filter.level = level;
+  const kind = q.get("kind");
+  if (kind !== null) filter.kind = kind;
+  const from = q.get("from");
+  if (from !== null) filter.from = from;
+  const to = q.get("to");
+  if (to !== null) filter.to = to;
+  const eventType = q.get("eventType");
+  if (eventType !== null) filter.eventType = eventType;
+  const action = q.get("action");
+  if (action !== null) filter.action = action;
+  const actor = q.get("actor");
+  if (actor !== null) filter.actor = actor;
   const rawLimit = q.get("limit");
   if (rawLimit !== null) {
-    const parsed = parseInt(rawLimit, 10);
-    if (!isNaN(parsed) && parsed > 0) filter.limit = parsed;
+    const parsed = Number.parseInt(rawLimit, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) filter.limit = parsed;
   }
   const events = queryAuditLog(filter);
   return json({ events, count: events.length });
 }
 
 function handleGuardianDecisions(): Response {
-  return json({ decisions: guardianService.listGuardianDecisions() } satisfies GuardianDecisionsResponse);
+  return json({
+    decisions: guardianService.listGuardianDecisions(),
+  } satisfies GuardianDecisionsResponse);
 }
 
 function handleGuardianDecisionAction(pathname: string): Response {
@@ -661,17 +720,19 @@ function handleGuardianDecisionAction(pathname: string): Response {
   const [scope, encodedSubjectId, action] = suffix.split("/");
   const subjectId = decodeURIComponent(encodedSubjectId ?? "");
   if (!scope || !subjectId || !action) return notFound();
-  const typedScope = scope === "exposure" || scope === "domain" || scope === "runtime" ? scope : null;
+  const typedScope =
+    scope === "exposure" || scope === "domain" || scope === "runtime" ? scope : null;
   if (!typedScope) return notFound();
-  const decision = action === "approve"
-    ? guardianService.approveGuardianDecision(typedScope, subjectId)
-    : action === "deny"
-      ? guardianService.denyGuardianDecision(typedScope, subjectId)
-      : action === "suspend"
-        ? guardianService.suspendGuardianDecision(typedScope, subjectId)
-        : action === "quarantine"
-          ? guardianService.quarantineGuardianDecision(typedScope, subjectId)
-          : null;
+  const decision =
+    action === "approve"
+      ? guardianService.approveGuardianDecision(typedScope, subjectId)
+      : action === "deny"
+        ? guardianService.denyGuardianDecision(typedScope, subjectId)
+        : action === "suspend"
+          ? guardianService.suspendGuardianDecision(typedScope, subjectId)
+          : action === "quarantine"
+            ? guardianService.quarantineGuardianDecision(typedScope, subjectId)
+            : null;
   if (!decision) return notFound();
   return json({ decision } satisfies GuardianDecisionResponse);
 }
@@ -688,7 +749,9 @@ async function handleSystemsPublicUrl(request: Request): Promise<Response> {
 }
 
 function handleSystemsAddresses(): Response {
-  return json({ addresses: systemsApiService.listSystemsApiAddresses() } satisfies SystemsApiAddressesResponseDTO);
+  return json({
+    addresses: systemsApiService.listSystemsApiAddresses(),
+  } satisfies SystemsApiAddressesResponseDTO);
 }
 
 function handleSystemsAddressGet(toolId: string): Response {
@@ -710,18 +773,25 @@ async function handleSystemsAddressPost(request: Request): Promise<Response> {
 async function handleSystemsAddressRevoke(request: Request, toolId: string): Promise<Response> {
   const body = await readJson(request);
   if (!isSystemsApiAddressRevokeRequest(body)) return badRequest("Missing address revoke fields");
-  const revoked = systemsApiService.revokeSystemsApiAddress({ toolId, kind: body.kind });
+  const revoked = systemsApiService.revokeSystemsApiAddress({
+    toolId,
+    ...(body.kind !== undefined ? { kind: body.kind } : {}),
+  });
   return json({ addresses: revoked } satisfies SystemsApiAddressesResponseDTO);
 }
 
 function handleSystemsExposures(): Response {
-  return json(toSystemsApiExposureResourcesResponseDTO(systemsApiService.listSystemsApiExposures()));
+  return json(
+    toSystemsApiExposureResourcesResponseDTO(systemsApiService.listSystemsApiExposures()),
+  );
 }
 
 function handleSystemsExposureGet(toolId: string): Response {
   const exposure = systemsApiService.getSystemsApiExposure(toolId);
   if (!exposure) return notFound();
-  return json({ exposure: toSystemsApiExposureResourceDTO(exposure) } satisfies SystemsApiExposureResponseDTO);
+  return json({
+    exposure: toSystemsApiExposureResourceDTO(exposure),
+  } satisfies SystemsApiExposureResponseDTO);
 }
 
 async function handleSystemsExposurePost(request: Request): Promise<Response> {
@@ -729,17 +799,24 @@ async function handleSystemsExposurePost(request: Request): Promise<Response> {
   if (!isSystemsApiExposureRequest(body)) return badRequest("Missing exposure fields");
   const exposure = systemsApiService.requestSystemsApiExposure(body);
   if (!exposure) return notFound();
-  return json({ exposure: toSystemsApiExposureResourceDTO(exposure) } satisfies SystemsApiExposureResponseDTO, 201);
+  return json(
+    { exposure: toSystemsApiExposureResourceDTO(exposure) } satisfies SystemsApiExposureResponseDTO,
+    201,
+  );
 }
 
 function handleSystemsExposureRevoke(toolId: string): Response {
   const exposure = systemsApiService.revokeSystemsApiExposure(toolId);
   if (!exposure) return notFound();
-  return json({ exposure: toSystemsApiExposureResourceDTO(exposure) } satisfies SystemsApiExposureResponseDTO);
+  return json({
+    exposure: toSystemsApiExposureResourceDTO(exposure),
+  } satisfies SystemsApiExposureResponseDTO);
 }
 
 function handleSystemsDomains(): Response {
-  return json(toSystemsApiDomainResourcesResponseDTO(systemsApiService.listSystemsApiDomainBindings()));
+  return json(
+    toSystemsApiDomainResourcesResponseDTO(systemsApiService.listSystemsApiDomainBindings()),
+  );
 }
 
 async function handleSystemsDomainPost(request: Request): Promise<Response> {
@@ -747,13 +824,18 @@ async function handleSystemsDomainPost(request: Request): Promise<Response> {
   if (!isSystemsApiDomainBindingRequest(body)) return badRequest("Missing domain binding fields");
   const domain = systemsApiService.requestSystemsApiDomainBinding(body);
   if (!domain) return notFound();
-  return json({ domain: toSystemsApiDomainResourceDTO(domain) } satisfies SystemsApiDomainResponseDTO, 201);
+  return json(
+    { domain: toSystemsApiDomainResourceDTO(domain) } satisfies SystemsApiDomainResponseDTO,
+    201,
+  );
 }
 
 function handleSystemsDomainGet(domain: string): Response {
   const binding = systemsApiService.getSystemsApiDomainBinding(domain);
   if (!binding) return notFound();
-  return json({ domain: toSystemsApiDomainResourceDTO(binding) } satisfies SystemsApiDomainResponseDTO);
+  return json({
+    domain: toSystemsApiDomainResourceDTO(binding),
+  } satisfies SystemsApiDomainResponseDTO);
 }
 
 async function handleSystemsDomainVerify(request: Request, domain: string): Promise<Response> {
@@ -769,7 +851,9 @@ async function handleSystemsDomainVerify(request: Request, domain: string): Prom
 function handleSystemsDomainDelete(domain: string): Response {
   const revoked = systemsApiService.revokeSystemsApiDomain(domain);
   if (!revoked) return notFound();
-  return json({ domain: toSystemsApiDomainResourceDTO(revoked) } satisfies SystemsApiDomainResponseDTO);
+  return json({
+    domain: toSystemsApiDomainResourceDTO(revoked),
+  } satisfies SystemsApiDomainResponseDTO);
 }
 
 async function handleSystemsToolRoute(request: Request, pathname: string): Promise<Response> {
@@ -780,8 +864,10 @@ async function handleSystemsToolRoute(request: Request, pathname: string): Promi
     const toolId = decodeURIComponent(suffix.slice(0, -"/history".length));
     return toolId ? handleSystemsToolHistory(toolId) : badRequest("Missing tool id");
   }
-  if (request.method === "GET" && !suffix.includes("/")) return handleSystemsTool(decodeURIComponent(suffix));
-  if (request.method === "PATCH" && !suffix.includes("/")) return handleSystemsToolPatch(request, decodeURIComponent(suffix));
+  if (request.method === "GET" && !suffix.includes("/"))
+    return handleSystemsTool(decodeURIComponent(suffix));
+  if (request.method === "PATCH" && !suffix.includes("/"))
+    return handleSystemsToolPatch(request, decodeURIComponent(suffix));
   if (request.method === "POST" && suffix.endsWith("/enable")) {
     const toolId = decodeURIComponent(suffix.slice(0, -"/enable".length));
     return toolId ? handleSystemsToolEnable(toolId) : badRequest("Missing tool id");
@@ -819,10 +905,12 @@ function handleSystemsRoutesCaddy(): Response {
   const routes = listSystemsApiRoutes();
   const caddyRoutes = routes.map((route) => ({
     match: [{ host: [route.domain] }],
-    handle: [{
-      handler: "reverse_proxy",
-      upstreams: [{ dial: route.upstream.replace(/^https?:\/\//, "") }],
-    }],
+    handle: [
+      {
+        handler: "reverse_proxy",
+        upstreams: [{ dial: route.upstream.replace(/^https?:\/\//, "") }],
+      },
+    ],
   }));
   return json({ routes: caddyRoutes });
 }
@@ -832,7 +920,7 @@ function handleFederationIdentity(): Response {
   return json({
     did: id.did,
     shortId: id.shortId,
-    publicKey: id.publicKey,
+    publicKey: id.did,
     namingScheme: "@user:shortId",
     exampleAddress: `@alice:${id.shortId}`,
     addressNote:
@@ -847,21 +935,43 @@ function handleNodeAnnouncement(): Response {
 async function handleInboundPeerAnnounce(request: Request): Promise<Response> {
   const body = await readJson(request);
   if (
-    typeof body !== "object" || body === null ||
+    typeof body !== "object" ||
+    body === null ||
     typeof (body as Record<string, unknown>)["did"] !== "string" ||
     typeof (body as Record<string, unknown>)["upstreamUrl"] !== "string"
   ) {
     return badRequest("Missing required fields: did, upstreamUrl");
   }
   const announcement = body as GossipAnnouncement;
+
+  const bootstrapPeers = (process.env["BOOTSTRAP_PEERS"] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const isBootstrapPeer = bootstrapPeers.some((peerUrl) => {
+    try {
+      return new URL(peerUrl).host === new URL(announcement.upstreamUrl).host;
+    } catch {
+      return false;
+    }
+  });
+
+  if (isBootstrapPeer) {
+    const result = handleInboundBootstrapAnnouncement(announcement);
+    return json(result);
+  }
+
   const trustDecision = federationService.authorizeFederatedPeerAction(announcement.upstreamUrl);
   if (!trustDecision.allowed) {
-    return json({
-      error: trustDecision.reason,
-      reasonCode: trustDecision.reasonCode,
-      requiredTrust: trustDecision.requiredTrust,
-      peerTrustState: trustDecision.peerTrustState ?? "unregistered",
-    }, 403);
+    return json(
+      {
+        error: trustDecision.reason,
+        reasonCode: trustDecision.reasonCode,
+        requiredTrust: trustDecision.requiredTrust,
+        peerTrustState: trustDecision.peerTrustState ?? "unregistered",
+      },
+      403,
+    );
   }
 
   const result = handleInboundAnnouncement(announcement);
@@ -870,10 +980,23 @@ async function handleInboundPeerAnnounce(request: Request): Promise<Response> {
 
 async function handleUserRegister(request: Request): Promise<Response> {
   const body = await readJson(request);
-  if (typeof body !== "object" || body === null || typeof (body as Record<string, unknown>)["username"] !== "string") {
-    return badRequest("Missing required field: username");
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    typeof (body as Record<string, unknown>)["email"] !== "string" ||
+    typeof (body as Record<string, unknown>)["username"] !== "string" ||
+    typeof (body as Record<string, unknown>)["password"] !== "string"
+  ) {
+    return badRequest("Missing required fields: email, username, password");
   }
-  const result = registerUser((body as Record<string, unknown>)["username"] as string);
+
+  const result = await registerUser(
+    (body as Record<string, unknown>)["email"] as string,
+    (body as Record<string, unknown>)["username"] as string,
+    (body as Record<string, unknown>)["password"] as string,
+    (body as Record<string, unknown>)["firstName"] as string | undefined,
+    (body as Record<string, unknown>)["lastName"] as string | undefined,
+  );
   if (!result.ok) return badRequest(result.error);
   return json({ user: result.user }, 201);
 }
@@ -930,8 +1053,11 @@ async function handleToolHeartbeat(request: Request, toolId: string): Promise<Re
 
 async function handleToolRegister(request: Request): Promise<Response> {
   const body = await readJson(request);
-  if (!isSystemsApiToolRegistrationRequest(body)) return badRequest("Missing tool registration fields");
-  const tool = systemsApiService.registerSystemsApiTool(body as SystemsApiToolRegistrationRequestDTO);
+  if (!isSystemsApiToolRegistrationRequest(body))
+    return badRequest("Missing tool registration fields");
+  const tool = systemsApiService.registerSystemsApiTool(
+    body as SystemsApiToolRegistrationRequestDTO,
+  );
   return json({ tool } satisfies SystemsApiToolResponseDTO, 201);
 }
 
@@ -939,7 +1065,8 @@ async function handleSystemsAddressRoute(request: Request, pathname: string): Pr
   const prefix = "/api/v1/addresses/";
   const suffix = pathname.slice(prefix.length);
   if (!suffix) return notFound();
-  if (request.method === "GET" && !suffix.includes("/")) return handleSystemsAddressGet(decodeURIComponent(suffix));
+  if (request.method === "GET" && !suffix.includes("/"))
+    return handleSystemsAddressGet(decodeURIComponent(suffix));
   if (request.method === "POST" && suffix.endsWith("/revoke")) {
     const toolId = decodeURIComponent(suffix.slice(0, -"/revoke".length));
     return handleSystemsAddressRevoke(request, toolId);
@@ -951,7 +1078,8 @@ async function handleSystemsExposureRoute(request: Request, pathname: string): P
   const prefix = "/api/v1/exposures/";
   const suffix = pathname.slice(prefix.length);
   if (!suffix) return notFound();
-  if (request.method === "GET" && !suffix.includes("/")) return handleSystemsExposureGet(decodeURIComponent(suffix));
+  if (request.method === "GET" && !suffix.includes("/"))
+    return handleSystemsExposureGet(decodeURIComponent(suffix));
   if (request.method === "POST" && suffix.endsWith("/revoke")) {
     const toolId = decodeURIComponent(suffix.slice(0, -"/revoke".length));
     return toolId ? handleSystemsExposureRevoke(toolId) : badRequest("Missing tool id");
@@ -964,35 +1092,160 @@ function handleSystemsApps(): Response {
 }
 
 function handleSystemsConnections(): Response {
-  return json({ connections: systemsApiService.listSystemsApiConnections() } satisfies SystemsApiConnectionsResponseDTO);
+  return json({
+    connections: systemsApiService.listSystemsApiConnections(),
+  } satisfies SystemsApiConnectionsResponseDTO);
 }
 
 function handleSystemsTopology(): Response {
-  return json({ topology: systemsApiService.describeSystemsApiTopology() } satisfies SystemsApiTopologyResponseDTO);
+  return json({
+    topology: systemsApiService.describeSystemsApiTopology(),
+  } satisfies SystemsApiTopologyResponseDTO);
 }
 
 async function handleSystemsRoute(request: Request, pathname: string): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/apps") return handleSystemsApps();
-  if (request.method === "GET" && pathname === "/api/v1/connections") return handleSystemsConnections();
+  if (request.method === "GET" && pathname === "/api/v1/connections")
+    return handleSystemsConnections();
   if (request.method === "GET" && pathname === "/api/v1/topology") return handleSystemsTopology();
   if (request.method === "GET" && pathname === "/api/v1/addresses") return handleSystemsAddresses();
-  if (request.method === "POST" && pathname === "/api/v1/addresses") return handleSystemsAddressPost(request);
-  if (pathname.startsWith("/api/v1/addresses/")) return await handleSystemsAddressRoute(request, pathname);
+  if (request.method === "POST" && pathname === "/api/v1/addresses")
+    return handleSystemsAddressPost(request);
+  if (pathname.startsWith("/api/v1/addresses/"))
+    return await handleSystemsAddressRoute(request, pathname);
   if (request.method === "GET" && pathname === "/api/v1/exposures") return handleSystemsExposures();
-  if (request.method === "POST" && pathname === "/api/v1/exposures") return handleSystemsExposurePost(request);
-  if (pathname.startsWith("/api/v1/exposures/")) return await handleSystemsExposureRoute(request, pathname);
+  if (request.method === "POST" && pathname === "/api/v1/exposures")
+    return handleSystemsExposurePost(request);
+  if (pathname.startsWith("/api/v1/exposures/"))
+    return await handleSystemsExposureRoute(request, pathname);
   if (request.method === "GET" && pathname === "/api/v1/domains") return handleSystemsDomains();
-  if (request.method === "POST" && pathname === "/api/v1/domains") return handleSystemsDomainPost(request);
+  if (request.method === "POST" && pathname === "/api/v1/domains")
+    return handleSystemsDomainPost(request);
   if (pathname.startsWith("/api/v1/domains/")) {
     const suffix = pathname.slice("/api/v1/domains/".length);
-    if (request.method === "GET" && !suffix.includes("/")) return handleSystemsDomainGet(decodeURIComponent(suffix));
+    if (request.method === "GET" && !suffix.includes("/"))
+      return handleSystemsDomainGet(decodeURIComponent(suffix));
     if (request.method === "POST" && suffix.endsWith("/verify")) {
       const domain = decodeURIComponent(suffix.slice(0, -"/verify".length));
       return handleSystemsDomainVerify(request, domain);
     }
-    if (request.method === "DELETE" && !suffix.includes("/")) return handleSystemsDomainDelete(decodeURIComponent(suffix));
+    if (request.method === "DELETE" && !suffix.includes("/"))
+      return handleSystemsDomainDelete(decodeURIComponent(suffix));
   }
   return notFound();
+}
+
+// ── Storage backend & volumes ──────────────────────────────────────────────────
+
+function handleStorageStatus(): Promise<Response> {
+  const backend = checkStorageBackend();
+  return backend.then((status) =>
+    json({
+      classes: storage.classes,
+      backend: status,
+      volumes: listVolumes(),
+    }),
+  );
+}
+
+export function handleStorageList(): Response {
+  return json({ volumes: listVolumes() });
+}
+
+export async function handleStorageVolumeCreate(request: Request): Promise<Response> {
+  const body = (await readJson(request)) as Partial<{
+    name: string;
+    className: string;
+    sizeGb: number;
+  }> | null;
+  if (!body?.name) return badRequest("Missing required field: name");
+  const volume = await createVolume({
+    name: body.name,
+    ...(body.className !== undefined ? { className: body.className } : {}),
+    ...(body.sizeGb !== undefined ? { sizeGb: body.sizeGb } : {}),
+  });
+  return json({ volume }, volume.status === "provisioned" ? 201 : 202);
+}
+
+export function handleStorageVolumeGet(pathname: string): Response {
+  const id = decodeURIComponent(pathname.slice("/api/v1/volumes/".length));
+  if (!id || id.includes("/")) return notFound();
+  const volume = getVolume(id);
+  if (!volume) return json({ error: "volume not found" }, 404);
+  return json({ volume });
+}
+
+export function handleStorageVolumeDelete(pathname: string): Response {
+  const id = decodeURIComponent(pathname.slice("/api/v1/volumes/".length));
+  if (!id || id.includes("/")) return notFound();
+  return deleteVolume(id) ? json({ ok: true }) : json({ error: "volume not found" }, 404);
+}
+
+// ── Shared Storage Pool Management ──────────────────────────────────────────────
+
+async function handleStoragePoolsList(): Promise<Response> {
+  const localPools = listPools();
+  const federatedPools = await listFederatedPools();
+  return json({ pools: localPools, federatedPools });
+}
+
+async function handleStoragePoolCreate(request: Request): Promise<Response> {
+  const body = (await readJson(request)) as Partial<{
+    name: string;
+    totalCapacityGb: number;
+    tags: string[];
+    replicationFactor: number;
+  }> | null;
+  if (!body?.name) return badRequest("Missing required field: name");
+  if (!body?.totalCapacityGb || body.totalCapacityGb < 1)
+    return badRequest("totalCapacityGb must be >= 1");
+
+  const identity = getNodeIdentity();
+  const pool = await registerPool(
+    {
+      name: body.name,
+      totalCapacityGb: body.totalCapacityGb,
+      ...(body.tags !== undefined ? { tags: body.tags } : {}),
+      ...(body.replicationFactor !== undefined
+        ? { replicationFactor: body.replicationFactor }
+        : {}),
+    },
+    identity.shortId,
+    identity.did,
+  );
+  return json({ pool }, 201);
+}
+
+async function handleStoragePoolGet(pathname: string): Promise<Response> {
+  const id = decodeURIComponent(pathname.slice("/api/v1/storage/pools/".length));
+  if (!id || id.includes("/")) return notFound();
+  const pool = getPool(id);
+  if (!pool) return json({ error: "pool not found" }, 404);
+  return json({ pool });
+}
+
+async function handleStoragePoolDelete(pathname: string): Promise<Response> {
+  const id = decodeURIComponent(pathname.slice("/api/v1/storage/pools/".length));
+  if (!id || id.includes("/")) return notFound();
+  return removePool(id) ? json({ ok: true }) : json({ error: "pool not found" }, 404);
+}
+
+async function handleStoragePoolHeartbeat(pathname: string): Promise<Response> {
+  const id = decodeURIComponent(
+    pathname.slice("/api/v1/storage/pools/".length, -"/heartbeat".length),
+  );
+  if (!id || id.includes("/")) return notFound();
+  const pool = updatePoolHeartbeat(id);
+  if (!pool) return json({ error: "pool not found" }, 404);
+  return json({ pool });
+}
+
+async function handleStoragePoolDrain(pathname: string): Promise<Response> {
+  const id = decodeURIComponent(pathname.slice("/api/v1/storage/pools/".length, -"/drain".length));
+  if (!id || id.includes("/")) return notFound();
+  const pool = drainPool(id);
+  if (!pool) return json({ error: "pool not found" }, 404);
+  return json({ pool });
 }
 
 // ── Subdomain reverse proxy ────────────────────────────────────────────────────
@@ -1094,11 +1347,41 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
 
+  if (request.method === "GET" && pathname === "/api/v1/storage") return handleStorageStatus();
+  if (request.method === "GET" && pathname === "/api/v1/volumes") return handleStorageList();
+  if (request.method === "POST" && pathname === "/api/v1/volumes")
+    return handleStorageVolumeCreate(request);
+  if (request.method === "GET" && pathname.startsWith("/api/v1/volumes/"))
+    return handleStorageVolumeGet(pathname);
+  if (request.method === "DELETE" && pathname.startsWith("/api/v1/volumes/"))
+    return handleStorageVolumeDelete(pathname);
+  if (request.method === "GET" && pathname === "/api/v1/storage/pools")
+    return handleStoragePoolsList();
+  if (request.method === "POST" && pathname === "/api/v1/storage/pools")
+    return handleStoragePoolCreate(request);
+  if (
+    request.method === "GET" &&
+    pathname.startsWith("/api/v1/storage/pools/") &&
+    pathname.endsWith("/heartbeat")
+  )
+    return handleStoragePoolHeartbeat(pathname);
+  if (
+    request.method === "POST" &&
+    pathname.startsWith("/api/v1/storage/pools/") &&
+    pathname.endsWith("/drain")
+  )
+    return handleStoragePoolDrain(pathname);
+  if (request.method === "GET" && pathname.startsWith("/api/v1/storage/pools/"))
+    return handleStoragePoolGet(pathname);
+  if (request.method === "DELETE" && pathname.startsWith("/api/v1/storage/pools/"))
+    return handleStoragePoolDelete(pathname);
+
   // Subdomain proxy: *.cloudDomain requests are routed to the registered upstream.
   // This runs before CORS and auth so the upstream handles its own CORS/auth headers.
-  const host = (request.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  const host = (request.headers.get("host") ?? "").toLowerCase().split(":")[0] ?? "";
   const cloudDomain = cloudConfig.cloudDomain.toLowerCase();
-  if (host !== cloudDomain && host.endsWith(`.${cloudDomain}`)) {
+  const cloudOwnHost = `cloud.${cloudDomain}`;
+  if (host !== cloudDomain && host !== cloudOwnHost && host.endsWith(`.${cloudDomain}`)) {
     return handleSubdomainProxy(request, host);
   }
 
@@ -1111,61 +1394,134 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   }
 
   // Authenticate all mutating requests. /api/v1/deployments and /api/v1/auth/login handle their own auth.
-  if (["POST", "PATCH", "DELETE"].includes(request.method) && pathname !== "/api/v1/deployments" && pathname !== "/api/v1/auth/login") {
+  if (
+    ["POST", "PATCH", "DELETE"].includes(request.method) &&
+    pathname !== "/api/v1/deployments" &&
+    pathname !== "/api/v1/auth/login"
+  ) {
     const authErr = checkApiKey(request);
     if (authErr) return authErr;
   }
 
-  if (request.method === "POST" && pathname === "/api/v1/auth/login") return handleAuthLogin(request);
+  // Authenticate the read-only endpoints that hand out internal topology: the
+  // domain -> upstream host:port table for every active route, the Caddy config
+  // generated from it, and the DNS zone naming every subdomain. Cloud answers
+  // publicly on cloud.<cloudDomain>, so anonymous reads there would publish the
+  // private address of every backend in the deployment.
+  //
+  // /api/v1/routes/tls-ask deliberately stays open: Caddy calls it during a TLS
+  // handshake and cannot present a credential, and its answer only confirms
+  // allow/deny for a name the caller already supplied.
+  if (request.method === "GET" && TOPOLOGY_READ_PATHS.has(pathname)) {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
+  }
+
+  if (request.method === "POST" && pathname === "/api/v1/auth/login")
+    return handleAuthLogin(request);
   if (request.method === "GET" && pathname === "/api/v1/auth/me") return handleAuthMe(request);
-  if (request.method === "GET" && (pathname === "/" || pathname === "/status")) return handleDashboard();
+  if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
+    return handleDashboard();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();
   if (request.method === "GET" && pathname === "/v1/architecture") return handleArchitecture();
   if (request.method === "GET" && pathname === "/v1/state") return handleState();
   if (request.method === "GET" && pathname === "/v1/nodes") return handleNodesList();
-  if (request.method === "POST" && pathname === "/v1/nodes/register") return handleNodeRegister(request);
-  if (request.method === "POST" && pathname === "/v1/nodes/trust/bulk") return handleNodeTrustBulk(request);
-  if (request.method === "POST" && pathname.startsWith("/v1/nodes/") && pathname.includes("/trust/")) return handleNodeTrustAction(request, pathname);
+  if (request.method === "POST" && pathname === "/v1/nodes/register")
+    return handleNodeRegister(request);
+  if (request.method === "POST" && pathname === "/v1/nodes/trust/bulk")
+    return handleNodeTrustBulk(request);
+  if (
+    request.method === "POST" &&
+    pathname.startsWith("/v1/nodes/") &&
+    pathname.includes("/trust/")
+  )
+    return handleNodeTrustAction(request, pathname);
   if (request.method === "GET" && pathname === "/v1/workloads") return handleWorkloadsList();
-  if (request.method === "POST" && pathname === "/v1/workloads/plan") return handleWorkloadPlan(request);
-  if (request.method === "POST" && pathname.startsWith("/v1/workloads/") && pathname.endsWith("/run")) return handleWorkloadRun(decodeURIComponent(pathname.slice("/v1/workloads/".length, -"/run".length)));
-  if (request.method === "POST" && pathname.startsWith("/v1/workloads/") && pathname.endsWith("/stop")) return handleWorkloadStop(decodeURIComponent(pathname.slice("/v1/workloads/".length, -"/stop".length)));
+  if (request.method === "POST" && pathname === "/v1/workloads/plan")
+    return handleWorkloadPlan(request);
+  if (
+    request.method === "POST" &&
+    pathname.startsWith("/v1/workloads/") &&
+    pathname.endsWith("/run")
+  )
+    return handleWorkloadRun(
+      decodeURIComponent(pathname.slice("/v1/workloads/".length, -"/run".length)),
+    );
+  if (
+    request.method === "POST" &&
+    pathname.startsWith("/v1/workloads/") &&
+    pathname.endsWith("/stop")
+  )
+    return handleWorkloadStop(
+      decodeURIComponent(pathname.slice("/v1/workloads/".length, -"/stop".length)),
+    );
   if (request.method === "GET" && pathname === "/v1/federation/peers") return handlePeersList();
-  if (request.method === "POST" && pathname.startsWith("/v1/federation/peers/") && pathname.endsWith("/trust")) return handlePeerTrust(request, pathname);
-  if (request.method === "GET" && pathname === "/v1/federation/identity") return handleFederationIdentity();
-  if (request.method === "GET" && pathname === "/v1/federation/announcement") return handleNodeAnnouncement();
-  if (request.method === "POST" && pathname === "/v1/federation/peers/announce") return handleInboundPeerAnnounce(request);
+  if (
+    request.method === "POST" &&
+    pathname.startsWith("/v1/federation/peers/") &&
+    pathname.endsWith("/trust")
+  )
+    return handlePeerTrust(request, pathname);
+  if (request.method === "GET" && pathname === "/v1/federation/identity")
+    return handleFederationIdentity();
+  if (request.method === "GET" && pathname === "/v1/federation/announcement")
+    return handleNodeAnnouncement();
+  if (request.method === "POST" && pathname === "/v1/federation/peers/announce")
+    return handleInboundPeerAnnounce(request);
   if (request.method === "GET" && pathname === "/api/v1/users") return handleUserList();
   if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/tools") return handleSystemsTools(url);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/endpoints") return handleSystemsEndpoints();
-  if (request.method === "GET" && pathname === "/api/v1/capabilities") return handleSystemsCapabilities();
+  if (request.method === "GET" && pathname === "/api/v1/capabilities")
+    return handleSystemsCapabilities();
   if (request.method === "GET" && pathname === "/api/v1/summary") return handleSystemsSummary();
-  if (request.method === "GET" && pathname === "/api/v1/status") return handleSystemsStatus(request, url);
-  if (request.method === "GET" && pathname === "/api/v1/compliance/phantom") return handleSystemsPhantomCompliance(url);
-  if (request.method === "GET" && pathname === "/api/v1/compliance/phantom/summary") return handleSystemsPhantomComplianceSummary(request);
-  if (request.method === "GET" && pathname === "/api/v1/trust/summary") return handleSystemsTrustSummary(request);
+  if (request.method === "GET" && pathname === "/api/v1/status")
+    return handleSystemsStatus(request, url);
+  if (request.method === "GET" && pathname === "/api/v1/compliance/phantom")
+    return handleSystemsPhantomCompliance(url);
+  if (request.method === "GET" && pathname === "/api/v1/compliance/phantom/summary")
+    return handleSystemsPhantomComplianceSummary(request);
+  if (request.method === "GET" && pathname === "/api/v1/trust/summary")
+    return handleSystemsTrustSummary(request);
   if (request.method === "GET" && pathname === "/api/v1/routes") return handleSystemsRoutes();
-  if (request.method === "GET" && pathname === "/api/v1/routes/caddy") return handleSystemsRoutesCaddy();
-  if (request.method === "GET" && pathname === "/api/v1/guardian/decisions") return handleGuardianDecisions();
-  if (request.method === "POST" && pathname.startsWith("/api/v1/guardian/")) return handleGuardianDecisionAction(pathname);
+  if (request.method === "GET" && pathname === "/api/v1/routes/caddy")
+    return handleSystemsRoutesCaddy();
+  if (request.method === "GET" && pathname === "/api/v1/guardian/decisions")
+    return handleGuardianDecisions();
+  if (request.method === "POST" && pathname.startsWith("/api/v1/guardian/"))
+    return handleGuardianDecisionAction(pathname);
   if (request.method === "GET" && pathname === "/api/v1/audit") return handleAuditQuery(url);
   if (request.method === "GET" && pathname.startsWith("/api/v1/audit/")) {
     const subjectId = decodeURIComponent(pathname.slice("/api/v1/audit/".length));
     return subjectId ? handleAuditQuery(url, subjectId) : badRequest("Missing subjectId");
   }
-  if (request.method === "GET" && pathname === "/api/v1/routes/tls-ask") return handleTlsAsk(url.searchParams);
+  if (request.method === "GET" && pathname === "/api/v1/routes/tls-ask")
+    return handleTlsAsk(url.searchParams);
   if (request.method === "GET" && pathname === "/api/v1/routes/zone") return handleZoneFile();
   if (request.method === "GET" && pathname === "/.well-known/nexus-cloud") return handleWellKnown();
   if (request.method === "GET" && pathname === "/api/v1/dns/status") return handleDnsStatus();
-  if (request.method === "POST" && pathname === "/api/v1/dns/bootstrap") return await handleDnsBootstrap(request);
-  if (request.method === "GET" && pathname === "/api/v1/deployments/integration") return handleSystemsDeployIntegration();
-  if (request.method === "POST" && pathname === "/api/v1/deployments") return handleSystemsDeploy(request);
-  if (request.method === "POST" && pathname === "/api/v1/public-url") return handleSystemsPublicUrl(request);
+  if (request.method === "POST" && pathname === "/api/v1/dns/bootstrap")
+    return await handleDnsBootstrap(request);
+  if (request.method === "GET" && pathname === "/api/v1/deployments/integration")
+    return handleSystemsDeployIntegration();
+  if (request.method === "POST" && pathname === "/api/v1/deployments")
+    return handleSystemsDeploy(request);
+  if (request.method === "POST" && pathname === "/api/v1/public-url")
+    return handleSystemsPublicUrl(request);
   if (pathname.startsWith("/api/v1/tools/")) return await handleSystemsToolRoute(request, pathname);
-  if (pathname === "/api/v1/apps" || pathname === "/api/v1/connections" || pathname === "/api/v1/topology" || pathname === "/api/v1/addresses" || pathname.startsWith("/api/v1/addresses/") || pathname === "/api/v1/exposures" || pathname.startsWith("/api/v1/exposures/") || pathname === "/api/v1/domains" || pathname.startsWith("/api/v1/domains/")) {
+  if (
+    pathname === "/api/v1/apps" ||
+    pathname === "/api/v1/connections" ||
+    pathname === "/api/v1/topology" ||
+    pathname === "/api/v1/addresses" ||
+    pathname.startsWith("/api/v1/addresses/") ||
+    pathname === "/api/v1/exposures" ||
+    pathname.startsWith("/api/v1/exposures/") ||
+    pathname === "/api/v1/domains" ||
+    pathname.startsWith("/api/v1/domains/")
+  ) {
     return await handleSystemsRoute(request, pathname);
   }
   return notFound();

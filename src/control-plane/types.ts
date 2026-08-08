@@ -1,6 +1,12 @@
 export type NodeStatus = "pending" | "ready" | "draining" | "offline";
 
-export type NodeTrustState = "pending" | "verified" | "trusted" | "quarantined" | "revoked" | "expired";
+export type NodeTrustState =
+  | "pending"
+  | "verified"
+  | "trusted"
+  | "quarantined"
+  | "revoked"
+  | "expired";
 
 export type NodeCapacity = {
   cpu: number;

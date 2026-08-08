@@ -1,17 +1,48 @@
 import type { ArchitectureLayer } from "../architecture";
-import type { FederationTrust } from "../architecture";
-import type { NodeCapacity, NodeRegistrationRequest, NodeSpec, PlacementPlan, WorkloadSpec } from "../control-plane";
-import type { DataPlaneUnit } from "../data-plane";
+import type {
+  NodeCapacity,
+  NodeRegistrationRequest,
+  NodeSpec,
+  PlacementPlan,
+  WorkloadSpec,
+} from "../control-plane";
 import type { PolicyDecision } from "../control-plane/policy";
 import type { QuotaDecision } from "../control-plane/quota";
+import type { DataPlaneUnit } from "../data-plane";
 import type { FederationPeer, FederationSignedRequest } from "../federation";
-import type { GuardianDecision } from "../state";
 import type { FederationSummary } from "../federation/service";
 import type { HealthCheck, ObservabilityEvent } from "../observability";
 import type { ObservabilitySummary } from "../observability/service";
+import type { GuardianDecision } from "../state";
 import type { StorageVolume } from "../storage";
-import type { SystemsApiApp, SystemsApiCapability, SystemsApiConnection, SystemsApiDeployRequest, SystemsApiDeployResponse, SystemsApiAddress, SystemsApiAddressKind, SystemsApiDomainBinding, SystemsApiDomainVerificationChallenge, SystemsApiEndpoint, SystemsApiExposureRecord, SystemsApiIntegrationFailure, SystemsApiMode, SystemsApiPhantomSecurityProfile, SystemsApiPublicUrl, SystemsApiRegistryMetadata, SystemsApiRoute, SystemsApiStatus, SystemsApiSummary, SystemsApiTool, SystemsApiToolHealth, SystemsApiToolHistoryEntry, SystemsApiTopology } from "../systems-api";
-import type { SystemsApiDomainResponseDTO as SystemsApiDomainResourceDTO, SystemsApiExposureResourceDTO, SystemsApiExposureResourcesResponseDTO } from "./exposure-dto";
+import type {
+  SystemsApiAddress,
+  SystemsApiAddressKind,
+  SystemsApiApp,
+  SystemsApiCapability,
+  SystemsApiConnection,
+  SystemsApiDeployRequest,
+  SystemsApiDeployResponse,
+  SystemsApiDomainVerificationChallenge,
+  SystemsApiEndpoint,
+  SystemsApiIntegrationFailure,
+  SystemsApiMode,
+  SystemsApiPhantomSecurityProfile,
+  SystemsApiPublicUrl,
+  SystemsApiRegistryMetadata,
+  SystemsApiRoute,
+  SystemsApiStatus,
+  SystemsApiSummary,
+  SystemsApiTool,
+  SystemsApiToolHealth,
+  SystemsApiToolHistoryEntry,
+  SystemsApiTopology,
+} from "../systems-api";
+import type {
+  SystemsApiDomainResponseDTO as SystemsApiDomainResourceDTO,
+  SystemsApiExposureResourceDTO,
+  SystemsApiExposureResourcesResponseDTO,
+} from "./exposure-dto";
 
 export type ApiRoute = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -353,7 +384,13 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 }
 
 function isNodeCapacity(value: unknown): value is NodeCapacity {
-  return isRecord(value) && isNumber(value.cpu) && isNumber(value.memoryMb) && isNumber(value.storageGb) && (value.publicIpv4 === undefined || isString(value.publicIpv4));
+  return (
+    isRecord(value) &&
+    isNumber(value.cpu) &&
+    isNumber(value.memoryMb) &&
+    isNumber(value.storageGb) &&
+    (value.publicIpv4 === undefined || isString(value.publicIpv4))
+  );
 }
 
 function isMode(value: unknown): value is SystemsApiMode {
@@ -364,33 +401,43 @@ function isToolHealth(value: unknown): value is SystemsApiToolHealth {
   return value === "healthy" || value === "degraded" || value === "offline";
 }
 
-function isPhantomProtectionLevel(value: unknown): value is "transitional" | "hardened" | "maximum" {
+function isPhantomProtectionLevel(
+  value: unknown,
+): value is "transitional" | "hardened" | "maximum" {
   return value === "transitional" || value === "hardened" || value === "maximum";
 }
 
 function isPhantomSecurityProfile(value: unknown): value is SystemsApiPhantomSecurityProfile {
   if (!isRecord(value) || !isRecord(value.guarantees)) return false;
-  return typeof value.claimedSecured === "boolean"
-    && isPhantomProtectionLevel(value.protectionLevel)
-    && typeof value.guarantees.postQuantum === "boolean"
-    && typeof value.guarantees.fheTransport === "boolean"
-    && typeof value.guarantees.zkProofs === "boolean"
-    && (
-      value.metadata === undefined
-      || (
-        isRecord(value.metadata)
-        && (value.metadata.pqAlgorithms === undefined || Array.isArray(value.metadata.pqAlgorithms) && value.metadata.pqAlgorithms.every(isString))
-        && (value.metadata.fheScheme === undefined || isString(value.metadata.fheScheme))
-        && (value.metadata.zkProofSystem === undefined || isString(value.metadata.zkProofSystem))
-        && (value.metadata.proofAttestation === undefined || isString(value.metadata.proofAttestation))
-        && (value.metadata.proofEndpoint === undefined || isString(value.metadata.proofEndpoint))
-        && (value.metadata.lastVerifiedAt === undefined || isString(value.metadata.lastVerifiedAt))
-      )
-    );
+  return (
+    typeof value.claimedSecured === "boolean" &&
+    isPhantomProtectionLevel(value.protectionLevel) &&
+    typeof value.guarantees.postQuantum === "boolean" &&
+    typeof value.guarantees.fheTransport === "boolean" &&
+    typeof value.guarantees.zkProofs === "boolean" &&
+    (value.metadata === undefined ||
+      (isRecord(value.metadata) &&
+        (value.metadata.pqAlgorithms === undefined ||
+          (Array.isArray(value.metadata.pqAlgorithms) &&
+            value.metadata.pqAlgorithms.every(isString))) &&
+        (value.metadata.fheScheme === undefined || isString(value.metadata.fheScheme)) &&
+        (value.metadata.zkProofSystem === undefined || isString(value.metadata.zkProofSystem)) &&
+        (value.metadata.proofAttestation === undefined ||
+          isString(value.metadata.proofAttestation)) &&
+        (value.metadata.proofEndpoint === undefined || isString(value.metadata.proofEndpoint)) &&
+        (value.metadata.lastVerifiedAt === undefined || isString(value.metadata.lastVerifiedAt))))
+  );
 }
 
 export function isRegisterNodeRequest(value: unknown): value is RegisterNodeRequestDTO {
-  return isRecord(value) && isString(value.name) && isString(value.region) && isString(value.zone) && (value.labels === undefined || isStringRecord(value.labels)) && isNodeCapacity(value.capacity);
+  return (
+    isRecord(value) &&
+    isString(value.name) &&
+    isString(value.region) &&
+    isString(value.zone) &&
+    (value.labels === undefined || isStringRecord(value.labels)) &&
+    isNodeCapacity(value.capacity)
+  );
 }
 
 export function isNodeTrustActionRequest(value: unknown): value is NodeTrustActionRequestDTO {
@@ -398,129 +445,188 @@ export function isNodeTrustActionRequest(value: unknown): value is NodeTrustActi
 }
 
 export function isNodeTrustBulkRequest(value: unknown): value is NodeTrustBulkRequestDTO {
-  return isRecord(value)
-    && Array.isArray(value.operations)
-    && value.operations.every((operation) =>
-      isRecord(operation)
-      && isString(operation.nodeId)
-      && (operation.action === "promote" || operation.action === "quarantine" || operation.action === "revoke")
-      && (operation.reason === undefined || isString(operation.reason))
-    );
+  return (
+    isRecord(value) &&
+    Array.isArray(value.operations) &&
+    value.operations.every(
+      (operation) =>
+        isRecord(operation) &&
+        isString(operation.nodeId) &&
+        (operation.action === "promote" ||
+          operation.action === "quarantine" ||
+          operation.action === "revoke") &&
+        (operation.reason === undefined || isString(operation.reason)),
+    )
+  );
 }
 
 export function isWorkloadPlanRequest(value: unknown): value is WorkloadPlanRequestDTO {
-  return isRecord(value)
-    && isString(value.id)
-    && isString(value.name)
-    && isString(value.image)
-    && isNumber(value.replicas)
-    && isNumber(value.cpuMillicores)
-    && isNumber(value.memoryMb)
-    && isStringRecord(value.env)
-    && Array.isArray(value.ports) && value.ports.every(isNumber)
-    && (value.runtime === "container" || value.runtime === "vm" || value.runtime === "function")
-    && Array.isArray(value.storage) && value.storage.every(isString);
+  return (
+    isRecord(value) &&
+    isString(value.id) &&
+    isString(value.name) &&
+    isString(value.image) &&
+    isNumber(value.replicas) &&
+    isNumber(value.cpuMillicores) &&
+    isNumber(value.memoryMb) &&
+    isStringRecord(value.env) &&
+    Array.isArray(value.ports) &&
+    value.ports.every(isNumber) &&
+    (value.runtime === "container" || value.runtime === "vm" || value.runtime === "function") &&
+    Array.isArray(value.storage) &&
+    value.storage.every(isString)
+  );
 }
 
 export function isTrustPeerRequest(value: unknown): value is TrustPeerRequestDTO {
-  return isRecord(value)
-    && isString(value.method)
-    && isString(value.path)
-    && isString(value.host)
-    && isString(value.timestamp)
-    && isString(value.nonce)
-    && isString(value.keyId)
-    && isString(value.signature);
+  return (
+    isRecord(value) &&
+    isString(value.method) &&
+    isString(value.path) &&
+    isString(value.host) &&
+    isString(value.timestamp) &&
+    isString(value.nonce) &&
+    isString(value.keyId) &&
+    isString(value.signature)
+  );
 }
 
-export function isSystemsApiPublicUrlRequest(value: unknown): value is SystemsApiPublicUrlRequestDTO {
-  return isRecord(value)
-    && isString(value.toolId)
-    && (value.desiredHost === undefined || isString(value.desiredHost))
-    && (value.refresh === undefined || typeof value.refresh === "boolean");
+export function isSystemsApiPublicUrlRequest(
+  value: unknown,
+): value is SystemsApiPublicUrlRequestDTO {
+  return (
+    isRecord(value) &&
+    isString(value.toolId) &&
+    (value.desiredHost === undefined || isString(value.desiredHost)) &&
+    (value.refresh === undefined || typeof value.refresh === "boolean")
+  );
 }
 
 export function isSystemsApiAddressRequest(value: unknown): value is SystemsApiAddressRequestDTO {
-  return isRecord(value)
-    && isString(value.toolId)
-    && isString(value.kind)
-    && (value.subject === undefined || isString(value.subject))
-    && (value.desiredHost === undefined || isString(value.desiredHost));
+  return (
+    isRecord(value) &&
+    isString(value.toolId) &&
+    isString(value.kind) &&
+    (value.subject === undefined || isString(value.subject)) &&
+    (value.desiredHost === undefined || isString(value.desiredHost))
+  );
 }
 
-export function isSystemsApiAddressRevokeRequest(value: unknown): value is SystemsApiAddressRevokeRequestDTO {
-  return isRecord(value)
-    && isString(value.toolId)
-    && (value.kind === undefined || isString(value.kind));
+export function isSystemsApiAddressRevokeRequest(
+  value: unknown,
+): value is SystemsApiAddressRevokeRequestDTO {
+  return (
+    isRecord(value) && isString(value.toolId) && (value.kind === undefined || isString(value.kind))
+  );
 }
 
 export function isSystemsApiExposureRequest(value: unknown): value is SystemsApiExposureRequestDTO {
-  return isRecord(value)
-    && isString(value.toolId)
-    && (value.desiredHost === undefined || isString(value.desiredHost));
+  return (
+    isRecord(value) &&
+    isString(value.toolId) &&
+    (value.desiredHost === undefined || isString(value.desiredHost))
+  );
 }
 
-export function isSystemsApiDomainBindingRequest(value: unknown): value is SystemsApiDomainBindingRequestDTO {
-  return isRecord(value)
-    && isString(value.toolId)
-    && isString(value.domain)
-    && (value.desiredHost === undefined || isString(value.desiredHost));
+export function isSystemsApiDomainBindingRequest(
+  value: unknown,
+): value is SystemsApiDomainBindingRequestDTO {
+  return (
+    isRecord(value) &&
+    isString(value.toolId) &&
+    isString(value.domain) &&
+    (value.desiredHost === undefined || isString(value.desiredHost))
+  );
 }
 
-export function isSystemsApiDomainVerificationRequest(value: unknown): value is SystemsApiDomainVerificationRequestDTO {
+export function isSystemsApiDomainVerificationRequest(
+  value: unknown,
+): value is SystemsApiDomainVerificationRequestDTO {
   return isRecord(value) && isString(value.domain) && isString(value.token);
 }
 
-export function isSystemsApiToolPatchRequest(value: unknown): value is SystemsApiToolPatchRequestDTO {
-  return isRecord(value)
-    && (value.name === undefined || isString(value.name))
-    && (value.description === undefined || isString(value.description))
-    && (value.mode === undefined || isMode(value.mode))
-    && (value.exposed === undefined || typeof value.exposed === "boolean")
-    && (value.health === undefined || isToolHealth(value.health))
-    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
-    && (value.capabilities === undefined || Array.isArray(value.capabilities) && value.capabilities.every(isString))
-    && (value.phantomSecurityProfile === undefined || isPhantomSecurityProfile(value.phantomSecurityProfile));
+export function isSystemsApiToolPatchRequest(
+  value: unknown,
+): value is SystemsApiToolPatchRequestDTO {
+  return (
+    isRecord(value) &&
+    (value.name === undefined || isString(value.name)) &&
+    (value.description === undefined || isString(value.description)) &&
+    (value.mode === undefined || isMode(value.mode)) &&
+    (value.exposed === undefined || typeof value.exposed === "boolean") &&
+    (value.health === undefined || isToolHealth(value.health)) &&
+    (value.upstreamUrl === undefined || isString(value.upstreamUrl)) &&
+    (value.capabilities === undefined ||
+      (Array.isArray(value.capabilities) && value.capabilities.every(isString))) &&
+    (value.phantomSecurityProfile === undefined ||
+      isPhantomSecurityProfile(value.phantomSecurityProfile))
+  );
 }
 
-export function isSystemsApiToolRegistrationRequest(value: unknown): value is SystemsApiToolRegistrationRequestDTO {
-  return isRecord(value)
-    && isString(value.id)
-    && isString(value.name)
-    && isString(value.description)
-    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
-    && (value.mode === undefined || isMode(value.mode))
-    && (value.exposed === undefined || typeof value.exposed === "boolean")
-    && (value.health === undefined || isToolHealth(value.health))
-    && (value.capabilities === undefined || Array.isArray(value.capabilities) && value.capabilities.every(isString))
-    && (value.phantomSecurityProfile === undefined || isPhantomSecurityProfile(value.phantomSecurityProfile));
+export function isSystemsApiToolRegistrationRequest(
+  value: unknown,
+): value is SystemsApiToolRegistrationRequestDTO {
+  return (
+    isRecord(value) &&
+    isString(value.id) &&
+    isString(value.name) &&
+    isString(value.description) &&
+    (value.upstreamUrl === undefined || isString(value.upstreamUrl)) &&
+    (value.mode === undefined || isMode(value.mode)) &&
+    (value.exposed === undefined || typeof value.exposed === "boolean") &&
+    (value.health === undefined || isToolHealth(value.health)) &&
+    (value.capabilities === undefined ||
+      (Array.isArray(value.capabilities) && value.capabilities.every(isString))) &&
+    (value.phantomSecurityProfile === undefined ||
+      isPhantomSecurityProfile(value.phantomSecurityProfile))
+  );
 }
 
-export function isSystemsApiNodeHeartbeatRequest(value: unknown): value is SystemsApiNodeHeartbeatRequestDTO {
-  return isRecord(value)
-    && (value.upstreamUrl === undefined || isString(value.upstreamUrl))
-    && (value.health === undefined || isToolHealth(value.health))
-    && (value.phantomSecurityProfile === undefined || isPhantomSecurityProfile(value.phantomSecurityProfile));
+export function isSystemsApiNodeHeartbeatRequest(
+  value: unknown,
+): value is SystemsApiNodeHeartbeatRequestDTO {
+  return (
+    isRecord(value) &&
+    (value.upstreamUrl === undefined || isString(value.upstreamUrl)) &&
+    (value.health === undefined || isToolHealth(value.health)) &&
+    (value.phantomSecurityProfile === undefined ||
+      isPhantomSecurityProfile(value.phantomSecurityProfile))
+  );
 }
 
 export function isSystemsApiDeployRequest(value: unknown): value is SystemsApiDeployRequestDTO {
-  return isRecord(value)
-    && isString(value.toolId)
-    && isString(value.repo)
-    && (value.name === undefined || isString(value.name))
-    && (value.branch === undefined || isString(value.branch))
-    && (value.buildCommand === undefined || isString(value.buildCommand))
-    && (value.startCommand === undefined || isString(value.startCommand))
-    && (value.volumePath === undefined || isString(value.volumePath))
-    && (value.port === undefined || isNumber(value.port))
-    && (value.env === undefined || isStringRecord(value.env))
-    && (value.customDomain === undefined || isString(value.customDomain))
-    && (value.autoDeployEnabled === undefined || typeof value.autoDeployEnabled === "boolean")
-    && (value.notifyUrl === undefined || isString(value.notifyUrl))
-    && (value.deployNow === undefined || typeof value.deployNow === "boolean")
-    && (value.commitSha === undefined || isString(value.commitSha));
+  return (
+    isRecord(value) &&
+    isString(value.toolId) &&
+    isString(value.repo) &&
+    (value.name === undefined || isString(value.name)) &&
+    (value.branch === undefined || isString(value.branch)) &&
+    (value.buildCommand === undefined || isString(value.buildCommand)) &&
+    (value.startCommand === undefined || isString(value.startCommand)) &&
+    (value.volumePath === undefined || isString(value.volumePath)) &&
+    (value.port === undefined || isNumber(value.port)) &&
+    (value.env === undefined || isStringRecord(value.env)) &&
+    (value.customDomain === undefined || isString(value.customDomain)) &&
+    (value.autoDeployEnabled === undefined || typeof value.autoDeployEnabled === "boolean") &&
+    (value.notifyUrl === undefined || isString(value.notifyUrl)) &&
+    (value.deployNow === undefined || typeof value.deployNow === "boolean") &&
+    (value.commitSha === undefined || isString(value.commitSha))
+  );
 }
 
-export function isSystemsApiToolHistoryResponse(value: unknown): value is SystemsApiToolHistoryResponseDTO {
-  return isRecord(value) && Array.isArray(value.history) && value.history.every((entry) => isRecord(entry) && isString(entry.toolId) && isString(entry.action) && isString(entry.summary) && isString(entry.at));
+export function isSystemsApiToolHistoryResponse(
+  value: unknown,
+): value is SystemsApiToolHistoryResponseDTO {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.history) &&
+    value.history.every(
+      (entry) =>
+        isRecord(entry) &&
+        isString(entry.toolId) &&
+        isString(entry.action) &&
+        isString(entry.summary) &&
+        isString(entry.at),
+    )
+  );
 }

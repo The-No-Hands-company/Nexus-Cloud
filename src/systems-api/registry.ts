@@ -1,31 +1,43 @@
-import { buildPublicAddress, createAddressRecord, revokeAddressRecord } from "./address";
-import { buildPublicUrl, createExposureRecord, revokeExposureRecord, transitionExposureRecord } from "./exposure";
-import { createDomainBinding, issueDomainVerificationChallenge as buildDomainVerificationChallenge, revokeDomainBinding as revokeDomainRecord, verifyDomainBinding as verifyDomainRecord } from "./domains";
 import { guardianService } from "../guardian";
 import { recordEvent } from "../observability";
 import { state } from "../state";
-import { getSystemsApiRegistryMetadata, loadSystemsApiRegistry, saveSystemsApiRegistry, type SystemsApiRegistryData } from "./store";
+import { buildPublicAddress, createAddressRecord, revokeAddressRecord } from "./address";
+import {
+  issueDomainVerificationChallenge as buildDomainVerificationChallenge,
+  createDomainBinding,
+  revokeDomainBinding as revokeDomainRecord,
+  verifyDomainBinding as verifyDomainRecord,
+} from "./domains";
+import {
+  buildPublicUrl,
+  createExposureRecord,
+  revokeExposureRecord,
+  transitionExposureRecord,
+} from "./exposure";
+import {
+  type SystemsApiRegistryData,
+  getSystemsApiRegistryMetadata,
+  loadSystemsApiRegistry,
+  saveSystemsApiRegistry,
+} from "./store";
 import type {
   SystemsApiAddress,
   SystemsApiAddressKind,
-  SystemsApiAddressStatus,
   SystemsApiDomainBinding,
   SystemsApiDomainVerificationChallenge,
   SystemsApiExposureRecord,
-  SystemsApiExposureStatus,
   SystemsApiMode,
   SystemsApiPhantomProtectionLevel,
   SystemsApiPhantomSecurityProfile,
   SystemsApiPublicUrl,
-  SystemsApiPublicUrlStatus,
   SystemsApiRoute,
   SystemsApiStatus,
-  SystemsApiTrustStateSummary,
   SystemsApiTool,
   SystemsApiToolExposure,
   SystemsApiToolHealth,
   SystemsApiToolHistoryAction,
   SystemsApiToolHistoryEntry,
+  SystemsApiTrustStateSummary,
 } from "./types";
 
 export type SystemsApiToolRegistrationInput = {
@@ -99,7 +111,16 @@ function cloneRegistryData(data: SystemsApiRegistryData): SystemsApiRegistryData
   };
 }
 
-export function resetSystemsApiRegistryForTests(next: SystemsApiRegistryData = { tools: [], publicUrls: [], addresses: [], history: [], exposures: [], domains: [] }): void {
+export function resetSystemsApiRegistryForTests(
+  next: SystemsApiRegistryData = {
+    tools: [],
+    publicUrls: [],
+    addresses: [],
+    history: [],
+    exposures: [],
+    domains: [],
+  },
+): void {
   const snapshot = cloneRegistryData(next);
   registry.tools = snapshot.tools;
   registry.publicUrls = snapshot.publicUrls;
@@ -126,11 +147,15 @@ function findToolIndex(toolId: string): number {
   return registry.tools.findIndex((tool) => tool.id === toolId);
 }
 
-function phantomProtectionLevel(profile?: SystemsApiPhantomSecurityProfile): SystemsApiPhantomProtectionLevel {
+function phantomProtectionLevel(
+  profile?: SystemsApiPhantomSecurityProfile,
+): SystemsApiPhantomProtectionLevel {
   return profile?.protectionLevel ?? "transitional";
 }
 
-function phantomSecurityTag(profile?: SystemsApiPhantomSecurityProfile): "phantom-hardened" | "transitional" {
+function phantomSecurityTag(
+  profile?: SystemsApiPhantomSecurityProfile,
+): "phantom-hardened" | "transitional" {
   if (!profile) return "transitional";
   if (!profile.claimedSecured) return "transitional";
   return evaluatePhantomCompliance(profile).length === 0 ? "phantom-hardened" : "transitional";
@@ -156,19 +181,36 @@ function evaluatePhantomCompliance(profile: SystemsApiPhantomSecurityProfile): s
   return failures;
 }
 
-function pushHistory(toolId: string, action: SystemsApiToolHistoryAction, summary: string, at = now()): void {
+function pushHistory(
+  toolId: string,
+  action: SystemsApiToolHistoryAction,
+  summary: string,
+  at = now(),
+): void {
   registry.history.push({ toolId, action, summary, at });
 }
 
-function updateToolRecord(toolId: string, updater: (tool: SystemsApiTool) => SystemsApiTool): SystemsApiTool | null {
+function updateToolRecord(
+  toolId: string,
+  updater: (tool: SystemsApiTool) => SystemsApiTool,
+): SystemsApiTool | null {
   const existingIndex = findToolIndex(toolId);
   if (existingIndex < 0) return null;
-  const next = updater(registry.tools[existingIndex]);
+  const current = registry.tools[existingIndex];
+  if (!current) return null;
+  const next = updater(current);
   registry.tools[existingIndex] = next;
   return next;
 }
 
-function buildTool(input: SystemsApiToolRegistrationInput, previous: SystemsApiTool | null = null): SystemsApiTool {
+function buildTool(
+  input: SystemsApiToolRegistrationInput,
+  previous: SystemsApiTool | null = null,
+): SystemsApiTool {
+  const phantomSecurityProfile = input.phantomSecurityProfile ?? previous?.phantomSecurityProfile;
+  const publicUrl = input.publicUrl ?? previous?.publicUrl;
+  const upstreamUrl = input.upstreamUrl ?? previous?.upstreamUrl;
+  const lastHeartbeatAt = previous?.lastHeartbeatAt;
   return {
     id: input.id,
     name: input.name,
@@ -179,10 +221,10 @@ function buildTool(input: SystemsApiToolRegistrationInput, previous: SystemsApiT
     health: input.health ?? previous?.health ?? "healthy",
     registrationStatus: previous?.registrationStatus ?? "registered",
     capabilities: input.capabilities ?? previous?.capabilities ?? [],
-    phantomSecurityProfile: input.phantomSecurityProfile ?? previous?.phantomSecurityProfile,
-    publicUrl: input.publicUrl ?? previous?.publicUrl,
-    upstreamUrl: input.upstreamUrl ?? previous?.upstreamUrl,
-    lastHeartbeatAt: previous?.lastHeartbeatAt,
+    ...(phantomSecurityProfile !== undefined ? { phantomSecurityProfile } : {}),
+    ...(publicUrl !== undefined ? { publicUrl } : {}),
+    ...(upstreamUrl !== undefined ? { upstreamUrl } : {}),
+    ...(lastHeartbeatAt !== undefined ? { lastHeartbeatAt } : {}),
     heartbeatCount: previous?.heartbeatCount ?? 0,
     registeredAt: previous?.registeredAt ?? now(),
     updatedAt: now(),
@@ -211,7 +253,10 @@ function upsertPublicUrlRecord(record: SystemsApiPublicUrl): SystemsApiPublicUrl
 }
 
 function upsertAddressRecord(record: SystemsApiAddress): SystemsApiAddress {
-  const existingIndex = registry.addresses.findIndex((item) => item.toolId === record.toolId && item.kind === record.kind && item.subject === record.subject);
+  const existingIndex = registry.addresses.findIndex(
+    (item) =>
+      item.toolId === record.toolId && item.kind === record.kind && item.subject === record.subject,
+  );
   if (existingIndex >= 0) registry.addresses[existingIndex] = record;
   else registry.addresses.push(record);
   return record;
@@ -224,8 +269,10 @@ function upsertDomainRecord(record: SystemsApiDomainBinding): SystemsApiDomainBi
   return record;
 }
 
-function hasActiveWebsiteAddress(toolId: string): boolean {
-  return registry.addresses.some((item) => item.toolId === toolId && item.kind === "website" && item.status === "active");
+function _hasActiveWebsiteAddress(toolId: string): boolean {
+  return registry.addresses.some(
+    (item) => item.toolId === toolId && item.kind === "website" && item.status === "active",
+  );
 }
 
 function hasActiveAddress(toolId: string): boolean {
@@ -275,22 +322,39 @@ export function registerSystemsApiTool(input: SystemsApiToolRegistrationInput): 
   const action: SystemsApiToolHistoryAction = previous ? "updated" : "registered";
 
   upsertToolRecord(tool);
-  pushHistory(tool.id, action, action === "registered" ? `Registered ${tool.name}` : `Updated ${tool.name}`, tool.updatedAt);
+  pushHistory(
+    tool.id,
+    action,
+    action === "registered" ? `Registered ${tool.name}` : `Updated ${tool.name}`,
+    tool.updatedAt,
+  );
   persist();
   return tool;
 }
 
 export function recordToolHeartbeat(
   toolId: string,
-  patch: { upstreamUrl?: string; health?: SystemsApiToolHealth; phantomSecurityProfile?: SystemsApiPhantomSecurityProfile },
+  patch: {
+    upstreamUrl?: string;
+    health?: SystemsApiToolHealth;
+    phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  },
 ): SystemsApiTool | null {
   const heartbeatAt = now();
   const tool = updateToolRecord(toolId, (current) => ({
     ...current,
-    upstreamUrl: patch.upstreamUrl !== undefined ? patch.upstreamUrl : current.upstreamUrl,
+    ...(patch.upstreamUrl !== undefined
+      ? { upstreamUrl: patch.upstreamUrl }
+      : current.upstreamUrl !== undefined
+        ? { upstreamUrl: current.upstreamUrl }
+        : {}),
     health: patch.health ?? (current.health === "offline" ? "healthy" : current.health),
     registrationStatus: "active",
-    phantomSecurityProfile: patch.phantomSecurityProfile !== undefined ? patch.phantomSecurityProfile : current.phantomSecurityProfile,
+    ...(patch.phantomSecurityProfile !== undefined
+      ? { phantomSecurityProfile: patch.phantomSecurityProfile }
+      : current.phantomSecurityProfile !== undefined
+        ? { phantomSecurityProfile: current.phantomSecurityProfile }
+        : {}),
     lastHeartbeatAt: heartbeatAt,
     heartbeatCount: current.heartbeatCount + 1,
     updatedAt: heartbeatAt,
@@ -323,6 +387,7 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
   if (existingIndex < 0) return null;
 
   const previous = registry.tools[existingIndex];
+  if (!previous) return null;
   const tool: SystemsApiTool = {
     ...previous,
     name: patch.name ?? previous.name,
@@ -332,8 +397,16 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
     exposure: exposureFromFlag(patch.exposed ?? previous.exposed),
     health: patch.health ?? previous.health,
     capabilities: patch.capabilities ?? previous.capabilities,
-    upstreamUrl: patch.upstreamUrl !== undefined ? patch.upstreamUrl : previous.upstreamUrl,
-    phantomSecurityProfile: patch.phantomSecurityProfile !== undefined ? patch.phantomSecurityProfile : previous.phantomSecurityProfile,
+    ...(patch.upstreamUrl !== undefined
+      ? { upstreamUrl: patch.upstreamUrl }
+      : previous.upstreamUrl !== undefined
+        ? { upstreamUrl: previous.upstreamUrl }
+        : {}),
+    ...(patch.phantomSecurityProfile !== undefined
+      ? { phantomSecurityProfile: patch.phantomSecurityProfile }
+      : previous.phantomSecurityProfile !== undefined
+        ? { phantomSecurityProfile: previous.phantomSecurityProfile }
+        : {}),
     updatedAt: now(),
   };
 
@@ -349,7 +422,7 @@ export function deregisterTool(toolId: string): SystemsApiTool | null {
   const [removed] = registry.tools.splice(existingIndex, 1);
   registry.history = registry.history.filter((entry) => entry.toolId !== toolId);
   persist();
-  return removed;
+  return removed ?? null;
 }
 
 export function enableSystemsApiTool(toolId: string): SystemsApiTool | null {
@@ -382,7 +455,9 @@ export function disableSystemsApiTool(toolId: string): SystemsApiTool | null {
   return tool;
 }
 
-export function requestSystemsApiAddress(input: SystemsApiAddressRequest): SystemsApiAddress | null {
+export function requestSystemsApiAddress(
+  input: SystemsApiAddressRequest,
+): SystemsApiAddress | null {
   const tool = getTool(input.toolId);
   if (!tool) return null;
 
@@ -390,7 +465,7 @@ export function requestSystemsApiAddress(input: SystemsApiAddressRequest): Syste
     scope: "exposure",
     tool,
     subjectId: `${tool.id}:address:${input.kind}`,
-    desiredHost: input.desiredHost,
+    ...(input.desiredHost !== undefined ? { desiredHost: input.desiredHost } : {}),
   });
   guardianService.recordGuardianDecision({
     toolId: tool.id,
@@ -398,11 +473,15 @@ export function requestSystemsApiAddress(input: SystemsApiAddressRequest): Syste
     subjectId: `${tool.id}:address:${input.kind}`,
     status: decision.status,
     reason: decision.reason,
-    metadata: decision.metadata,
+    ...(decision.metadata !== undefined ? { metadata: decision.metadata } : {}),
   });
 
   const publicAddress = buildPublicAddress(input);
-  const record = createAddressRecord(input, publicAddress, decision.status === "approved" ? "active" : "requested");
+  const record = createAddressRecord(
+    input,
+    publicAddress,
+    decision.status === "approved" ? "active" : "requested",
+  );
   upsertAddressRecord(record);
 
   if (decision.status === "approved") {
@@ -410,7 +489,11 @@ export function requestSystemsApiAddress(input: SystemsApiAddressRequest): Syste
       ...current,
       exposed: true,
       exposure: "public",
-      publicUrl: input.kind === "website" ? publicAddress : current.publicUrl,
+      ...(input.kind === "website"
+        ? { publicUrl: publicAddress }
+        : current.publicUrl !== undefined
+          ? { publicUrl: current.publicUrl }
+          : {}),
       updatedAt: now(),
     }));
   }
@@ -427,36 +510,91 @@ export function requestSystemsApiAddress(input: SystemsApiAddressRequest): Syste
 
     const existingExposure = getExposure(tool.id);
     const exposure = existingExposure
-      ? transitionExposureRecord(existingExposure, decision.status === "approved" ? "active" : decision.status === "quarantined" ? "quarantined" : "denied", publicAddress, record.requestedAt)
-      : createExposureRecord({ toolId: tool.id, desiredHost: input.desiredHost }, publicAddress, decision.status === "approved" ? "active" : decision.status === "quarantined" ? "quarantined" : "denied", record.requestedAt);
+      ? transitionExposureRecord(
+          existingExposure,
+          decision.status === "approved"
+            ? "active"
+            : decision.status === "quarantined"
+              ? "quarantined"
+              : "denied",
+          publicAddress,
+          record.requestedAt,
+        )
+      : createExposureRecord(
+          {
+            toolId: tool.id,
+            ...(input.desiredHost !== undefined ? { desiredHost: input.desiredHost } : {}),
+          },
+          publicAddress,
+          decision.status === "approved"
+            ? "active"
+            : decision.status === "quarantined"
+              ? "quarantined"
+              : "denied",
+          record.requestedAt,
+        );
     upsertExposureRecord(exposure);
 
-    if (decision.status === "approved") pushHistory(tool.id, "public-url-issued", `Issued public URL for ${tool.name}`, record.requestedAt);
-    pushHistory(tool.id, "exposure-requested", `Requested exposure for ${tool.name}`, exposure.requestedAt);
-    if (decision.status === "approved") pushHistory(tool.id, "exposure-activated", `Activated exposure for ${tool.name}`, exposure.activatedAt ?? exposure.updatedAt);
+    if (decision.status === "approved")
+      pushHistory(
+        tool.id,
+        "public-url-issued",
+        `Issued public URL for ${tool.name}`,
+        record.requestedAt,
+      );
+    pushHistory(
+      tool.id,
+      "exposure-requested",
+      `Requested exposure for ${tool.name}`,
+      exposure.requestedAt,
+    );
+    if (decision.status === "approved")
+      pushHistory(
+        tool.id,
+        "exposure-activated",
+        `Activated exposure for ${tool.name}`,
+        exposure.activatedAt ?? exposure.updatedAt,
+      );
   }
 
   recordEvent({
     kind: "audit",
-    level: decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn",
+    level:
+      decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn",
     source: "systems-api",
     subjectId: tool.id,
     message: `Address request ${decision.status} for ${tool.name}`,
     timestamp: record.requestedAt,
   });
-  pushHistory(tool.id, "address-issued", `Issued ${input.kind} address ${publicAddress}`, record.requestedAt);
+  pushHistory(
+    tool.id,
+    "address-issued",
+    `Issued ${input.kind} address ${publicAddress}`,
+    record.requestedAt,
+  );
   persist();
   return record;
 }
 
-export function revokeSystemsApiAddress(input: { toolId: string; kind?: SystemsApiAddressKind }): readonly SystemsApiAddress[] {
-  const matches = registry.addresses.filter((item) => item.toolId === input.toolId && (input.kind === undefined || item.kind === input.kind));
+export function revokeSystemsApiAddress(input: {
+  toolId: string;
+  kind?: SystemsApiAddressKind;
+}): readonly SystemsApiAddress[] {
+  const matches = registry.addresses.filter(
+    (item) =>
+      item.toolId === input.toolId && (input.kind === undefined || item.kind === input.kind),
+  );
   if (!matches.length) return [];
 
   const revoked = matches.map((address) => {
     const next = revokeAddressRecord(address);
     upsertAddressRecord(next);
-    pushHistory(input.toolId, "address-revoked", `Revoked ${next.kind} address ${next.publicAddress}`, next.revokedAt ?? next.updatedAt);
+    pushHistory(
+      input.toolId,
+      "address-revoked",
+      `Revoked ${next.kind} address ${next.publicAddress}`,
+      next.revokedAt ?? next.updatedAt,
+    );
     return next;
   });
 
@@ -470,7 +608,6 @@ export function revokeSystemsApiAddress(input: { toolId: string; kind?: SystemsA
       ...current,
       exposed: false,
       exposure: "private",
-      publicUrl: undefined,
       updatedAt: now(),
     }));
   }
@@ -487,7 +624,7 @@ export function requestExposure(input: SystemsApiExposureRequest): SystemsApiExp
     scope: "exposure",
     tool,
     subjectId: `${tool.id}:exposure`,
-    desiredHost: input.desiredHost,
+    ...(input.desiredHost !== undefined ? { desiredHost: input.desiredHost } : {}),
   });
   guardianService.recordGuardianDecision({
     toolId: tool.id,
@@ -495,12 +632,27 @@ export function requestExposure(input: SystemsApiExposureRequest): SystemsApiExp
     subjectId: `${tool.id}:exposure`,
     status: decision.status,
     reason: decision.reason,
-    metadata: decision.metadata,
+    ...(decision.metadata !== undefined ? { metadata: decision.metadata } : {}),
   });
 
   const publicUrl = buildPublicUrl(tool.id, input.desiredHost);
-  const requested = createExposureRecord({ toolId: tool.id, desiredHost: input.desiredHost }, publicUrl, "requested");
-  const record = transitionExposureRecord(requested, decision.status === "approved" ? "active" : decision.status === "quarantined" ? "quarantined" : "denied", publicUrl);
+  const requested = createExposureRecord(
+    {
+      toolId: tool.id,
+      ...(input.desiredHost !== undefined ? { desiredHost: input.desiredHost } : {}),
+    },
+    publicUrl,
+    "requested",
+  );
+  const record = transitionExposureRecord(
+    requested,
+    decision.status === "approved"
+      ? "active"
+      : decision.status === "quarantined"
+        ? "quarantined"
+        : "denied",
+    publicUrl,
+  );
   upsertExposureRecord(record);
 
   if (decision.status === "approved") {
@@ -513,13 +665,24 @@ export function requestExposure(input: SystemsApiExposureRequest): SystemsApiExp
     }));
   }
 
-  pushHistory(tool.id, "exposure-requested", `Requested exposure for ${tool.name}`, record.requestedAt);
+  pushHistory(
+    tool.id,
+    "exposure-requested",
+    `Requested exposure for ${tool.name}`,
+    record.requestedAt,
+  );
   if (decision.status === "approved") {
-    pushHistory(tool.id, "exposure-activated", `Activated exposure for ${tool.name}`, record.activatedAt ?? record.updatedAt);
+    pushHistory(
+      tool.id,
+      "exposure-activated",
+      `Activated exposure for ${tool.name}`,
+      record.activatedAt ?? record.updatedAt,
+    );
   }
   recordEvent({
     kind: "audit",
-    level: decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn",
+    level:
+      decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn",
     source: "systems-api",
     subjectId: tool.id,
     message: `Exposure ${decision.status} for ${tool.name}`,
@@ -537,7 +700,7 @@ export function requestPublicUrl(input: SystemsApiPublicUrlRequest): SystemsApiP
     toolId: tool.id,
     kind: "website",
     subject: input.desiredHost?.replace(/^https?:\/\//, "") || tool.id,
-    desiredHost: input.desiredHost,
+    ...(input.desiredHost !== undefined ? { desiredHost: input.desiredHost } : {}),
   });
   if (!requestedAddress) return null;
 
@@ -557,7 +720,11 @@ export function listAddresses(): readonly SystemsApiAddress[] {
 }
 
 export function getAddress(toolId: string, kind?: SystemsApiAddressKind): SystemsApiAddress | null {
-  return registry.addresses.find((item) => item.toolId === toolId && (kind === undefined || item.kind === kind)) ?? null;
+  return (
+    registry.addresses.find(
+      (item) => item.toolId === toolId && (kind === undefined || item.kind === kind),
+    ) ?? null
+  );
 }
 
 export function listExposures(): readonly SystemsApiExposureRecord[] {
@@ -578,33 +745,50 @@ export function revokeSystemsApiExposure(toolId: string): SystemsApiExposureReco
 
   const publicUrlIndex = registry.publicUrls.findIndex((item) => item.toolId === toolId);
   if (publicUrlIndex >= 0) {
-    registry.publicUrls[publicUrlIndex] = {
-      ...registry.publicUrls[publicUrlIndex],
-      status: "revoked",
-    };
+    const existingPublicUrl = registry.publicUrls[publicUrlIndex];
+    if (existingPublicUrl) {
+      registry.publicUrls[publicUrlIndex] = {
+        ...existingPublicUrl,
+        status: "revoked",
+      };
+    }
   }
 
   for (const address of registry.addresses.filter((item) => item.toolId === toolId)) {
     const revokedAddress = revokeAddressRecord(address);
     upsertAddressRecord(revokedAddress);
-    pushHistory(toolId, "address-revoked", `Revoked ${revokedAddress.kind} address ${revokedAddress.publicAddress}`, revokedAddress.revokedAt ?? revokedAddress.updatedAt);
+    pushHistory(
+      toolId,
+      "address-revoked",
+      `Revoked ${revokedAddress.kind} address ${revokedAddress.publicAddress}`,
+      revokedAddress.revokedAt ?? revokedAddress.updatedAt,
+    );
   }
 
   for (const domain of registry.domains.filter((item) => item.toolId === toolId)) {
     const revokedDomain = revokeDomainRecord(domain);
     upsertDomainRecord(revokedDomain);
-    pushHistory(toolId, "domain-revoked", `Revoked ${revokedDomain.domain}`, revokedDomain.revokedAt ?? revokedDomain.updatedAt);
+    pushHistory(
+      toolId,
+      "domain-revoked",
+      `Revoked ${revokedDomain.domain}`,
+      revokedDomain.revokedAt ?? revokedDomain.updatedAt,
+    );
   }
 
   updateToolRecord(toolId, (current) => ({
     ...current,
     exposed: false,
     exposure: "private",
-    publicUrl: undefined,
     updatedAt: now(),
   }));
 
-  pushHistory(toolId, "exposure-revoked", `Revoked exposure for ${tool?.name ?? toolId}`, revoked.revokedAt ?? revoked.updatedAt);
+  pushHistory(
+    toolId,
+    "exposure-revoked",
+    `Revoked exposure for ${tool?.name ?? toolId}`,
+    revoked.revokedAt ?? revoked.updatedAt,
+  );
   persist();
   return revoked;
 }
@@ -617,7 +801,9 @@ export function getDomainBinding(domain: string): SystemsApiDomainBinding | null
   return registry.domains.find((item) => item.domain === domain) ?? null;
 }
 
-export function requestDomainBinding(input: SystemsApiDomainBindingRequest): SystemsApiDomainBinding | null {
+export function requestDomainBinding(
+  input: SystemsApiDomainBindingRequest,
+): SystemsApiDomainBinding | null {
   const publicUrl = getPublicUrl(input.toolId);
   if (!publicUrl || publicUrl.status !== "active") return null;
   const tool = getTool(input.toolId);
@@ -633,19 +819,46 @@ export function requestDomainBinding(input: SystemsApiDomainBindingRequest): Sys
     subjectId: `${input.toolId}:domain:${input.domain}`,
     status: decision.status,
     reason: decision.reason,
-    metadata: decision.metadata,
+    ...(decision.metadata !== undefined ? { metadata: decision.metadata } : {}),
   });
 
   const existing = getDomainBinding(input.domain);
-  const binding = createDomainBinding({ toolId: input.toolId, domain: input.domain, desiredHost: input.desiredHost }, publicUrl.url, decision.status === "approved" ? existing?.status ?? "pending" : decision.status === "quarantined" ? "quarantined" : "denied");
+  const binding = createDomainBinding(
+    {
+      toolId: input.toolId,
+      domain: input.domain,
+      ...(input.desiredHost !== undefined ? { desiredHost: input.desiredHost } : {}),
+    },
+    publicUrl.url,
+    decision.status === "approved"
+      ? (existing?.status ?? "pending")
+      : decision.status === "quarantined"
+        ? "quarantined"
+        : "denied",
+  );
   upsertDomainRecord(binding);
-  pushHistory(input.toolId, "domain-bound", `Bound ${input.domain} to ${input.toolId}`, binding.requestedAt);
-  recordEvent({ kind: "audit", level: decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn", source: "systems-api", subjectId: input.toolId, message: `Domain ${decision.status} for ${input.domain}`, timestamp: binding.updatedAt });
+  pushHistory(
+    input.toolId,
+    "domain-bound",
+    `Bound ${input.domain} to ${input.toolId}`,
+    binding.requestedAt,
+  );
+  recordEvent({
+    kind: "audit",
+    level:
+      decision.status === "approved" ? "info" : decision.status === "denied" ? "error" : "warn",
+    source: "systems-api",
+    subjectId: input.toolId,
+    message: `Domain ${decision.status} for ${input.domain}`,
+    timestamp: binding.updatedAt,
+  });
   persist();
   return binding;
 }
 
-export function getDomainVerificationChallenge(domain: string): SystemsApiDomainVerificationChallenge | null {
+export function getDomainVerificationChallenge(
+  domain: string,
+): SystemsApiDomainVerificationChallenge | null {
   const binding = getDomainBinding(domain);
   if (!binding) return null;
   return buildDomainVerificationChallenge(binding);
@@ -657,7 +870,12 @@ export function verifyDomainBinding(domain: string, token: string): SystemsApiDo
   const verified = verifyDomainRecord(existing, token);
   if (!verified) return null;
   upsertDomainRecord(verified);
-  pushHistory(verified.toolId, "domain-verified", `Verified ${domain}`, verified.verifiedAt ?? verified.updatedAt);
+  pushHistory(
+    verified.toolId,
+    "domain-verified",
+    `Verified ${domain}`,
+    verified.verifiedAt ?? verified.updatedAt,
+  );
   persist();
   return verified;
 }
@@ -667,7 +885,12 @@ export function revokeDomainBinding(domain: string): SystemsApiDomainBinding | n
   if (!existing) return null;
   const revoked = revokeDomainRecord(existing);
   upsertDomainRecord(revoked);
-  pushHistory(revoked.toolId, "domain-revoked", `Revoked ${domain}`, revoked.revokedAt ?? revoked.updatedAt);
+  pushHistory(
+    revoked.toolId,
+    "domain-revoked",
+    `Revoked ${domain}`,
+    revoked.revokedAt ?? revoked.updatedAt,
+  );
   persist();
   return revoked;
 }
@@ -679,7 +902,9 @@ export function describeStatus(): SystemsApiStatus {
   const healthyToolCount = registry.tools.filter((tool) => tool.health === "healthy").length;
   const activeExposureCount = registry.exposures.filter((item) => item.status === "active").length;
   const verifiedDomainCount = registry.domains.filter((item) => item.status === "verified").length;
-  const claimedSecuredTools = registry.tools.filter((tool) => tool.phantomSecurityProfile?.claimedSecured);
+  const claimedSecuredTools = registry.tools.filter(
+    (tool) => tool.phantomSecurityProfile?.claimedSecured,
+  );
   const integrationFailures = claimedSecuredTools.flatMap((tool) => {
     const profile = tool.phantomSecurityProfile;
     if (!profile) return [];
@@ -735,7 +960,10 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
   const seen = new Set<string>();
 
   for (const address of registry.addresses.filter((a) => a.status === "active")) {
-    const guardianDecision = guardianService.getGuardianDecision("exposure", `${address.toolId}:address:${address.kind}`);
+    const guardianDecision = guardianService.getGuardianDecision(
+      "exposure",
+      `${address.toolId}:address:${address.kind}`,
+    );
     if (guardianDecision && BLOCKED.includes(guardianDecision.status)) continue;
     const tool = registry.tools.find((t) => t.id === address.toolId);
     if (!tool?.upstreamUrl) continue;
@@ -755,7 +983,10 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
   }
 
   for (const exposure of registry.exposures.filter((e) => e.status === "active")) {
-    const guardianDecision = guardianService.getGuardianDecision("exposure", `${exposure.toolId}:exposure`);
+    const guardianDecision = guardianService.getGuardianDecision(
+      "exposure",
+      `${exposure.toolId}:exposure`,
+    );
     if (guardianDecision && BLOCKED.includes(guardianDecision.status)) continue;
     const tool = registry.tools.find((t) => t.id === exposure.toolId);
     if (!tool?.upstreamUrl) continue;
@@ -775,7 +1006,10 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
   }
 
   for (const binding of registry.domains.filter((d) => d.status === "verified")) {
-    const guardianDecision = guardianService.getGuardianDecision("domain", `${binding.toolId}:domain:${binding.domain}`);
+    const guardianDecision = guardianService.getGuardianDecision(
+      "domain",
+      `${binding.toolId}:domain:${binding.domain}`,
+    );
     if (guardianDecision && BLOCKED.includes(guardianDecision.status)) continue;
     const tool = registry.tools.find((t) => t.id === binding.toolId);
     if (!tool?.upstreamUrl) continue;

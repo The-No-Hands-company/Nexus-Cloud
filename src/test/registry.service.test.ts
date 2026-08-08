@@ -29,8 +29,17 @@ describe("Systems API registry/service behavior", () => {
       expect(revoked?.status).toBe("revoked");
       expect(systemsApiService.getSystemsApiExposure("tool-gamma")?.status).toBe("revoked");
       expect(systemsApiService.listSystemsApiTools()[0]?.exposed).toBe(false);
-      expect(systemsApiService.listSystemsApiToolHistory("tool-gamma").map((entry: { action: string }) => entry.action)).toEqual(
-        expect.arrayContaining(["registered", "exposure-requested", "exposure-activated", "exposure-revoked"]),
+      expect(
+        systemsApiService
+          .listSystemsApiToolHistory("tool-gamma")
+          .map((entry: { action: string }) => entry.action),
+      ).toEqual(
+        expect.arrayContaining([
+          "registered",
+          "exposure-requested",
+          "exposure-activated",
+          "exposure-revoked",
+        ]),
       );
     } finally {
       harness.cleanup();
@@ -75,7 +84,8 @@ describe("Systems API registry/service behavior", () => {
       expect(binding?.canonicalUrl).toBe("https://tool-delta.nexus.local");
       expect(binding?.publicUrl).toBe("https://public.delta.example.com");
 
-      const bindingAfterPublicUrl = systemsApiService.getSystemsApiDomainBinding("delta.example.com");
+      const bindingAfterPublicUrl =
+        systemsApiService.getSystemsApiDomainBinding("delta.example.com");
       expect(bindingAfterPublicUrl?.publicUrl).toBe("https://public.delta.example.com");
       expect(bindingAfterPublicUrl?.status).toBe("pending");
 
@@ -83,10 +93,24 @@ describe("Systems API registry/service behavior", () => {
       expect(revokedExposure?.status).toBe("revoked");
       expect(systemsApiService.getSystemsApiExposure("tool-delta")?.status).toBe("revoked");
       expect(systemsApiService.listSystemsApiPublicUrls()[0]?.status).toBe("revoked");
-      expect(systemsApiService.getSystemsApiDomainBinding("delta.example.com")?.status).toBe("revoked");
+      expect(systemsApiService.getSystemsApiDomainBinding("delta.example.com")?.status).toBe(
+        "revoked",
+      );
       expect(systemsApiService.listSystemsApiTools()[0]?.exposed).toBe(false);
-      expect(systemsApiService.listSystemsApiToolHistory("tool-delta").map((entry: { action: string }) => entry.action)).toEqual(
-        expect.arrayContaining(["registered", "public-url-issued", "exposure-requested", "exposure-activated", "domain-bound", "exposure-revoked", "domain-revoked"]),
+      expect(
+        systemsApiService
+          .listSystemsApiToolHistory("tool-delta")
+          .map((entry: { action: string }) => entry.action),
+      ).toEqual(
+        expect.arrayContaining([
+          "registered",
+          "public-url-issued",
+          "exposure-requested",
+          "exposure-activated",
+          "domain-bound",
+          "exposure-revoked",
+          "domain-revoked",
+        ]),
       );
     } finally {
       harness.cleanup();
@@ -108,20 +132,29 @@ describe("Systems API registry/service behavior", () => {
         capabilities: ["exposure.lifecycle"],
       });
 
-      const response = await handleRequest(new Request("http://localhost/api/v1/exposures", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ toolId: "tool-epsilon", desiredHost: "epsilon.example.com" }),
-      }));
+      const response = await handleRequest(
+        new Request("http://localhost/api/v1/exposures", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ toolId: "tool-epsilon", desiredHost: "epsilon.example.com" }),
+        }),
+      );
 
       expect(response.status).toBe(201);
       const body = await response.json();
       expect(body.exposure.target.status).toBe("quarantined");
 
-      const decisionsResponse = await handleRequest(new Request("http://localhost/api/v1/guardian/decisions", { method: "GET" }));
+      const decisionsResponse = await handleRequest(
+        new Request("http://localhost/api/v1/guardian/decisions", { method: "GET" }),
+      );
       expect(decisionsResponse.status).toBe(200);
       const decisionsBody = await decisionsResponse.json();
-      expect(decisionsBody.decisions.some((decision: { toolId: string; status: string }) => decision.toolId === "tool-epsilon" && decision.status === "quarantined")).toBe(true);
+      expect(
+        decisionsBody.decisions.some(
+          (decision: { toolId: string; status: string }) =>
+            decision.toolId === "tool-epsilon" && decision.status === "quarantined",
+        ),
+      ).toBe(true);
     } finally {
       harness.cleanup();
     }
@@ -161,7 +194,9 @@ describe("Systems API registry/service behavior", () => {
       expect(status.failedIntegrationCount).toBe(1);
       expect(status.phantomSecuredClaimedCount).toBe(1);
       expect(status.phantomSecuredCompliantCount).toBe(0);
-      expect(status.integrationFailures.some((failure) => failure.toolId === "tool-zeta")).toBe(true);
+      expect(status.integrationFailures.some((failure) => failure.toolId === "tool-zeta")).toBe(
+        true,
+      );
       expect(status.integrationFailures[0]?.reason).toContain("missing zkProofSystem metadata");
     } finally {
       harness.cleanup();

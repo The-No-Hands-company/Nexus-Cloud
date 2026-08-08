@@ -8,7 +8,9 @@ import type {
   SystemsApiTool,
 } from "../systems-api";
 
-export type SystemsApiExposureTargetStatus = SystemsApiExposureStatus | SystemsApiDomainBindingStatus;
+export type SystemsApiExposureTargetStatus =
+  | SystemsApiExposureStatus
+  | SystemsApiDomainBindingStatus;
 
 export type SystemsApiExposureTargetDTO = {
   toolId: string;
@@ -66,7 +68,9 @@ function exposureExpiresAt(requestedAt: string): string {
   return new Date(timestamp + 1000 * 60 * 60 * 24 * 30).toISOString();
 }
 
-export function toSystemsApiExposureTargetDTO(record: SystemsApiExposureRecord): SystemsApiExposureTargetDTO {
+export function toSystemsApiExposureTargetDTO(
+  record: SystemsApiExposureRecord,
+): SystemsApiExposureTargetDTO {
   return {
     toolId: record.toolId,
     publicUrl: record.publicUrl,
@@ -79,7 +83,9 @@ export function toSystemsApiExposureTargetDTO(record: SystemsApiExposureRecord):
   };
 }
 
-export function toSystemsApiDomainTargetDTO(binding: SystemsApiDomainBinding): SystemsApiExposureTargetDTO {
+export function toSystemsApiDomainTargetDTO(
+  binding: SystemsApiDomainBinding,
+): SystemsApiExposureTargetDTO {
   return {
     toolId: binding.toolId,
     publicUrl: binding.publicUrl,
@@ -92,19 +98,27 @@ export function toSystemsApiDomainTargetDTO(binding: SystemsApiDomainBinding): S
   };
 }
 
-export function toSystemsApiExposureResourceDTO(record: SystemsApiExposureRecord): SystemsApiExposureResourceDTO {
+export function toSystemsApiExposureResourceDTO(
+  record: SystemsApiExposureRecord,
+): SystemsApiExposureResourceDTO {
   return { target: toSystemsApiExposureTargetDTO(record) };
 }
 
-export function toSystemsApiDomainResourceDTO(binding: SystemsApiDomainBinding): SystemsApiExposureResourceDTO {
+export function toSystemsApiDomainResourceDTO(
+  binding: SystemsApiDomainBinding,
+): SystemsApiExposureResourceDTO {
   return { target: toSystemsApiDomainTargetDTO(binding) };
 }
 
-export function toSystemsApiExposureResourcesResponseDTO(exposures: readonly SystemsApiExposureRecord[]): SystemsApiExposureResourcesResponseDTO {
+export function toSystemsApiExposureResourcesResponseDTO(
+  exposures: readonly SystemsApiExposureRecord[],
+): SystemsApiExposureResourcesResponseDTO {
   return { exposures: exposures.map(toSystemsApiExposureResourceDTO) };
 }
 
-export function toSystemsApiDomainResourcesResponseDTO(domains: readonly SystemsApiDomainBinding[]): SystemsApiDomainsResponseDTO {
+export function toSystemsApiDomainResourcesResponseDTO(
+  domains: readonly SystemsApiDomainBinding[],
+): SystemsApiDomainsResponseDTO {
   return { domains: domains.map(toSystemsApiDomainResourceDTO) };
 }
 
@@ -121,8 +135,24 @@ export function toSystemsApiExposureStatusResponseDTO(
     total: exposureResources.length + domainResources.length,
     active: exposureResources.filter((item) => item.target.status === "active").length,
     verified: domainResources.filter((item) => item.target.status === "verified").length,
-    pending: exposureResources.filter((item) => item.target.status === "requested" || item.target.status === "suspended" || item.target.status === "quarantined" || item.target.status === "denied" || item.target.status === "pending").length + domainResources.filter((item) => item.target.status === "pending" || item.target.status === "quarantined" || item.target.status === "denied").length,
-    revoked: exposureResources.filter((item) => item.target.status === "revoked").length + domainResources.filter((item) => item.target.status === "revoked").length,
+    pending:
+      exposureResources.filter(
+        (item) =>
+          item.target.status === "requested" ||
+          item.target.status === "suspended" ||
+          item.target.status === "quarantined" ||
+          item.target.status === "denied" ||
+          item.target.status === "pending",
+      ).length +
+      domainResources.filter(
+        (item) =>
+          item.target.status === "pending" ||
+          item.target.status === "quarantined" ||
+          item.target.status === "denied",
+      ).length,
+    revoked:
+      exposureResources.filter((item) => item.target.status === "revoked").length +
+      domainResources.filter((item) => item.target.status === "revoked").length,
   };
 
   return {

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { mutateState, state } from "../state";
-import { recordEvent, upsertHealthCheck } from "../observability";
 import type { WorkloadSpec } from "../control-plane";
+import { recordEvent, upsertHealthCheck } from "../observability";
+import { mutateState, state } from "../state";
 import type { DataPlaneUnit, StorageMount } from "./index";
 
 export type ContainerRuntimeProvider = "docker" | "podman";
@@ -69,7 +69,12 @@ function buildMountArgs(mounts: StorageMount[]): string[] {
   return args;
 }
 
-function createUnit(workload: WorkloadSpec, nodeId: string, stateName: DataPlaneUnit["state"], partial?: Partial<DataPlaneUnit>): DataPlaneUnit {
+function createUnit(
+  workload: WorkloadSpec,
+  nodeId: string,
+  stateName: DataPlaneUnit["state"],
+  partial?: Partial<DataPlaneUnit>,
+): DataPlaneUnit {
   return {
     id: `unit_${crypto.randomUUID()}`,
     kind: workload.runtime,
@@ -108,10 +113,15 @@ export function listRuntimeUnits(): readonly DataPlaneUnit[] {
   return state.units;
 }
 
-export function runContainerWorkload(workload: WorkloadSpec, nodeId: string): RuntimeExecutionResult {
+export function runContainerWorkload(
+  workload: WorkloadSpec,
+  nodeId: string,
+): RuntimeExecutionResult {
   const provider = findAvailableContainerProvider();
   if (!provider) {
-    const failed = saveUnit(createUnit(workload, nodeId, "failed", { lastError: "No container runtime available" }));
+    const failed = saveUnit(
+      createUnit(workload, nodeId, "failed", { lastError: "No container runtime available" }),
+    );
     recordEvent({
       kind: "audit",
       level: "error",
@@ -120,7 +130,11 @@ export function runContainerWorkload(workload: WorkloadSpec, nodeId: string): Ru
       message: `Failed to start workload ${workload.id}: no container runtime available`,
       timestamp: failed.updatedAt ?? now(),
     });
-    return { ok: false, unit: failed, error: failed.lastError };
+    return {
+      ok: false,
+      unit: failed,
+      ...(failed.lastError !== undefined ? { error: failed.lastError } : {}),
+    };
   }
 
   const name = buildContainerName(workload.id);
@@ -140,12 +154,14 @@ export function runContainerWorkload(workload: WorkloadSpec, nodeId: string): Ru
 
   const result = commandRunner(provider, args, { encoding: "utf8" });
   if (result.status !== 0) {
-    const failed = saveUnit(createUnit(workload, nodeId, "failed", {
-      provider,
-      runtimeId: name,
-      lastError: (result.stderr || result.stdout || "Container runtime failed").trim(),
-      mounts,
-    }));
+    const failed = saveUnit(
+      createUnit(workload, nodeId, "failed", {
+        provider,
+        runtimeId: name,
+        lastError: (result.stderr || result.stdout || "Container runtime failed").trim(),
+        mounts,
+      }),
+    );
     recordEvent({
       kind: "audit",
       level: "error",
@@ -155,14 +171,21 @@ export function runContainerWorkload(workload: WorkloadSpec, nodeId: string): Ru
       timestamp: failed.updatedAt ?? now(),
       metadata: { provider },
     });
-    return { ok: false, unit: failed, provider, error: failed.lastError };
+    return {
+      ok: false,
+      unit: failed,
+      provider,
+      ...(failed.lastError !== undefined ? { error: failed.lastError } : {}),
+    };
   }
 
-  const running = saveUnit(createUnit(workload, nodeId, "running", {
-    provider,
-    runtimeId: (result.stdout || "").trim() || name,
-    mounts,
-  }));
+  const running = saveUnit(
+    createUnit(workload, nodeId, "running", {
+      provider,
+      runtimeId: (result.stdout || "").trim() || name,
+      mounts,
+    }),
+  );
   recordEvent({
     kind: "audit",
     level: "info",
@@ -180,14 +203,24 @@ export function runWorkload(workloadId: string): RuntimeExecutionResult | null {
   const node = state.nodes.find((item) => item.status === "ready");
   if (!workload || !node) return null;
   if (workload.runtime !== "container") {
-    const failed = saveUnit(createUnit(workload, node.id, "failed", { lastError: `Unsupported runtime ${workload.runtime}` }));
-    return { ok: false, unit: failed, error: failed.lastError };
+    const failed = saveUnit(
+      createUnit(workload, node.id, "failed", {
+        lastError: `Unsupported runtime ${workload.runtime}`,
+      }),
+    );
+    return {
+      ok: false,
+      unit: failed,
+      ...(failed.lastError !== undefined ? { error: failed.lastError } : {}),
+    };
   }
   return runContainerWorkload(workload, node.id);
 }
 
 export function stopWorkload(workloadId: string): DataPlaneUnit[] {
-  const units = state.units.filter((item) => item.workloadId === workloadId && item.state === "running");
+  const units = state.units.filter(
+    (item) => item.workloadId === workloadId && item.state === "running",
+  );
   const stopped: DataPlaneUnit[] = [];
   for (const unit of units) {
     if (unit.provider && unit.runtimeId) {
