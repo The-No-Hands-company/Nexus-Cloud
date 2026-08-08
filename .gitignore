@@ -1,5 +1,8 @@
 *
 !/.gitignore
+!/.githooks/
+!/.githooks/**
+!/.secrets.baseline
 !/AGENTS.md
 !/README.md
 !/package.json
