@@ -42,12 +42,13 @@ import {
   systemsApiDeployIntegration,
 } from "../systems-api/deploy";
 import {
-  authenticateUser,
-  createSession,
-  listUsers,
-  registerUser,
-  validateSession,
-} from "../users";
+  NexusAuthUnavailable,
+  checkSession,
+  listUsers as listNexusAuthUsers,
+  login as nexusAuthLogin,
+  logout as nexusAuthLogout,
+  nexusAuthUrl,
+} from "../nexus-auth";
 import {
   type GuardianDecisionResponse,
   type GuardianDecisionsResponse,
@@ -112,7 +113,6 @@ import {
   toSystemsApiExposureResourcesResponseDTO,
   toSystemsApiExposureStatusResponseDTO,
 } from "./exposure-dto";
-import { databaseEnabled } from "../db";
 import { apiRoutes } from "./index";
 
 function corsHeaders(): Record<string, string> {
@@ -123,8 +123,35 @@ function corsHeaders(): Record<string, string> {
   };
 }
 
-function json(data: unknown, status = 200): Response {
-  return Response.json(data, { status, headers: corsHeaders() });
+function json(data: unknown, status = 200, extraHeaders?: Record<string, string>): Response {
+  return Response.json(data, { status, headers: { ...corsHeaders(), ...extraHeaders } });
+}
+
+const SESSION_COOKIE = "nexus_session";
+
+/**
+ * The caller's credential, however it arrived. Browsers cannot set an
+ * Authorization header on a navigation, so the shared cookie is what actually
+ * turns up from the dashboard and from other apps on the parent domain.
+ */
+function callerCredential(request: Request): string | null {
+  const header = request.headers.get("authorization");
+  if (header?.startsWith("Bearer ")) {
+    const bearer = header.slice(7).trim();
+    if (bearer) return bearer;
+  }
+  const cookie = request.headers.get("cookie");
+  if (cookie) {
+    for (const part of cookie.split(";")) {
+      const eq = part.indexOf("=");
+      if (eq === -1) continue;
+      if (part.slice(0, eq).trim() === SESSION_COOKIE) {
+        const value = decodeURIComponent(part.slice(eq + 1).trim());
+        if (value) return value;
+      }
+    }
+  }
+  return null;
 }
 
 function jsonWithConditionalEtag(request: Request, data: unknown, status = 200): Response {
@@ -192,27 +219,6 @@ function notFound(): Response {
 }
 
 /**
- * Accounts live in Postgres, which is optional — without DATABASE_URL the pool
- * is null and every user/session query dereferences it. That crashed the whole
- * process: a single anonymous GET /api/v1/users took the control plane down,
- * routing and all, because the throw escaped the request and killed the runtime.
- *
- * Answer 503 instead, and say which variable is missing. Callers get a real
- * status, and an unconfigured account system can no longer be a denial of
- * service against everything else Cloud serves.
- */
-function databaseRequired(): Response | null {
-  if (databaseEnabled()) return null;
-  return json(
-    {
-      error: "Account features unavailable: Cloud has no database configured",
-      hint: "Set DATABASE_URL and apply src/db/migrations/0001_create_auth_tables.sql",
-    },
-    503,
-  );
-}
-
-/**
  * GET endpoints that disclose internal topology and therefore require the API
  * key, even though they only read. `tls-ask` is intentionally absent — Caddy
  * cannot authenticate during a handshake. See the gate in `handleApiRequest`.
@@ -235,11 +241,16 @@ const TOPOLOGY_READ_PATHS: ReadonlySet<string> = new Set([
 async function callerIsAuthenticated(request: Request): Promise<boolean> {
   if (!requiresApiKey()) return true;
   if (checkApiKey(request) === null) return true;
-  const header = request.headers.get("authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
-  if (!token) return false;
-  const session = await validateSession(token);
-  return session.ok;
+  const credential = callerCredential(request);
+  if (!credential) return false;
+  try {
+    return (await checkSession(credential)) !== null;
+  } catch {
+    // Identity service down: treat as unauthenticated so topology stays
+    // redacted. Failing open here would leak upstream addresses precisely when
+    // the ecosystem is already degraded.
+    return false;
+  }
 }
 
 /**
@@ -291,22 +302,53 @@ async function handleAuthLogin(request: Request): Promise<Response> {
     return json({ error: "Invalid credentials" }, 401);
   }
 
-  const authResult = await authenticateUser(username, password);
-  if (!authResult.ok) {
-    return json({ error: authResult.error }, 401);
+  // Proxied, not verified here: Cloud holds no accounts. Relaying Set-Cookie
+  // verbatim is what makes this the ecosystem session rather than a Cloud-local
+  // one — the cookie carries Nexus-Auth's own Domain, so Deploy and Vault
+  // accept it too.
+  try {
+    const upstream = await nexusAuthLogin(username, password);
+    const headers = upstream.setCookie ? { "set-cookie": upstream.setCookie } : undefined;
+    return json(upstream.body, upstream.status, headers);
+  } catch (err) {
+    if (err instanceof NexusAuthUnavailable) {
+      return json(
+        { error: "Identity service unavailable", hint: err.message },
+        503,
+      );
+    }
+    throw err;
   }
-
-  const token = await createSession(authResult.user.id);
-  return json({ token, user: authResult.user });
 }
 
 async function handleAuthMe(request: Request): Promise<Response> {
-  const header = request.headers.get("authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) return json({ error: "Unauthorized" }, 401);
-  const sessionResult = await validateSession(token);
-  if (!sessionResult.ok) return json({ error: sessionResult.error }, 401);
-  return json({ user: sessionResult.user });
+  const credential = callerCredential(request);
+  if (!credential) return json({ error: "Unauthorized" }, 401);
+  try {
+    const user = await checkSession(credential);
+    if (!user) return json({ error: "Unauthorized" }, 401);
+    return json({ user });
+  } catch (err) {
+    if (err instanceof NexusAuthUnavailable) {
+      return json({ error: "Identity service unavailable", hint: err.message }, 503);
+    }
+    throw err;
+  }
+}
+
+async function handleAuthLogout(request: Request): Promise<Response> {
+  const credential = callerCredential(request);
+  if (!credential) return json({ error: "Unauthorized" }, 401);
+  try {
+    const upstream = await nexusAuthLogout(credential);
+    const headers = upstream.setCookie ? { "set-cookie": upstream.setCookie } : undefined;
+    return json({ success: upstream.status === 200 }, upstream.status, headers);
+  } catch (err) {
+    if (err instanceof NexusAuthUnavailable) {
+      return json({ error: "Identity service unavailable", hint: err.message }, 503);
+    }
+    throw err;
+  }
 }
 
 function handleDashboard(): Response {
@@ -1042,31 +1084,31 @@ async function handleInboundPeerAnnounce(request: Request): Promise<Response> {
   return json(result);
 }
 
-async function handleUserRegister(request: Request): Promise<Response> {
-  const body = await readJson(request);
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    typeof (body as Record<string, unknown>)["email"] !== "string" ||
-    typeof (body as Record<string, unknown>)["username"] !== "string" ||
-    typeof (body as Record<string, unknown>)["password"] !== "string"
-  ) {
-    return badRequest("Missing required fields: email, username, password");
-  }
-
-  const result = await registerUser(
-    (body as Record<string, unknown>)["email"] as string,
-    (body as Record<string, unknown>)["username"] as string,
-    (body as Record<string, unknown>)["password"] as string,
-    (body as Record<string, unknown>)["firstName"] as string | undefined,
-    (body as Record<string, unknown>)["lastName"] as string | undefined,
+async function handleUserRegister(_request: Request): Promise<Response> {
+  // Cloud does not create identities. Answering 410 rather than 404 tells an
+  // older client where accounts actually live.
+  return json(
+    {
+      error: "Account creation has moved to Nexus-Auth",
+      hint: "One account covers the whole ecosystem.",
+      register: `${nexusAuthUrl}/api/v1/auth/users`,
+    },
+    410,
   );
-  if (!result.ok) return badRequest(result.error);
-  return json({ user: result.user }, 201);
 }
 
-function handleUserList(): Response {
-  return json({ users: listUsers() });
+async function handleUserList(request: Request): Promise<Response> {
+  const credential = callerCredential(request);
+  if (!credential) return json({ error: "Unauthorized" }, 401);
+  try {
+    const upstream = await listNexusAuthUsers(credential);
+    return json(upstream.body, upstream.status);
+  } catch (err) {
+    if (err instanceof NexusAuthUnavailable) {
+      return json({ error: "Identity service unavailable", hint: err.message }, 503);
+    }
+    throw err;
+  }
 }
 
 function handleWellKnown(): Response {
@@ -1457,12 +1499,23 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     });
   }
 
-  // Authenticate all mutating requests. /api/v1/deployments and /api/v1/auth/login handle their own auth.
-  if (
-    ["POST", "PATCH", "DELETE"].includes(request.method) &&
-    pathname !== "/api/v1/deployments" &&
-    pathname !== "/api/v1/auth/login"
-  ) {
+  // Authenticate all mutating requests, except the handful that authenticate
+  // themselves:
+  //   /api/v1/deployments — carries its own deploy token
+  //   /api/v1/auth/login  — is the act of authenticating
+  //   /api/v1/auth/logout — authenticates by session, and gating it behind the
+  //                         API key made logout impossible for a signed-in user,
+  //                         leaving the session alive everywhere
+  //   /api/v1/users       — no longer creates anything; it answers 410 pointing
+  //                         at Nexus-Auth, which a caller should see rather than
+  //                         a 401 implying the endpoint still works
+  const SELF_AUTHENTICATING = new Set([
+    "/api/v1/deployments",
+    "/api/v1/auth/login",
+    "/api/v1/auth/logout",
+    "/api/v1/users",
+  ]);
+  if (["POST", "PATCH", "DELETE"].includes(request.method) && !SELF_AUTHENTICATING.has(pathname)) {
     const authErr = checkApiKey(request);
     if (authErr) return authErr;
   }
@@ -1482,9 +1535,11 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   }
 
   if (request.method === "POST" && pathname === "/api/v1/auth/login")
-    return databaseRequired() ?? handleAuthLogin(request);
+    return handleAuthLogin(request);
+  if (request.method === "POST" && pathname === "/api/v1/auth/logout")
+    return handleAuthLogout(request);
   if (request.method === "GET" && pathname === "/api/v1/auth/me")
-    return databaseRequired() ?? handleAuthMe(request);
+    return handleAuthMe(request);
   if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
     return handleDashboard();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
@@ -1535,9 +1590,9 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "POST" && pathname === "/v1/federation/peers/announce")
     return handleInboundPeerAnnounce(request);
   if (request.method === "GET" && pathname === "/api/v1/users")
-    return databaseRequired() ?? handleUserList();
+    return handleUserList(request);
   if (request.method === "POST" && pathname === "/api/v1/users")
-    return databaseRequired() ?? handleUserRegister(request);
+    return handleUserRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/tools")
     return handleSystemsTools(request, url);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
