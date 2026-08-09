@@ -181,6 +181,25 @@ function evaluatePhantomCompliance(profile: SystemsApiPhantomSecurityProfile): s
   return failures;
 }
 
+/**
+ * Cap on `registry.history`, which is rewritten to disk on every mutation and
+ * re-read on every start. It had grown to 4466 entries behind 84 tools — an
+ * 814 KB file — because nothing ever removed one; heartbeats alone append
+ * forever. Oldest entries are dropped first.
+ *
+ * Safe to bound because this is not the audit system of record: durable audit
+ * lives behind /api/v1/audit and is unaffected. This array only backs
+ * /api/v1/tools/:toolId/history, which is a recent-activity view.
+ */
+const HISTORY_LIMIT = Math.max(1, Number(process.env.NEXUS_CLOUD_TOOL_HISTORY_LIMIT || "1000"));
+
+function trimHistory(): boolean {
+  const excess = registry.history.length - HISTORY_LIMIT;
+  if (excess <= 0) return false;
+  registry.history.splice(0, excess);
+  return true;
+}
+
 function pushHistory(
   toolId: string,
   action: SystemsApiToolHistoryAction,
@@ -188,7 +207,12 @@ function pushHistory(
   at = now(),
 ): void {
   registry.history.push({ toolId, action, summary, at });
+  trimHistory();
 }
+
+// Shrink a store that is already over the cap, rather than leaving it oversized
+// until something happens to mutate it. Only writes when it actually trimmed.
+if (trimHistory()) persist();
 
 function updateToolRecord(
   toolId: string,
