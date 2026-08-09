@@ -260,7 +260,12 @@ export const apiRouteManifest = [
   {
     method: "POST",
     path: "/api/v1/dns/bootstrap",
-    description: "Bootstrap Cloudflare A records for the cloud domain",
+    description: "Bootstrap Cloudflare CNAME records (root + wildcard) to the tunnel",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/dns/custom-domain",
+    description: "Publish a custom domain as a proxied CNAME to the tunnel",
   },
   {
     method: "POST",

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { architecture } from "../architecture";
 import { type AuditFilter, queryAuditLog } from "../audit";
-import { bootstrapDns, hasCloudflareDns } from "../cloudflare-dns";
+import { bootstrapDns, hasCloudflareDns, ensureCustomDomainDns, tunnelTarget } from "../cloudflare-dns";
 import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane, dataPlaneService } from "../data-plane";
@@ -1416,30 +1416,56 @@ async function handleSubdomainProxy(request: Request, host: string): Promise<Res
 
 /**
  * POST /api/v1/dns/bootstrap
- * Idempotent: creates or updates the two mandatory A records on Cloudflare:
- *   nexus.cloud        → ip   (proxied)
- *   *.nexus.cloud      → ip   (not proxied — Caddy handles TLS)
- * Body: { ip?: string }  — falls back to SERVER_PUBLIC_IP env var.
- * Requires CF_API_TOKEN and CF_ZONE_ID to be set.
+ * Idempotent: creates or updates the node's own root and wildcard as proxied
+ * CNAMEs to the tunnel:
+ *   <cloudDomain>    → <tunnel-id>.cfargotunnel.com  (proxied)
+ *   *.<cloudDomain>  → <tunnel-id>.cfargotunnel.com  (proxied)
+ * Requires CF_API_TOKEN, CF_ZONE_ID, and NEXUS_TUNNEL_ID (or
+ * NEXUS_TUNNEL_CNAME_TARGET) to be set.
  */
-async function handleDnsBootstrap(request: Request): Promise<Response> {
+async function handleDnsBootstrap(_request: Request): Promise<Response> {
   if (!hasCloudflareDns()) {
-    return json({ error: "CF_API_TOKEN and CF_ZONE_ID are not configured" }, 501);
+    return json({ error: "CF_API_TOKEN and NEXUS_TUNNEL_ID are not configured" }, 501);
   }
-  const body = (await readJson(request)) as { ip?: string } | null;
-  const result = await bootstrapDns(body?.ip);
+  const result = await bootstrapDns();
   const ok = result.root.ok && result.wildcard.ok;
   return json({ ok, root: result.root, wildcard: result.wildcard }, ok ? 200 : 502);
 }
 
 /**
+ * POST /api/v1/dns/custom-domain
+ * Publish a custom domain (outside the *.<cloudDomain> wildcard) as a proxied
+ * CNAME to the tunnel, discovering the owning zone from the token's scope.
+ * Body: { host: string }. Idempotent. Returns 403 with outOfScope=true when the
+ * token cannot see the host's zone — the operator must add that zone to the
+ * token, or the domain owner must point their own DNS at the tunnel.
+ */
+async function handleDnsCustomDomain(request: Request): Promise<Response> {
+  const body = (await readJson(request)) as { host?: string } | null;
+  const host = body?.host?.trim().toLowerCase();
+  if (!host || !/^(?=.{1,253}$)([a-z0-9](-*[a-z0-9])*\.)+[a-z]{2,}$/.test(host)) {
+    return json({ error: "a valid 'host' is required" }, 400);
+  }
+  const result = await ensureCustomDomainDns(host);
+  const status = result.ok
+    ? 200
+    : result.outOfScope
+      ? 403
+      : result.status && result.status >= 400
+        ? result.status
+        : 502;
+  return json(result, status);
+}
+
+/**
  * GET /api/v1/dns/status
- * Reports whether Cloudflare DNS integration is configured and what SERVER_PUBLIC_IP is set to.
+ * Reports whether Cloudflare DNS integration is configured and the tunnel target
+ * every hostname is published against.
  */
 function handleDnsStatus(): Response {
   return json({
     cloudflareConfigured: hasCloudflareDns(),
-    serverIp: cloudConfig.serverIp || null,
+    tunnelTarget: tunnelTarget() || null,
     cloudDomain: cloudConfig.cloudDomain,
   });
 }
@@ -1657,6 +1683,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/dns/status") return handleDnsStatus();
   if (request.method === "POST" && pathname === "/api/v1/dns/bootstrap")
     return await handleDnsBootstrap(request);
+  if (request.method === "POST" && pathname === "/api/v1/dns/custom-domain")
+    return await handleDnsCustomDomain(request);
   if (request.method === "GET" && pathname === "/api/v1/deployments/integration")
     return handleSystemsDeployIntegration();
   if (request.method === "POST" && pathname === "/api/v1/deployments")
