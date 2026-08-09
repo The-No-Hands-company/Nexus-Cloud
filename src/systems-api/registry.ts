@@ -628,12 +628,20 @@ export function revokeSystemsApiAddress(input: {
   }
 
   if (!hasActiveAddress(input.toolId)) {
-    updateToolRecord(input.toolId, (current) => ({
-      ...current,
-      exposed: false,
-      exposure: "private",
-      updatedAt: now(),
-    }));
+    updateToolRecord(input.toolId, (current) => {
+      // Drop the tool's own publicUrl too. It is a copy of the address, and
+      // leaving it behind meant a revoked tool kept advertising a URL it no
+      // longer owns: the address, exposure and public-url records all read
+      // "revoked" while /api/v1/tools still returned https://<tool>.localhost,
+      // and the dashboard offered an Open button for it.
+      const { publicUrl: _revoked, ...rest } = current;
+      return {
+        ...rest,
+        exposed: false,
+        exposure: "private",
+        updatedAt: now(),
+      };
+    });
   }
 
   persist();

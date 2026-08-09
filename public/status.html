@@ -1596,15 +1596,24 @@ function loadView(viewId) {
 // App frame
 function openTool(tool) {
   var h = tool.health || tool.status;
-  if (!tool.upstreamUrl) { navigate('tools'); return; }
+  // publicUrl first, upstreamUrl only as a fallback. upstreamUrl is the private
+  // host:port the backend listens on — Cloud redacts it from callers it cannot
+  // identify, so in a browser it is almost always absent and this used to bounce
+  // straight back to the tools list: nothing could be opened from the dashboard
+  // at all, even though the same app answered fine on its subdomain. And when it
+  // is present it is something like http://127.0.0.1:4310, which resolves to the
+  // visitor's own machine rather than the service. publicUrl is the address a
+  // browser can actually reach, and it is never redacted.
+  var target = tool.publicUrl || tool.upstreamUrl;
+  if (!target) { navigate('tools'); return; }
   if (h && h !== 'healthy' && h !== 'degraded') {
     showOfflineModal(tool.name);
     return;
   }
   var meta = capMeta(tool.capabilities);
-  openApps.set(tool.id, { id: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
+  openApps.set(tool.id, { id: tool.id, name: tool.name, url: target, icon: meta.icon });
   renderOpenApps();
-  navigate('app-frame', { appId: tool.id, name: tool.name, url: tool.upstreamUrl, icon: meta.icon });
+  navigate('app-frame', { appId: tool.id, name: tool.name, url: target, icon: meta.icon });
 }
 
 function showOfflineModal(name) {
@@ -2129,8 +2138,8 @@ function renderInternalServicesCard(allTools) {
       return '<span class="cap-badge">' + esc(c) + '</span>';
     }).join('');
     var hbAgo = t.lastHeartbeatAt ? timeAgo(t.lastHeartbeatAt) : (t.registeredAt ? 'registered ' + timeAgo(t.registeredAt) : '\u2014');
-    var openBtn = t.upstreamUrl
-      ? '<a href="' + esc(t.upstreamUrl) + '" target="_blank" style="margin-left:auto;flex-shrink:0;font-size:11px;padding:3px 10px;border-radius:4px;background:var(--surface2);color:var(--text);text-decoration:none;border:1px solid var(--border)">Open &#x2197;</a>'
+    var openBtn = (t.publicUrl || t.upstreamUrl)
+      ? '<a href="' + esc(t.publicUrl || t.upstreamUrl) + '" target="_blank" style="margin-left:auto;flex-shrink:0;font-size:11px;padding:3px 10px;border-radius:4px;background:var(--surface2);color:var(--text);text-decoration:none;border:1px solid var(--border)">Open &#x2197;</a>'
       : '';
     return '<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 18px;' + border + '">' +
       '<div style="font-size:20px;line-height:1;margin-top:1px">' + svc.icon + '</div>' +
@@ -2252,12 +2261,12 @@ async function loadToolsView() {
       return '<tr><td><strong>' + esc(t.name) + '</strong></td>' +
         '<td>' + (caps || '<span class="cap-badge cap-default">none</span>') + '</td>' +
         '<td><span class="status-dot ' + sd + '" style="margin-right:6px"></span>' + esc(sh || 'unknown') + '</td>' +
-        '<td class="mono">' + (t.upstreamUrl ? esc(t.upstreamUrl) : '\u2014') + '</td>' +
+        '<td class="mono">' + esc(t.publicUrl || t.upstreamUrl || '\u2014') + '</td>' +
         '<td>' + (t.lastHeartbeatAt ? timeAgo(t.lastHeartbeatAt) : '\u2014') + '</td>' +
-        '<td>' + (t.upstreamUrl ? '<button class="open-app-btn" onclick=\'openTool(' + JSON.stringify(t).replace(/'/g,"&#39;") + ')\'>Open &#x2197;</button>' : '') + '</td></tr>';
+        '<td>' + ((t.publicUrl || t.upstreamUrl) ? '<button class="open-app-btn" onclick=\'openTool(' + JSON.stringify(t).replace(/'/g,"&#39;") + ')\'>Open &#x2197;</button>' : '') + '</td></tr>';
     }).join('');
     el.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Registered Tools</span><span class="card-count">' + tools.length + '</span></div>' +
-      '<table><thead><tr><th>Name</th><th>Capabilities</th><th>Status</th><th>Upstream URL</th><th>Last Seen</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      '<table><thead><tr><th>Name</th><th>Capabilities</th><th>Status</th><th>Address</th><th>Last Seen</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   } catch(err) { el.innerHTML = '<div class="error-state">Failed to load tools: ' + esc(String(err)) + '</div>'; }
 }
 
