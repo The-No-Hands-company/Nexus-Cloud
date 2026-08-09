@@ -900,4 +900,48 @@ describe("API route handlers", () => {
       process.env.NEXUS_CLOUD_API_KEY = previousKey ?? "";
     }
   });
+
+  test("storage pools do not leak credentials to anonymous callers", async () => {
+    // GET /api/v1/storage/pools answers on the public cloud subdomain and had no
+    // auth check, so it served each pool's accessKey and secretKey to anyone.
+    // A shared pool holds other people's data; federation exists to make these
+    // endpoints reachable and their credentials real.
+    // With no API key configured Cloud treats every caller as authenticated, so
+    // redaction correctly does not apply. Set one, or this test would pass
+    // against a server that leaks.
+    const previousKey = process.env.NEXUS_CLOUD_API_KEY;
+    process.env.NEXUS_CLOUD_API_KEY = "leak-check-key";  // pragma: allowlist secret — literal test value, not a credential
+    try {
+    const created = await handleRequest(
+      new Request("http://localhost/api/v1/storage/pools", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "leak-check-pool", totalCapacityGb: 10 }),
+      }),
+    );
+    expect(created.status).toBe(201);
+
+    const anonymous = await handleRequest(
+      new Request("http://localhost/api/v1/storage/pools", { method: "GET" }),
+    );
+    expect(anonymous.status).toBe(200);
+    const body = (await anonymous.json()) as {
+      pools: Array<Record<string, unknown>>;
+    };
+    const pool = body.pools.find((p) => p["name"] === "leak-check-pool");
+    expect(pool).toBeDefined();
+    expect(pool?.["accessKey"]).toBeUndefined();
+    expect(pool?.["secretKey"]).toBeUndefined();
+    expect(pool?.["endpoint"]).toBeUndefined();
+    // The non-secret fields must still be there, or this would be redacting by
+    // breaking the endpoint rather than by removing the secrets.
+    expect(pool?.["id"]).toBeDefined();
+    expect(pool?.["totalCapacityGb"]).toBe(10);
+
+    // Nothing anywhere in the anonymous payload may contain the secret.
+    expect(JSON.stringify(body)).not.toContain("minioadmin");
+    } finally {
+      process.env.NEXUS_CLOUD_API_KEY = previousKey ?? "";
+    }
+  });
 });

@@ -271,6 +271,32 @@ function redactUpstreams<T extends { upstreamUrl?: string }>(
   return tools.map(({ upstreamUrl: _dropped, ...rest }) => rest as T);
 }
 
+/**
+ * Remove pool credentials and backend addresses from storage pools bound for an
+ * anonymous caller.
+ *
+ * `GET /api/v1/storage/pools` answers on the public cloud subdomain and had no
+ * auth check at all, so it published each pool's `accessKey` and `secretKey`
+ * verbatim to anyone who asked — the whole point of a shared pool is that it
+ * holds other people's data. It is contained today only because the one pool
+ * points at 127.0.0.1 with the MinIO defaults, but federation exists precisely
+ * to make pools reachable and their credentials real, at which point this
+ * endpoint hands them out. `endpoint` goes too: it is a private address, the
+ * same disclosure redactUpstreams closes for tools.
+ *
+ * Peers that need these fields authenticate; the public dashboard does not read
+ * this endpoint at all.
+ */
+function redactPoolSecrets<T extends { accessKey?: string; secretKey?: string; endpoint?: string }>(
+  pools: readonly T[],
+  authenticated: boolean,
+): readonly T[] {
+  if (authenticated) return pools;
+  return pools.map(
+    ({ accessKey: _key, secretKey: _secret, endpoint: _endpoint, ...rest }) => rest as T,
+  );
+}
+
 function checkApiKey(request: Request): Response | null {
   if (!requiresApiKey()) return null;
   const header = request.headers.get("authorization");
@@ -1289,10 +1315,14 @@ export function handleStorageVolumeDelete(pathname: string): Response {
 
 // ── Shared Storage Pool Management ──────────────────────────────────────────────
 
-async function handleStoragePoolsList(): Promise<Response> {
+async function handleStoragePoolsList(request: Request): Promise<Response> {
+  const authenticated = await callerIsAuthenticated(request);
   const localPools = listPools();
   const federatedPools = await listFederatedPools();
-  return json({ pools: localPools, federatedPools });
+  return json({
+    pools: redactPoolSecrets(localPools, authenticated),
+    federatedPools: redactPoolSecrets(federatedPools, authenticated),
+  });
 }
 
 async function handleStoragePoolCreate(request: Request): Promise<Response> {
@@ -1462,7 +1492,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "DELETE" && pathname.startsWith("/api/v1/volumes/"))
     return handleStorageVolumeDelete(pathname);
   if (request.method === "GET" && pathname === "/api/v1/storage/pools")
-    return handleStoragePoolsList();
+    return handleStoragePoolsList(request);
   if (request.method === "POST" && pathname === "/api/v1/storage/pools")
     return handleStoragePoolCreate(request);
   if (
