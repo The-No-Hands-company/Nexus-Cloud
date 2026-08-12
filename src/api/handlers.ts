@@ -717,7 +717,8 @@ async function handleSystemsToolPatch(request: Request, toolId: string): Promise
     body.health === undefined &&
     body.capabilities === undefined &&
     body.upstreamUrl === undefined &&
-    body.phantomSecurityProfile === undefined
+    body.phantomSecurityProfile === undefined &&
+    body.requiresAuth === undefined
   ) {
     return badRequest("Empty tool metadata patch");
   }

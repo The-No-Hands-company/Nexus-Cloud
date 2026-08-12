@@ -334,6 +334,12 @@ export type SystemsApiToolPatchRequestDTO = {
   /** Update the backend URL used by the proxy routing table */
   upstreamUrl?: string;
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  /**
+   * Require an ecosystem sign-in before the proxy forwards to this tool.
+   * Only settable here, on the API-key-guarded operator patch — never from a
+   * tool's own registration, which it repeats on every restart and heartbeat.
+   */
+  requiresAuth?: boolean;
 };
 
 /** Register (or upsert) a tool with Nexus Cloud */
@@ -559,7 +565,8 @@ export function isSystemsApiToolPatchRequest(
     (value.capabilities === undefined ||
       (Array.isArray(value.capabilities) && value.capabilities.every(isString))) &&
     (value.phantomSecurityProfile === undefined ||
-      isPhantomSecurityProfile(value.phantomSecurityProfile))
+      isPhantomSecurityProfile(value.phantomSecurityProfile)) &&
+    (value.requiresAuth === undefined || typeof value.requiresAuth === "boolean")
   );
 }
 

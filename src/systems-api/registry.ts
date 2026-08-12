@@ -63,6 +63,8 @@ export type SystemsApiToolPatchInput = {
   capabilities?: readonly string[];
   upstreamUrl?: string;
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  /** Operator-only gate switch; see SystemsApiTool.requiresAuth. */
+  requiresAuth?: boolean;
 };
 
 export type SystemsApiPublicUrlRequest = {
@@ -248,6 +250,12 @@ function buildTool(
     ...(phantomSecurityProfile !== undefined ? { phantomSecurityProfile } : {}),
     ...(publicUrl !== undefined ? { publicUrl } : {}),
     ...(upstreamUrl !== undefined ? { upstreamUrl } : {}),
+    // Carried from the previous record and never read from `input`. A tool
+    // re-registers on every restart and heartbeat; if its payload could set
+    // this, an app that simply omitted the field would silently un-gate itself
+    // — the same way an omitted publicUrl once clobbered a live route. Only
+    // setToolRequiresAuth changes it.
+    ...(previous?.requiresAuth !== undefined ? { requiresAuth: previous.requiresAuth } : {}),
     ...(lastHeartbeatAt !== undefined ? { lastHeartbeatAt } : {}),
     heartbeatCount: previous?.heartbeatCount ?? 0,
     registeredAt: previous?.registeredAt ?? now(),
@@ -430,6 +438,13 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
       ? { phantomSecurityProfile: patch.phantomSecurityProfile }
       : previous.phantomSecurityProfile !== undefined
         ? { phantomSecurityProfile: previous.phantomSecurityProfile }
+        : {}),
+    // The only place this flag can change. Absent in the patch means "leave
+    // the gate as it is", not "open it".
+    ...(patch.requiresAuth !== undefined
+      ? { requiresAuth: patch.requiresAuth }
+      : previous.requiresAuth !== undefined
+        ? { requiresAuth: previous.requiresAuth }
         : {}),
     updatedAt: now(),
   };
@@ -1010,6 +1025,7 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
       kind: "website",
       securityTag: phantomSecurityTag(tool.phantomSecurityProfile),
       phantomProtectionLevel: phantomProtectionLevel(tool.phantomSecurityProfile),
+      requiresAuth: tool.requiresAuth === true,
       status: "active",
     });
   }
@@ -1033,6 +1049,7 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
       kind: "exposure",
       securityTag: phantomSecurityTag(tool.phantomSecurityProfile),
       phantomProtectionLevel: phantomProtectionLevel(tool.phantomSecurityProfile),
+      requiresAuth: tool.requiresAuth === true,
       status: "active",
     });
   }
@@ -1055,6 +1072,7 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
       kind: "custom-domain",
       securityTag: phantomSecurityTag(tool.phantomSecurityProfile),
       phantomProtectionLevel: phantomProtectionLevel(tool.phantomSecurityProfile),
+      requiresAuth: tool.requiresAuth === true,
       status: "active",
     });
   }

@@ -62,6 +62,14 @@ export type SystemsApiTool = {
   publicUrl?: string;
   /** The actual backend URL this tool is running on — used by the proxy routing table */
   upstreamUrl?: string;
+  /**
+   * Whether the proxy must require an ecosystem sign-in before forwarding to
+   * this tool. Operator-set only: deliberately NOT accepted from a tool's own
+   * registration payload, because a tool that could turn its own gate off is
+   * not gated. Absent means false — a route nobody has decided about stays
+   * reachable exactly as it is today.
+   */
+  requiresAuth?: boolean;
   lastHeartbeatAt?: string;
   heartbeatCount: number;
   registeredAt: string;
@@ -317,6 +325,8 @@ export type SystemsApiRoute = {
   kind: SystemsApiRouteKind;
   securityTag: SystemsApiRouteSecurityTag;
   phantomProtectionLevel: SystemsApiPhantomProtectionLevel;
+  /** Mirrors the tool's flag; the proxy reads this to decide whether to gate. */
+  requiresAuth: boolean;
   status: "active";
 };
 

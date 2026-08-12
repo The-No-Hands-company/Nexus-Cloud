@@ -117,6 +117,8 @@ export type SystemsApiToolPatchInput = {
   capabilities?: readonly string[];
   upstreamUrl?: string;
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  /** Operator-only gate switch; see SystemsApiTool.requiresAuth. */
+  requiresAuth?: boolean;
 };
 
 const endpoints = [
