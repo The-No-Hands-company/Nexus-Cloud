@@ -1472,31 +1472,50 @@ var HOME_APP_CATALOG = [
 // public cloud subdomain. Attaching the session token when we have one keeps the
 // signed-in view complete; signed-out visitors get everything except the
 // internal addresses.
+// No Authorization header. Identity is the ecosystem session cookie, which the
+// proxy exchanges for a signed identity before this app is reached; the page
+// cannot read it and holds no token of its own.
 function ncFetch(url, options) {
   var opts = options || {};
-  var token = localStorage.getItem('nc_token');
-  if (token) {
-    opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + token });
-  }
+  opts.credentials = 'include';
   return fetch(url, opts);
 }
 
+// Ask the server who we are. There is no login form to fall back to: the
+// ecosystem authenticated whoever is looking before this page was served, and
+// asking again would be a second login for one account.
 async function checkAuth() {
-  var token = localStorage.getItem('nc_token');
-  if (!token) { showLogin(); return; }
+  // A token from a build that predates single sign-on is a credential nothing
+  // accepts now; clear it so it cannot be sent or trusted.
+  try { localStorage.removeItem('nc_token'); } catch (e) {}
   try {
-    var res = await fetch('/api/v1/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
-    if (!res.ok) { localStorage.removeItem('nc_token'); showLogin(); return; }
+    var res = await fetch('/api/v1/auth/me', { credentials: 'include' });
+    if (!res.ok) { showLogin(); return; }
     var data = await res.json();
-    currentToken = token;
+    currentToken = null;
     currentUser = data.user;
     showShell();
-  } catch { showLogin(); }
+  } catch (e) { showLogin(); }
 }
 
+// "Signed out" is now a handoff, not a form. The card stays for its layout;
+// its inputs are hidden and replaced with a link to the ecosystem sign-in that
+// returns here afterwards.
 function showLogin() {
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app-shell').style.display = 'none';
+
+  var form = document.getElementById('login-form');
+  if (form && !form.dataset.ssoReplaced) {
+    form.dataset.ssoReplaced = '1';
+    var href = 'https://auth.tnhc.dev/login?redirect_uri=' +
+      encodeURIComponent(window.location.href);
+    form.innerHTML =
+      '<a class="btn btn-primary" style="display:block;width:100%;text-align:center" href="' +
+      href + '">Sign in</a>' +
+      '<p style="margin-top:.75rem;opacity:.7;font-size:.85rem">' +
+      'One account for every Nexus app.</p>';
+  }
 }
 
 function showShell() {
@@ -1515,7 +1534,9 @@ function showShell() {
 }
 
 function logout() {
-  localStorage.removeItem('nc_token');
+  // Signing out belongs to the ecosystem: this app does not own the session and
+  // cannot clear a cookie it never set.
+  try { localStorage.removeItem('nc_token'); } catch (e) {}
   currentToken = null; currentUser = null;
   loadedViews.clear(); loadedViews.add('launcher');
   openApps.clear();

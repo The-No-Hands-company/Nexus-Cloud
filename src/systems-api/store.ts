@@ -172,6 +172,13 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
   const upstreamUrl = typeof value.upstreamUrl === "string" ? value.upstreamUrl : undefined;
   const lastHeartbeatAt =
     typeof value.lastHeartbeatAt === "string" ? value.lastHeartbeatAt : undefined;
+  // Read explicitly, like every other optional field. Omitting it here meant a
+  // gated route quietly became ungated on the next restart: load dropped the
+  // flag, the next heartbeat persisted the stripped record, and nothing
+  // anywhere reported a change. A security switch that resets itself and says
+  // nothing is worse than not having one.
+  const requiresAuth =
+    typeof value.requiresAuth === "boolean" ? value.requiresAuth : undefined;
   const toolResult = {
     id,
     name,
@@ -195,6 +202,7 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
     ...(publicUrl !== undefined ? { publicUrl } : {}),
     ...(upstreamUrl !== undefined ? { upstreamUrl } : {}),
     ...(lastHeartbeatAt !== undefined ? { lastHeartbeatAt } : {}),
+    ...(requiresAuth !== undefined ? { requiresAuth } : {}),
   };
 }
 

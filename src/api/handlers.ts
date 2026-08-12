@@ -146,7 +146,16 @@ function callerCredential(request: Request): string | null {
       const eq = part.indexOf("=");
       if (eq === -1) continue;
       if (part.slice(0, eq).trim() === SESSION_COOKIE) {
-        const value = decodeURIComponent(part.slice(eq + 1).trim());
+        // decodeURIComponent throws on a malformed escape like "%zz". Unhandled
+        // that turns any request carrying a broken cookie into a 500 — the same
+        // fault the proxy's gate had. A cookie we cannot decode is simply not a
+        // session.
+        let value: string;
+        try {
+          value = decodeURIComponent(part.slice(eq + 1).trim());
+        } catch {
+          return null;
+        }
         if (value) return value;
       }
     }

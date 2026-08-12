@@ -69,3 +69,93 @@ describe("systems api registry durability", () => {
     }
   });
 });
+
+describe("requiresAuth durability", () => {
+  // Found in production: restarting Cloud silently un-gated chat.tnhc.dev.
+  // The flag lived only in memory, because the deserializer builds each tool
+  // field by field and this one was never read. A reload dropped it and the
+  // next heartbeat wrote the stripped record back over the good one. It failed
+  // open, and nothing anywhere reported a change — the worst way for a
+  // security switch to behave.
+  test("survives a write-then-read of the registry", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "nexus-cloud-requiresauth-"));
+    try {
+      mkdirSync(join(tempDir, "data"), { recursive: true });
+      process.chdir(tempDir);
+
+      const storeModule = await importFreshStoreModule("requires-auth");
+      const now = new Date().toISOString();
+      storeModule.saveSystemsApiRegistry({
+        tools: [
+          {
+            id: "tool-gated",
+            name: "Gated",
+            description: "Behind the login gate",
+            mode: "standalone",
+            exposed: false,
+            exposure: "private",
+            health: "healthy",
+            registrationStatus: "registered",
+            capabilities: [],
+            heartbeatCount: 0,
+            registeredAt: now,
+            updatedAt: now,
+            upstreamUrl: "http://127.0.0.1:4200",
+            requiresAuth: true,
+          },
+        ],
+        publicUrls: [],
+        addresses: [],
+        history: [],
+        exposures: [],
+        domains: [],
+      });
+
+      const reloaded = storeModule.loadSystemsApiRegistry();
+      expect(reloaded.tools[0]?.requiresAuth).toBe(true);
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("an ungated tool stays ungated, rather than becoming undefined", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "nexus-cloud-requiresauth-off-"));
+    try {
+      mkdirSync(join(tempDir, "data"), { recursive: true });
+      process.chdir(tempDir);
+
+      const storeModule = await importFreshStoreModule("requires-auth-off");
+      const now = new Date().toISOString();
+      storeModule.saveSystemsApiRegistry({
+        tools: [
+          {
+            id: "tool-open",
+            name: "Open",
+            description: "Public",
+            mode: "standalone",
+            exposed: true,
+            exposure: "public",
+            health: "healthy",
+            registrationStatus: "registered",
+            capabilities: [],
+            heartbeatCount: 0,
+            registeredAt: now,
+            updatedAt: now,
+            requiresAuth: false,
+          },
+        ],
+        publicUrls: [],
+        addresses: [],
+        history: [],
+        exposures: [],
+        domains: [],
+      });
+
+      expect(storeModule.loadSystemsApiRegistry().tools[0]?.requiresAuth).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
