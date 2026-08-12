@@ -8,6 +8,11 @@ import { applyHeartbeatExpiry } from "./systems-api/service";
 export const port = Number(process.env.PORT ?? "8787");
 export const server = Bun.serve({
   port,
+  // Loopback unless told otherwise — Bun.serve binds every interface by
+  // default. Cloud holds the service registry and routing table, and its
+  // mutating endpoints are guarded only by an API key; there is no reason for
+  // anything but the local proxy and local services to reach it.
+  hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
   fetch: handleRequest,
 });
 
