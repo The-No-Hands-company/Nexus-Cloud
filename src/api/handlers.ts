@@ -386,10 +386,25 @@ async function handleAuthLogout(request: Request): Promise<Response> {
   }
 }
 
-function handleDashboard(): Response {
-  const html = Bun.file(new URL("../../public/status.html", import.meta.url));
+async function handleDashboard(url: URL): Promise<Response> {
+  const embedded = url.searchParams.get("embed") === "1";
+  let html = await Bun.file(new URL("../../public/status.html", import.meta.url)).text();
+  if (embedded) {
+    // Injected here rather than by an inline script so the top bar is never
+    // painted before being hidden, and so the decision is unit-testable.
+    const marker = '<html lang="en">';
+    if (!html.includes(marker)) {
+      throw new Error("handleDashboard: status.html no longer starts with <html lang=\"en\">; embed-class injection would silently no-op");
+    }
+    html = html.replace(marker, '<html lang="en" class="embedded">');
+  }
   return new Response(html, {
-    headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      // The ecosystem's control plane. Framable by the shell, by nobody else.
+      "Content-Security-Policy": "frame-ancestors 'self' https://app.tnhc.dev",
+      ...corsHeaders(),
+    },
   });
 }
 
@@ -1607,7 +1622,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/auth/me")
     return handleAuthMe(request);
   if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
-    return handleDashboard();
+    return await handleDashboard(url);
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();
   if (request.method === "GET" && pathname === "/v1/architecture") return handleArchitecture();
