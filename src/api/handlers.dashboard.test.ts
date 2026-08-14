@@ -47,3 +47,27 @@ describe("GET / (dashboard console)", () => {
     expect(statusHtmlSource).toMatch(/\.embedded\s+#topbar\s*\{[^}]*display:\s*none/);
   });
 });
+
+describe("GET /nexus-tokens.css (vendored design tokens)", () => {
+  let handleRequest: (request: Request) => Promise<Response>;
+  let cleanup: () => void;
+
+  beforeAll(async () => {
+    const harness = await createSystemsApiTestHarness();
+    handleRequest = harness.handleRequest;
+    cleanup = harness.cleanup;
+  });
+
+  afterAll(() => {
+    cleanup?.();
+  });
+
+  test("serves the vendored stylesheet", async () => {
+    const res = await handleRequest(
+      new Request("http://localhost/nexus-tokens.css", { method: "GET" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(await res.text()).toContain("--nexus-color-accent-primary");
+  });
+});

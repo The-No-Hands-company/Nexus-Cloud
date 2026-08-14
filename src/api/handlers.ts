@@ -408,6 +408,24 @@ async function handleDashboard(url: URL): Promise<Response> {
   });
 }
 
+/**
+ * Serve the vendored ecosystem design tokens.
+ *
+ * `public/nexus-tokens.css` is a byte-identical copy of
+ * `packages/nexus-design`'s generated output (see that package's drift test).
+ * `status.html` links it so the console renders in the shared palette instead
+ * of its own hardcoded violet.
+ */
+async function handleNexusTokensCss(): Promise<Response> {
+  const css = await Bun.file(new URL("../../public/nexus-tokens.css", import.meta.url)).text();
+  return new Response(css, {
+    headers: {
+      "Content-Type": "text/css; charset=utf-8",
+      ...corsHeaders(),
+    },
+  });
+}
+
 function handleHealth(): Response {
   const body: HealthResponse = {
     ok: true,
@@ -1623,6 +1641,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return handleAuthMe(request);
   if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
     return await handleDashboard(url);
+  if (request.method === "GET" && pathname === "/nexus-tokens.css")
+    return await handleNexusTokensCss();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();
   if (request.method === "GET" && pathname === "/v1/architecture") return handleArchitecture();
