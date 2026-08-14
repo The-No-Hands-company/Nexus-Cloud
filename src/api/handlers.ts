@@ -386,43 +386,18 @@ async function handleAuthLogout(request: Request): Promise<Response> {
   }
 }
 
-async function handleDashboard(url: URL): Promise<Response> {
-  const embedded = url.searchParams.get("embed") === "1";
-  let html = await Bun.file(new URL("../../public/status.html", import.meta.url)).text();
-  if (embedded) {
-    // Injected here rather than by an inline script so the top bar is never
-    // painted before being hidden, and so the decision is unit-testable.
-    const marker = '<html lang="en">';
-    if (!html.includes(marker)) {
-      throw new Error("handleDashboard: status.html no longer starts with <html lang=\"en\">; embed-class injection would silently no-op");
-    }
-    html = html.replace(marker, '<html lang="en" class="embedded">');
-  }
-  return new Response(html, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      // The ecosystem's control plane. Framable by the shell, by nobody else.
-      "Content-Security-Policy": "frame-ancestors 'self' https://app.tnhc.dev",
-      ...corsHeaders(),
-    },
-  });
-}
-
 /**
- * Serve the vendored ecosystem design tokens.
- *
- * `public/nexus-tokens.css` is a byte-identical copy of
- * `packages/nexus-design`'s generated output (see that package's drift test).
- * `status.html` links it so the console renders in the shared palette instead
- * of its own hardcoded violet.
+ * Cloud has no frontend any more. Its operator console lives in the shell at
+ * https://app.tnhc.dev/cloud (see
+ * docs/superpowers/specs/2026-08-14-cloud-console-as-shell-views-design.md);
+ * `GET /` and `GET /status` just point there. Cloud itself stays a control
+ * plane: registry, routes, orchestration, the Systems API.
  */
-async function handleNexusTokensCss(): Promise<Response> {
-  const css = await Bun.file(new URL("../../public/nexus-tokens.css", import.meta.url)).text();
-  return new Response(css, {
-    headers: {
-      "Content-Type": "text/css; charset=utf-8",
-      ...corsHeaders(),
-    },
+function handleServicePointer(): Response {
+  return json({
+    service: "nexus-cloud",
+    role: "registry, routes, orchestration, Systems API",
+    console: "https://app.tnhc.dev/cloud",
   });
 }
 
@@ -1640,9 +1615,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/auth/me")
     return handleAuthMe(request);
   if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
-    return await handleDashboard(url);
-  if (request.method === "GET" && pathname === "/nexus-tokens.css")
-    return await handleNexusTokensCss();
+    return handleServicePointer();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
   if (request.method === "GET" && pathname === "/api/status") return handleLegacyStatus();
   if (request.method === "GET" && pathname === "/v1/architecture") return handleArchitecture();
