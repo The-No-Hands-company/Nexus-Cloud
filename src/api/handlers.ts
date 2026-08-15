@@ -293,8 +293,9 @@ function redactUpstreams<T extends { upstreamUrl?: string }>(
  * endpoint hands them out. `endpoint` goes too: it is a private address, the
  * same disclosure redactUpstreams closes for tools.
  *
- * Peers that need these fields authenticate; the public dashboard does not read
- * this endpoint at all.
+ * New local pools no longer persist credentials, and legacy state is scrubbed
+ * on load. This redaction remains as compatibility defense for an in-memory
+ * record created by older code during a rolling upgrade.
  */
 function redactPoolSecrets<T extends { accessKey?: string; secretKey?: string; endpoint?: string }>(
   pools: readonly T[],

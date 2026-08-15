@@ -123,7 +123,12 @@ export async function s3Request(
   config: S3Config,
   method: string,
   path: string,
-  options: { query?: Record<string, string>; body?: ArrayBuffer | null; contentType?: string } = {},
+  options: {
+    query?: Record<string, string>;
+    body?: ArrayBuffer | null;
+    contentType?: string;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<Response> {
   const url = buildUrl(config, path, options.query);
   const bodyBytes = options.body ?? null;
@@ -131,7 +136,12 @@ export async function s3Request(
   const extra: Record<string, string> = {};
   if (options.contentType) extra["content-type"] = options.contentType;
   const headers = await buildSignedHeaders(config, method, url, bodyHash, extra);
-  return fetch(url.toString(), { method, headers, body: bodyBytes });
+  return fetch(url.toString(), {
+    method,
+    headers,
+    body: bodyBytes,
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
 }
 
 export async function headBucket(config: S3Config, bucket: string): Promise<boolean> {
@@ -150,6 +160,7 @@ export async function putObject(
   key: string,
   body: Buffer | string | Uint8Array,
   contentType?: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const bytes =
     typeof body === "string"
@@ -161,21 +172,33 @@ export async function putObject(
     query?: Record<string, string>;
     body?: ArrayBuffer | null;
     contentType?: string;
+    signal?: AbortSignal;
   } = { body: bytes.buffer as ArrayBuffer };
   if (contentType) options.contentType = contentType;
+  if (signal) options.signal = signal;
   return s3Request(config, "PUT", `/${bucket}/${encodeURIComponent(key)}`, options);
 }
 
-export async function getObject(config: S3Config, bucket: string, key: string): Promise<Response> {
-  return s3Request(config, "GET", `/${bucket}/${encodeURIComponent(key)}`);
+export async function getObject(
+  config: S3Config,
+  bucket: string,
+  key: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  return s3Request(config, "GET", `/${bucket}/${encodeURIComponent(key)}`, {
+    ...(signal ? { signal } : {}),
+  });
 }
 
 export async function deleteObject(
   config: S3Config,
   bucket: string,
   key: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
-  return s3Request(config, "DELETE", `/${bucket}/${encodeURIComponent(key)}`);
+  return s3Request(config, "DELETE", `/${bucket}/${encodeURIComponent(key)}`, {
+    ...(signal ? { signal } : {}),
+  });
 }
 
 export type S3ObjectMeta = { key: string; size: number; lastModified?: string };

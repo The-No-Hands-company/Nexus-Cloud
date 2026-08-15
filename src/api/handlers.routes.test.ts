@@ -920,6 +920,11 @@ describe("API route handlers", () => {
       }),
     );
     expect(created.status).toBe(201);
+    const createdBody = (await created.clone().json()) as {
+      pool: Record<string, unknown>;
+    };
+    expect(createdBody.pool["accessKey"]).toBeUndefined();
+    expect(createdBody.pool["secretKey"]).toBeUndefined();
 
     const anonymous = await handleRequest(
       new Request("http://localhost/api/v1/storage/pools", { method: "GET" }),

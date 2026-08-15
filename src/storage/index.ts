@@ -30,8 +30,10 @@ export type SharedStoragePool = {
   ownerNodeDid: string;
   endpoint: string;
   region: string;
-  accessKey: string;
-  secretKey: string;
+  /** @deprecated Legacy state only. Local pool credentials now come from protected runtime config. */
+  accessKey?: string;
+  /** @deprecated Legacy state only. Local pool credentials now come from protected runtime config. */
+  secretKey?: string;
   totalCapacityGb: number;
   availableCapacityGb: number;
   status: "active" | "draining" | "offline";
@@ -180,6 +182,16 @@ export function getPool(poolId: string): SharedStoragePool | null {
   return (snapshot().sharedStoragePools ?? []).find((p) => p.id === poolId) ?? null;
 }
 
+export function storageConfigForPool(pool: SharedStoragePool): S3Config {
+  const current = s3Config();
+  return {
+    endpoint: pool.endpoint,
+    region: pool.region,
+    accessKey: current.accessKey,
+    secretKey: current.secretKey,
+  };
+}
+
 export async function registerPool(
   input: SharedStoragePoolRequest,
   ownerNodeId: string,
@@ -193,8 +205,6 @@ export async function registerPool(
     ownerNodeDid,
     endpoint: config.endpoint,
     region: config.region,
-    accessKey: config.accessKey,
-    secretKey: config.secretKey,
     totalCapacityGb: input.totalCapacityGb,
     availableCapacityGb: input.totalCapacityGb,
     status: "active",
@@ -347,12 +357,7 @@ export async function createVolume(input: StorageVolumeRequest): Promise<Storage
       record.bucket = "";
     } else {
       try {
-        const config: S3Config = {
-          endpoint: selectedPool.endpoint,
-          accessKey: selectedPool.accessKey,
-          secretKey: selectedPool.secretKey,
-          region: selectedPool.region,
-        };
+        const config = storageConfigForPool(selectedPool);
         await makeBucket(config, record.bucket);
         record.endpoint = selectedPool.endpoint;
         record.poolId = selectedPool.id;
