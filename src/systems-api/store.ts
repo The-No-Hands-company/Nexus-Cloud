@@ -177,8 +177,7 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
   // flag, the next heartbeat persisted the stripped record, and nothing
   // anywhere reported a change. A security switch that resets itself and says
   // nothing is worse than not having one.
-  const requiresAuth =
-    typeof value.requiresAuth === "boolean" ? value.requiresAuth : undefined;
+  const requiresAuth = typeof value.requiresAuth === "boolean" ? value.requiresAuth : undefined;
   const toolResult = {
     id,
     name,

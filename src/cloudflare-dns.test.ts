@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "bun:test";
-import { selectZone, tunnelTarget, cnameRecordBody } from "./cloudflare-dns";
+import { afterEach, describe, expect, it } from "bun:test";
+import { cnameRecordBody, selectZone, tunnelTarget } from "./cloudflare-dns";
 
 describe("selectZone", () => {
   const tnhc = { id: "z1", name: "tnhc.dev" };
@@ -37,12 +37,15 @@ describe("tunnelTarget", () => {
   const saved = { id: process.env.NEXUS_TUNNEL_ID, full: process.env.NEXUS_TUNNEL_CNAME_TARGET };
   afterEach(() => {
     // restore
-    if (saved.id === undefined) delete process.env.NEXUS_TUNNEL_ID; else process.env.NEXUS_TUNNEL_ID = saved.id;
-    if (saved.full === undefined) delete process.env.NEXUS_TUNNEL_CNAME_TARGET; else process.env.NEXUS_TUNNEL_CNAME_TARGET = saved.full;
+    if (saved.id === undefined) Reflect.deleteProperty(process.env, "NEXUS_TUNNEL_ID");
+    else process.env.NEXUS_TUNNEL_ID = saved.id;
+    if (saved.full === undefined) {
+      Reflect.deleteProperty(process.env, "NEXUS_TUNNEL_CNAME_TARGET");
+    } else process.env.NEXUS_TUNNEL_CNAME_TARGET = saved.full;
   });
 
   it("builds the cfargotunnel target from a tunnel id", () => {
-    delete process.env.NEXUS_TUNNEL_CNAME_TARGET;
+    Reflect.deleteProperty(process.env, "NEXUS_TUNNEL_CNAME_TARGET");
     process.env.NEXUS_TUNNEL_ID = "a3fc7587-49de-4792-b532-882775db6457";
     expect(tunnelTarget()).toBe("a3fc7587-49de-4792-b532-882775db6457.cfargotunnel.com");
   });
@@ -54,8 +57,8 @@ describe("tunnelTarget", () => {
   });
 
   it("is empty when neither is configured", () => {
-    delete process.env.NEXUS_TUNNEL_ID;
-    delete process.env.NEXUS_TUNNEL_CNAME_TARGET;
+    Reflect.deleteProperty(process.env, "NEXUS_TUNNEL_ID");
+    Reflect.deleteProperty(process.env, "NEXUS_TUNNEL_CNAME_TARGET");
     expect(tunnelTarget()).toBe("");
   });
 });

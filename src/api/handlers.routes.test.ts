@@ -827,7 +827,9 @@ describe("API route handlers", () => {
     process.env.NEXUS_CLOUD_API_KEY = key;
 
     const toolsOf = async (headers: Record<string, string>, path: string) => {
-      const res = await handleRequest(new Request(`http://localhost${path}`, { method: "GET", headers }));
+      const res = await handleRequest(
+        new Request(`http://localhost${path}`, { method: "GET", headers }),
+      );
       expect(res.status).toBe(200);
       const body = (await res.json()) as { tools?: Array<Record<string, unknown>> };
       return (body.tools ?? []).filter((t) => t.id === "tool-redact");
@@ -910,36 +912,36 @@ describe("API route handlers", () => {
     // redaction correctly does not apply. Set one, or this test would pass
     // against a server that leaks.
     const previousKey = process.env.NEXUS_CLOUD_API_KEY;
-    process.env.NEXUS_CLOUD_API_KEY = "leak-check-key";  // pragma: allowlist secret — literal test value, not a credential
+    process.env.NEXUS_CLOUD_API_KEY = "leak-check-key"; // pragma: allowlist secret — literal test value, not a credential
     try {
-    const created = await handleRequest(
-      new Request("http://localhost/api/v1/storage/pools", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "leak-check-pool", totalCapacityGb: 10 }),
-      }),
-    );
-    expect(created.status).toBe(201);
+      const created = await handleRequest(
+        new Request("http://localhost/api/v1/storage/pools", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "leak-check-pool", totalCapacityGb: 10 }),
+        }),
+      );
+      expect(created.status).toBe(201);
 
-    const anonymous = await handleRequest(
-      new Request("http://localhost/api/v1/storage/pools", { method: "GET" }),
-    );
-    expect(anonymous.status).toBe(200);
-    const body = (await anonymous.json()) as {
-      pools: Array<Record<string, unknown>>;
-    };
-    const pool = body.pools.find((p) => p["name"] === "leak-check-pool");
-    expect(pool).toBeDefined();
-    expect(pool?.["accessKey"]).toBeUndefined();
-    expect(pool?.["secretKey"]).toBeUndefined();
-    expect(pool?.["endpoint"]).toBeUndefined();
-    // The non-secret fields must still be there, or this would be redacting by
-    // breaking the endpoint rather than by removing the secrets.
-    expect(pool?.["id"]).toBeDefined();
-    expect(pool?.["totalCapacityGb"]).toBe(10);
+      const anonymous = await handleRequest(
+        new Request("http://localhost/api/v1/storage/pools", { method: "GET" }),
+      );
+      expect(anonymous.status).toBe(200);
+      const body = (await anonymous.json()) as {
+        pools: Array<Record<string, unknown>>;
+      };
+      const pool = body.pools.find((p) => p["name"] === "leak-check-pool");
+      expect(pool).toBeDefined();
+      expect(pool?.["accessKey"]).toBeUndefined();
+      expect(pool?.["secretKey"]).toBeUndefined();
+      expect(pool?.["endpoint"]).toBeUndefined();
+      // The non-secret fields must still be there, or this would be redacting by
+      // breaking the endpoint rather than by removing the secrets.
+      expect(pool?.["id"]).toBeDefined();
+      expect(pool?.["totalCapacityGb"]).toBe(10);
 
-    // Nothing anywhere in the anonymous payload may contain the secret.
-    expect(JSON.stringify(body)).not.toContain("minioadmin");
+      // Nothing anywhere in the anonymous payload may contain the secret.
+      expect(JSON.stringify(body)).not.toContain("minioadmin");
     } finally {
       process.env.NEXUS_CLOUD_API_KEY = previousKey ?? "";
     }

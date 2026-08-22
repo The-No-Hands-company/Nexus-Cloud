@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { architecture } from "../architecture";
 import { type AuditFilter, queryAuditLog } from "../audit";
-import { bootstrapDns, hasCloudflareDns, ensureCustomDomainDns, tunnelTarget } from "../cloudflare-dns";
+import {
+  bootstrapDns,
+  ensureCustomDomainDns,
+  hasCloudflareDns,
+  tunnelTarget,
+} from "../cloudflare-dns";
 import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane, dataPlaneService } from "../data-plane";
@@ -15,6 +20,14 @@ import {
 } from "../federation";
 import { guardianService } from "../guardian";
 import { getNodeIdentity } from "../identity";
+import {
+  NexusAuthUnavailable,
+  checkSession,
+  listUsers as listNexusAuthUsers,
+  login as nexusAuthLogin,
+  logout as nexusAuthLogout,
+  nexusAuthUrl,
+} from "../nexus-auth";
 import { observabilityService, recordEvent } from "../observability";
 import {
   checkStorageBackend,
@@ -41,14 +54,6 @@ import {
   describeSystemsApiDeployIntegration,
   systemsApiDeployIntegration,
 } from "../systems-api/deploy";
-import {
-  NexusAuthUnavailable,
-  checkSession,
-  listUsers as listNexusAuthUsers,
-  login as nexusAuthLogin,
-  logout as nexusAuthLogout,
-  nexusAuthUrl,
-} from "../nexus-auth";
 import {
   type GuardianDecisionResponse,
   type GuardianDecisionsResponse,
@@ -347,10 +352,7 @@ async function handleAuthLogin(request: Request): Promise<Response> {
     return json(upstream.body, upstream.status, headers);
   } catch (err) {
     if (err instanceof NexusAuthUnavailable) {
-      return json(
-        { error: "Identity service unavailable", hint: err.message },
-        503,
-      );
+      return json({ error: "Identity service unavailable", hint: err.message }, 503);
     }
     throw err;
   }
@@ -662,7 +664,10 @@ async function handleSystemsTools(request: Request, url: URL): Promise<Response>
 
   const { entries } = collectPhantomComplianceEntries("failing");
   return json({
-    tools: redactUpstreams(entries.map((entry) => entry.tool), authenticated),
+    tools: redactUpstreams(
+      entries.map((entry) => entry.tool),
+      authenticated,
+    ),
   } satisfies SystemsApiToolsResponseDTO);
 }
 
@@ -1612,8 +1617,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return handleAuthLogin(request);
   if (request.method === "POST" && pathname === "/api/v1/auth/logout")
     return handleAuthLogout(request);
-  if (request.method === "GET" && pathname === "/api/v1/auth/me")
-    return handleAuthMe(request);
+  if (request.method === "GET" && pathname === "/api/v1/auth/me") return handleAuthMe(request);
   if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
     return handleServicePointer();
   if (request.method === "GET" && pathname === "/health") return handleHealth();
@@ -1663,10 +1667,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return handleNodeAnnouncement();
   if (request.method === "POST" && pathname === "/v1/federation/peers/announce")
     return handleInboundPeerAnnounce(request);
-  if (request.method === "GET" && pathname === "/api/v1/users")
-    return handleUserList(request);
-  if (request.method === "POST" && pathname === "/api/v1/users")
-    return handleUserRegister(request);
+  if (request.method === "GET" && pathname === "/api/v1/users") return handleUserList(request);
+  if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/tools")
     return handleSystemsTools(request, url);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);

@@ -47,9 +47,11 @@ export async function checkSession(credential: string): Promise<NexusAuthUser | 
     headers: { Authorization: `Bearer ${credential}`, Accept: "application/json" },
   });
   if (!response.ok) return null;
-  const body = (await response.json().catch(() => null)) as
-    | { authorized?: boolean; userId?: string; user?: NexusAuthUser }
-    | null;
+  const body = (await response.json().catch(() => null)) as {
+    authorized?: boolean;
+    userId?: string;
+    user?: NexusAuthUser;
+  } | null;
   if (!body?.authorized || !body.userId) return null;
   return body.user ?? { id: body.userId };
 }
@@ -77,7 +79,9 @@ export async function login(
 }
 
 /** End the session upstream so it dies everywhere, not just for Cloud. */
-export async function logout(credential: string): Promise<{ status: number; setCookie: string | null }> {
+export async function logout(
+  credential: string,
+): Promise<{ status: number; setCookie: string | null }> {
   const response = await call("/api/v1/auth/logout", {
     method: "POST",
     headers: { Authorization: `Bearer ${credential}`, Accept: "application/json" },

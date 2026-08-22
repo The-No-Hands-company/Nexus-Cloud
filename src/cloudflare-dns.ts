@@ -33,7 +33,8 @@ type Zone = { id: string; name: string };
 function getConfig() {
   const token = process.env.CF_API_TOKEN?.trim() || "";
   const zoneId = process.env.CF_ZONE_ID?.trim() || "";
-  const cloudDomain = process.env.NEXUS_CLOUD_DOMAIN?.trim() || process.env.CLOUD_DOMAIN?.trim() || "nexus.local";
+  const cloudDomain =
+    process.env.NEXUS_CLOUD_DOMAIN?.trim() || process.env.CLOUD_DOMAIN?.trim() || "nexus.local";
   const serverIp = process.env.SERVER_PUBLIC_IP?.trim() || "";
   return { token, zoneId, cloudDomain, serverIp, tunnelTarget: tunnelTarget() };
 }
@@ -85,7 +86,9 @@ function err(name: string, message: string, status = 500, outOfScope = false): D
 }
 
 async function listZones(token: string): Promise<Zone[] | null> {
-  const res = await fetch(`${CLOUDFLARE_API_BASE}/zones?per_page=50`, { headers: authHeaders(token) });
+  const res = await fetch(`${CLOUDFLARE_API_BASE}/zones?per_page=50`, {
+    headers: authHeaders(token),
+  });
   if (!res.ok) return null;
   const j = (await res.json()) as { success?: boolean; result?: Zone[] };
   return j.success ? (j.result ?? []) : null;
@@ -114,7 +117,11 @@ async function upsertCnameRecord(
     result?: Array<{ id: string }>;
   };
   if (!listJson.success) {
-    return err(name, listJson.errors?.[0]?.message || "cloudflare list failed", listResponse.status);
+    return err(
+      name,
+      listJson.errors?.[0]?.message || "cloudflare list failed",
+      listResponse.status,
+    );
   }
 
   const existingId = listJson.result?.[0]?.id;
@@ -132,7 +139,11 @@ async function upsertCnameRecord(
     result?: { id?: string };
   };
   if (!writeJson.success) {
-    return err(name, writeJson.errors?.[0]?.message || "cloudflare write failed", writeResponse.status);
+    return err(
+      name,
+      writeJson.errors?.[0]?.message || "cloudflare write failed",
+      writeResponse.status,
+    );
   }
 
   const recordId = writeJson.result?.id || existingId;
