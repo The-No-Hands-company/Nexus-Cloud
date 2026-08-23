@@ -41,6 +41,25 @@ export function requiresApiKey(): boolean {
   return Boolean(cloudConfig.apiKey.trim());
 }
 
+/**
+ * Accepts the current key OR the previous key during a rotation window.
+ *
+ * Zero-downtime rotation procedure:
+ *   1. Set NEXUS_CLOUD_API_KEY_PREVIOUS=<old>, NEXUS_CLOUD_API_KEY=<new>,
+ *      restart Cloud.
+ *   2. Update each service's key to <new>. They keep working because Cloud
+ *      still accepts old via PREVIOUS.
+ *   3. Once every service has the new key, clear PREVIOUS and restart Cloud.
+ *
+ * Same model as AWS access key rotation. Without this, rotating meant a
+ * coordinated restart of Cloud + proxy + dashboard + auth + terminal + draw
+ * simultaneously — which is why the key had never been rotated.
+ */
 export function isValidApiKey(key: string): boolean {
-  return Boolean(cloudConfig.apiKey.trim()) && cloudConfig.apiKey.trim() === key.trim();
+  const current = cloudConfig.apiKey.trim();
+  if (!current) return false;
+  const trimmed = key.trim();
+  if (trimmed === current) return true;
+  const previous = (process.env.NEXUS_CLOUD_API_KEY_PREVIOUS ?? "").trim();
+  return previous.length > 0 && trimmed === previous;
 }
