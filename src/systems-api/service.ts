@@ -40,6 +40,7 @@ import type {
   SystemsApiConnection,
   SystemsApiDomainBinding,
   SystemsApiDomainVerificationChallenge,
+  SystemsApiDelivery,
   SystemsApiEndpoint,
   SystemsApiExposureRecord,
   SystemsApiMode,
@@ -104,7 +105,9 @@ export type SystemsApiToolRegistrationInput = {
   health?: import("./types").SystemsApiToolHealth;
   capabilities?: readonly string[];
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  path?: string;
   publicUrl?: string;
+  delivery?: SystemsApiDelivery;
   upstreamUrl?: string;
 };
 

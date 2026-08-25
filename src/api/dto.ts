@@ -24,6 +24,7 @@ import type {
   SystemsApiDeployRequest,
   SystemsApiDeployResponse,
   SystemsApiDomainVerificationChallenge,
+  SystemsApiDelivery,
   SystemsApiEndpoint,
   SystemsApiIntegrationFailure,
   SystemsApiMode,
@@ -353,6 +354,9 @@ export type SystemsApiToolRegistrationRequestDTO = {
   health?: SystemsApiToolHealth;
   capabilities?: readonly string[];
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  path?: string;
+  publicUrl?: string;
+  delivery?: SystemsApiDelivery;
 };
 
 export type SystemsApiNodeHeartbeatRequestDTO = {
@@ -585,7 +589,14 @@ export function isSystemsApiToolRegistrationRequest(
     (value.capabilities === undefined ||
       (Array.isArray(value.capabilities) && value.capabilities.every(isString))) &&
     (value.phantomSecurityProfile === undefined ||
-      isPhantomSecurityProfile(value.phantomSecurityProfile))
+      isPhantomSecurityProfile(value.phantomSecurityProfile)) &&
+    (value.path === undefined || isString(value.path)) &&
+    (value.publicUrl === undefined || isString(value.publicUrl)) &&
+    (value.delivery === undefined ||
+      value.delivery === "shell-native" ||
+      value.delivery === "proxied-app" ||
+      value.delivery === "framed" ||
+      value.delivery === "external")
   );
 }
 

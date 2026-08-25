@@ -19,6 +19,8 @@ export type SystemsApiToolRegistrationStatus = "registered" | "active" | "offlin
 
 export type SystemsApiToolExposure = "private" | "public" | "pending";
 
+export type SystemsApiDelivery = "shell-native" | "proxied-app" | "framed" | "external";
+
 export type SystemsApiPhantomProtectionLevel = "transitional" | "hardened" | "maximum";
 
 export type SystemsApiPhantomSecurityGuarantees = {
@@ -59,7 +61,11 @@ export type SystemsApiTool = {
   registrationStatus: SystemsApiToolRegistrationStatus;
   capabilities: readonly string[];
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  /** Stable shell route, independent from the app's delivery origin. */
+  path?: string;
   publicUrl?: string;
+  /** How the Dashboard delivers this app at its shell path. */
+  delivery?: SystemsApiDelivery;
   /** The actual backend URL this tool is running on — used by the proxy routing table */
   upstreamUrl?: string;
   /**

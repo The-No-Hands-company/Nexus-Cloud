@@ -25,6 +25,7 @@ import type {
   SystemsApiAddressKind,
   SystemsApiDomainBinding,
   SystemsApiDomainVerificationChallenge,
+  SystemsApiDelivery,
   SystemsApiExposureRecord,
   SystemsApiMode,
   SystemsApiPhantomProtectionLevel,
@@ -49,7 +50,9 @@ export type SystemsApiToolRegistrationInput = {
   health?: SystemsApiToolHealth;
   capabilities?: readonly string[];
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
+  path?: string;
   publicUrl?: string;
+  delivery?: SystemsApiDelivery;
   /** Actual backend URL so the proxy routing table can forward traffic */
   upstreamUrl?: string;
 };
@@ -234,7 +237,9 @@ function buildTool(
   previous: SystemsApiTool | null = null,
 ): SystemsApiTool {
   const phantomSecurityProfile = input.phantomSecurityProfile ?? previous?.phantomSecurityProfile;
+  const path = input.path === undefined ? previous?.path : requireSafeRelativePath(input.path);
   const publicUrl = input.publicUrl ?? previous?.publicUrl;
+  const delivery = input.delivery ?? previous?.delivery;
   const upstreamUrl = input.upstreamUrl ?? previous?.upstreamUrl;
   const lastHeartbeatAt = previous?.lastHeartbeatAt;
   return {
@@ -248,7 +253,9 @@ function buildTool(
     registrationStatus: previous?.registrationStatus ?? "registered",
     capabilities: input.capabilities ?? previous?.capabilities ?? [],
     ...(phantomSecurityProfile !== undefined ? { phantomSecurityProfile } : {}),
+    ...(path !== undefined ? { path } : {}),
     ...(publicUrl !== undefined ? { publicUrl } : {}),
+    ...(delivery !== undefined ? { delivery } : {}),
     ...(upstreamUrl !== undefined ? { upstreamUrl } : {}),
     // Carried from the previous record and never read from `input`. A tool
     // re-registers on every restart and heartbeat; if its payload could set
@@ -261,6 +268,13 @@ function buildTool(
     registeredAt: previous?.registeredAt ?? now(),
     updatedAt: now(),
   };
+}
+
+function requireSafeRelativePath(path: string): string {
+  if (!/^\/(?:[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*)?$/.test(path)) {
+    throw new Error("path must be a safe relative path");
+  }
+  return path;
 }
 
 function upsertToolRecord(tool: SystemsApiTool): SystemsApiTool {

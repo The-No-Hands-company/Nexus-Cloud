@@ -9,6 +9,7 @@ import type {
   SystemsApiAddress,
   SystemsApiAddressStatus,
   SystemsApiDomainBinding,
+  SystemsApiDelivery,
   SystemsApiExposureRecord,
   SystemsApiExposureStatus,
   SystemsApiMode,
@@ -77,6 +78,18 @@ function sanitizeRegistrationStatus(value: unknown): SystemsApiToolRegistrationS
 
 function sanitizeExposure(value: unknown): SystemsApiToolExposure | undefined {
   return value === "private" || value === "public" || value === "pending" ? value : undefined;
+}
+
+function sanitizeDelivery(value: unknown): SystemsApiDelivery | undefined {
+  return value === "shell-native" || value === "proxied-app" || value === "framed" || value === "external"
+    ? value
+    : undefined;
+}
+
+function sanitizeRelativePath(value: unknown): string | undefined {
+  return typeof value === "string" && /^\/(?:[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*)?$/.test(value)
+    ? value
+    : undefined;
 }
 
 function sanitizePhantomProtectionLevel(
@@ -168,7 +181,9 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
   const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : registeredAt;
   if (!id || !name || !description) return null;
   const phantomSecurityProfile = sanitizePhantomSecurityProfile(value.phantomSecurityProfile);
+  const path = sanitizeRelativePath(value.path);
   const publicUrl = typeof value.publicUrl === "string" ? value.publicUrl : undefined;
+  const delivery = sanitizeDelivery(value.delivery) ?? (publicUrl ? "framed" : "shell-native");
   const upstreamUrl = typeof value.upstreamUrl === "string" ? value.upstreamUrl : undefined;
   const lastHeartbeatAt =
     typeof value.lastHeartbeatAt === "string" ? value.lastHeartbeatAt : undefined;
@@ -198,7 +213,9 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
   return {
     ...toolResult,
     ...(phantomSecurityProfile !== undefined ? { phantomSecurityProfile } : {}),
+    ...(path !== undefined ? { path } : {}),
     ...(publicUrl !== undefined ? { publicUrl } : {}),
+    delivery,
     ...(upstreamUrl !== undefined ? { upstreamUrl } : {}),
     ...(lastHeartbeatAt !== undefined ? { lastHeartbeatAt } : {}),
     ...(requiresAuth !== undefined ? { requiresAuth } : {}),

@@ -3,6 +3,116 @@ import { readFileSync } from "node:fs";
 import { createSystemsApiTestHarness, emptySystemsApiRegistry } from "./systems-api-harness";
 
 describe("Systems API registry/service behavior", () => {
+  test("persists Calendar's explicit delivery contract across a registry reload", async () => {
+    const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
+    try {
+      const { systemsApiService } = harness;
+
+      const registered = systemsApiService.registerSystemsApiTool({
+        id: "nexus-calendar",
+        name: "Nexus-Calendar",
+        description: "Shared calendars with events, reminders, and month/week views",
+        path: "/calendar",
+        publicUrl: "https://calendar.tnhc.dev",
+        delivery: "proxied-app",
+      });
+      expect(registered).toMatchObject({
+        path: "/calendar",
+        publicUrl: "https://calendar.tnhc.dev",
+        delivery: "proxied-app",
+      });
+
+      const registryPath = systemsApiService.describeSystemsApiStatus().registry.path;
+      expect(JSON.parse(readFileSync(registryPath, "utf8")).tools[0]).toMatchObject({
+        path: "/calendar",
+        publicUrl: "https://calendar.tnhc.dev",
+        delivery: "proxied-app",
+      });
+
+      const storeModule = await import(`../systems-api/store.ts?case=delivery-${Date.now()}`);
+      const reloaded = storeModule.loadSystemsApiRegistry().tools[0];
+      expect(reloaded).toMatchObject({
+        path: "/calendar",
+        publicUrl: "https://calendar.tnhc.dev",
+        delivery: "proxied-app",
+      });
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  test("defaults malformed persisted delivery records from their safe destinations", async () => {
+    const harness = await createSystemsApiTestHarness({
+      ...emptySystemsApiRegistry,
+      tools: [
+        {
+          id: "legacy-framed",
+          name: "Legacy framed",
+          description: "A legacy external app",
+          mode: "standalone",
+          exposed: true,
+          exposure: "public",
+          health: "healthy",
+          registrationStatus: "registered",
+          capabilities: [],
+          heartbeatCount: 0,
+          registeredAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          path: "/legacy-framed",
+          publicUrl: "https://legacy.tnhc.dev",
+          delivery: "invalid" as never,
+        },
+        {
+          id: "legacy-native",
+          name: "Legacy native",
+          description: "A legacy shell view",
+          mode: "standalone",
+          exposed: false,
+          exposure: "private",
+          health: "healthy",
+          registrationStatus: "registered",
+          capabilities: [],
+          heartbeatCount: 0,
+          registeredAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          path: "/legacy-native",
+          delivery: "invalid" as never,
+        },
+      ],
+    });
+    try {
+      const registryPath = harness.systemsApiService.describeSystemsApiStatus().registry.path;
+      const storeModule = await import(`../systems-api/store.ts?case=malformed-delivery-${Date.now()}`);
+      const reloaded = storeModule.loadSystemsApiRegistry();
+
+      expect(reloaded.tools).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "legacy-framed", delivery: "framed" }),
+          expect.objectContaining({ id: "legacy-native", delivery: "shell-native" }),
+        ]),
+      );
+      expect(registryPath).toContain("systems-api-registry.json");
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  test("rejects non-relative registration paths", async () => {
+    const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
+    try {
+      expect(() =>
+        harness.systemsApiService.registerSystemsApiTool({
+          id: "unsafe-path",
+          name: "Unsafe path",
+          description: "Must not claim an origin as a shell route",
+          path: "https://unsafe.example",
+        }),
+      ).toThrow("path must be a safe relative path");
+    } finally {
+      harness.cleanup();
+    }
+  });
+
   test("request and revoke exposure update registry state and history", async () => {
     const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
     try {
