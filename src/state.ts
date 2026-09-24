@@ -132,7 +132,9 @@ function cloneState(next: PlatformState): PlatformState {
       ...(item.metadata ? { metadata: { ...item.metadata } } : {}),
     })),
     volumes: next.volumes.map((item) => ({ ...item })),
-    sharedStoragePools: (next.sharedStoragePools ?? []).map((item) => ({ ...item })),
+    sharedStoragePools: (next.sharedStoragePools ?? []).map(
+      ({ accessKey: _legacyAccess, secretKey: _legacySecret, ...item }) => ({ ...item }),
+    ),
     units: next.units.map((item) => ({
       ...item,
       ...(item.ports ? { ports: [...item.ports] } : {}),
@@ -269,7 +271,11 @@ function sanitizeState(value: unknown): PlatformState {
     events: Array.isArray(value.events) ? (value.events as ObservabilityEvent[]) : [],
     volumes: Array.isArray(value.volumes) ? (value.volumes as StorageVolume[]) : [],
     sharedStoragePools: Array.isArray(value.sharedStoragePools)
-      ? (value.sharedStoragePools as SharedStoragePool[])
+      ? value.sharedStoragePools
+          .filter(isRecord)
+          .map(({ accessKey: _legacyAccess, secretKey: _legacySecret, ...item }) =>
+            item as SharedStoragePool,
+          )
       : [],
     units: Array.isArray(value.units) ? (value.units as DataPlaneUnit[]) : [],
     healthChecks: Array.isArray(value.healthChecks) ? (value.healthChecks as HealthCheck[]) : [],
@@ -285,6 +291,7 @@ function applyStateSnapshot(next: PlatformState): void {
   state.peers = next.peers;
   state.events = next.events;
   state.volumes = next.volumes;
+  state.sharedStoragePools = next.sharedStoragePools;
   state.units = next.units;
   state.healthChecks = next.healthChecks;
   state.guardianDecisions = next.guardianDecisions;
