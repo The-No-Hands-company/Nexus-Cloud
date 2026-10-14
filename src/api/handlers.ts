@@ -1523,6 +1523,10 @@ function handleTlsAsk(searchParams: URLSearchParams): Response {
   if (!domain) return badRequest("domain query parameter required");
   const cloudDomain = cloudConfig.cloudDomain.toLowerCase();
   if (!domain.endsWith(`.${cloudDomain}`)) return json({ allowed: false }, 403);
+  // User-deployed Hosting sites live under sites.<cloudDomain> and are not
+  // individually registered in Cloud's route table, so approve the whole
+  // namespace here rather than requiring per-site Cloud registration.
+  if (domain.endsWith(`.sites.${cloudDomain}`)) return json({ allowed: true });
   const routes = listSystemsApiRoutes();
   const allowed = routes.some((r) => r.domain.toLowerCase() === domain);
   if (!allowed) return json({ allowed: false }, 403);
