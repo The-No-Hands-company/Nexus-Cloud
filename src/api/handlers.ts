@@ -1535,32 +1535,51 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 
   if (request.method === "GET" && pathname === "/api/v1/storage") return handleStorageStatus();
   if (request.method === "GET" && pathname === "/api/v1/volumes") return handleStorageList();
-  if (request.method === "POST" && pathname === "/api/v1/volumes")
+  if (request.method === "POST" && pathname === "/api/v1/volumes") {
+    // Storage mutations are dispatched before the shared gate below; guard them individually.
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
     return handleStorageVolumeCreate(request);
+  }
   if (request.method === "GET" && pathname.startsWith("/api/v1/volumes/"))
     return handleStorageVolumeGet(pathname);
-  if (request.method === "DELETE" && pathname.startsWith("/api/v1/volumes/"))
+  if (request.method === "DELETE" && pathname.startsWith("/api/v1/volumes/")) {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
     return handleStorageVolumeDelete(pathname);
+  }
   if (request.method === "GET" && pathname === "/api/v1/storage/pools")
     return handleStoragePoolsList(request);
-  if (request.method === "POST" && pathname === "/api/v1/storage/pools")
+  if (request.method === "POST" && pathname === "/api/v1/storage/pools") {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
     return handleStoragePoolCreate(request);
+  }
   if (
-    request.method === "GET" &&
+    request.method === "POST" &&
     pathname.startsWith("/api/v1/storage/pools/") &&
     pathname.endsWith("/heartbeat")
-  )
+  ) {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
     return handleStoragePoolHeartbeat(pathname);
+  }
   if (
     request.method === "POST" &&
     pathname.startsWith("/api/v1/storage/pools/") &&
     pathname.endsWith("/drain")
-  )
+  ) {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
     return handleStoragePoolDrain(pathname);
+  }
   if (request.method === "GET" && pathname.startsWith("/api/v1/storage/pools/"))
     return handleStoragePoolGet(pathname);
-  if (request.method === "DELETE" && pathname.startsWith("/api/v1/storage/pools/"))
+  if (request.method === "DELETE" && pathname.startsWith("/api/v1/storage/pools/")) {
+    const authErr = checkApiKey(request);
+    if (authErr) return authErr;
     return handleStoragePoolDelete(pathname);
+  }
 
   // Subdomain proxy: *.cloudDomain requests are routed to the registered upstream.
   // This runs before CORS and auth so the upstream handles its own CORS/auth headers.

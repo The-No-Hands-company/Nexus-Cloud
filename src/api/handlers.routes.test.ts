@@ -917,7 +917,10 @@ describe("API route handlers", () => {
       const created = await handleRequest(
         new Request("http://localhost/api/v1/storage/pools", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer leak-check-key", // pragma: allowlist secret — literal test value, not a credential
+          },
           body: JSON.stringify({ name: "leak-check-pool", totalCapacityGb: 10 }),
         }),
       );
@@ -947,6 +950,40 @@ describe("API route handlers", () => {
 
       // Nothing anywhere in the anonymous payload may contain the secret.
       expect(JSON.stringify(body)).not.toContain("minioadmin");
+    } finally {
+      process.env.NEXUS_CLOUD_API_KEY = previousKey ?? "";
+    }
+  });
+
+  test("storage mutations require the API key", async () => {
+    // Storage volume/pool mutations are dispatched before the shared mutation
+    // gate, so they carry their own checkApiKey guard. Without a key these should
+    // return 401; with the key they should proceed.
+    const previousKey = process.env.NEXUS_CLOUD_API_KEY;
+    process.env.NEXUS_CLOUD_API_KEY = "storage-auth-test-key"; // pragma: allowlist secret — literal test value, not a credential
+    try {
+      for (const [method, path, body] of [
+        ["POST", "/api/v1/volumes", { name: "vol-auth-test", sizeGb: 1 }],
+        ["DELETE", "/api/v1/volumes/nonexistent-vol", null],
+        ["POST", "/api/v1/storage/pools", { name: "pool-auth-test", totalCapacityGb: 5 }],
+        ["POST", "/api/v1/storage/pools/nonexistent-pool/drain", null],
+        ["DELETE", "/api/v1/storage/pools/nonexistent-pool", null],
+      ] as const) {
+        const res = await handleRequest(
+          new Request(`http://localhost${path}`, {
+            method,
+            headers: { "content-type": "application/json" },
+            body: body ? JSON.stringify(body) : undefined,
+          }),
+        );
+        expect(res.status).toBe(401);
+      }
+
+      // Reads remain open (no API key needed)
+      const listVols = await handleRequest(new Request("http://localhost/api/v1/volumes"));
+      expect(listVols.status).toBe(200);
+      const listPools = await handleRequest(new Request("http://localhost/api/v1/storage/pools"));
+      expect(listPools.status).toBe(200);
     } finally {
       process.env.NEXUS_CLOUD_API_KEY = previousKey ?? "";
     }
