@@ -471,6 +471,49 @@ export function getCloudDomain(): string {
   return cloudConfig.cloudDomain;
 }
 
+/**
+ * Probe the /health endpoint of every exposed tool that has an upstreamUrl.
+ * A successful probe (2xx) is recorded as a heartbeat so the tool stays
+ * healthy without requiring SDK integration (Rust services, static sites).
+ * A failing probe marks the tool offline when it was not already offline.
+ * Returns counts { probed, recovered, failed }.
+ */
+export async function probeExposedToolsHealth(): Promise<{
+  probed: number;
+  recovered: number;
+  failed: number;
+}> {
+  const exposed = listTools().filter((t) => t.exposed && t.upstreamUrl);
+  let recovered = 0;
+  let failed = 0;
+
+  await Promise.allSettled(
+    exposed.map(async (tool) => {
+      try {
+        const healthUrl = tool.upstreamUrl!.replace(/\/$/, "") + "/health";
+        const res = await fetch(healthUrl, { signal: AbortSignal.timeout(5_000) });
+        await res.body?.cancel();
+        if (res.ok) {
+          recordToolHeartbeat(tool.id, {});
+          recovered++;
+        } else {
+          if (tool.health !== "offline") {
+            expireToolHeartbeat(tool.id, new Date().toISOString());
+            failed++;
+          }
+        }
+      } catch {
+        if (tool.health !== "offline") {
+          expireToolHeartbeat(tool.id, new Date().toISOString());
+          failed++;
+        }
+      }
+    }),
+  );
+
+  return { probed: exposed.length, recovered, failed };
+}
+
 export const systemsApiService = {
   deregisterSystemsApiTool,
   describeSystemsApi,
@@ -512,5 +555,6 @@ export const systemsApiService = {
   listSystemsApiRoutes,
   heartbeatSystemsApiTool,
   applyHeartbeatExpiry,
+  probeExposedToolsHealth,
   getCloudDomain,
 };

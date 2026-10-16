@@ -3,7 +3,7 @@ import { handleRequest } from "./api/router";
 import { controlPlaneService } from "./control-plane";
 import { federationService } from "./federation";
 import { bootstrapPeers } from "./federation";
-import { applyHeartbeatExpiry } from "./systems-api/service";
+import { applyHeartbeatExpiry, probeExposedToolsHealth } from "./systems-api/service";
 
 export const port = Number(process.env.PORT ?? "8787");
 export const server = Bun.serve({
@@ -46,6 +46,7 @@ bootstrapPeers().then(() => {
 
 setInterval(() => {
   applyHeartbeatExpiry();
+  probeExposedToolsHealth();
   controlPlaneService.applyNodeTrustExpiry();
   federationService.applyPeerTrustExpiry();
 }, 30_000);

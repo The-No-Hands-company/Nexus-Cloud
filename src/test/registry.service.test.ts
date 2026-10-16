@@ -400,3 +400,135 @@ describe("Systems API registry/service behavior", () => {
     }
   });
 });
+
+describe("probeExposedToolsHealth", () => {
+  test("marks an offline exposed tool healthy when its /health responds 200", async () => {
+    const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
+    try {
+      const { systemsApiService } = harness;
+
+      // Register a tool that is exposed but has never heartbeated
+      systemsApiService.registerSystemsApiTool({
+        id: "nexus-chat",
+        name: "Nexus Chat",
+        description: "Chat service",
+        exposed: true,
+        upstreamUrl: "http://127.0.0.1:9991",
+      });
+      // Expire it so it shows offline
+      systemsApiService.updateSystemsApiTool("nexus-chat", {
+        health: "offline" as const,
+      });
+
+      const before = systemsApiService.getSystemsApiTool("nexus-chat");
+      expect(before?.health).toBe("offline");
+
+      // Stub fetch to return 200
+      const originalFetch = global.fetch;
+      global.fetch = async (_url: string | Request | URL) => new Response(null, { status: 200 });
+      try {
+        const result = await systemsApiService.probeExposedToolsHealth();
+        expect(result.probed).toBe(1);
+        expect(result.recovered).toBe(1);
+        expect(result.failed).toBe(0);
+      } finally {
+        global.fetch = originalFetch;
+      }
+
+      const after = systemsApiService.getSystemsApiTool("nexus-chat");
+      expect(after?.health).toBe("healthy");
+      expect(after?.registrationStatus).toBe("active");
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  test("leaves a tool offline when its /health responds non-2xx", async () => {
+    const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
+    try {
+      const { systemsApiService } = harness;
+
+      systemsApiService.registerSystemsApiTool({
+        id: "nexus-broken",
+        name: "Nexus Broken",
+        description: "Broken service",
+        exposed: true,
+        upstreamUrl: "http://127.0.0.1:9992",
+      });
+
+      const originalFetch = global.fetch;
+      global.fetch = async (_url: string | Request | URL) => new Response(null, { status: 503 });
+      try {
+        await systemsApiService.probeExposedToolsHealth();
+      } finally {
+        global.fetch = originalFetch;
+      }
+
+      const after = systemsApiService.getSystemsApiTool("nexus-broken");
+      expect(after?.health).toBe("offline");
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  test("does not probe tools without an upstreamUrl", async () => {
+    const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
+    try {
+      const { systemsApiService } = harness;
+
+      systemsApiService.registerSystemsApiTool({
+        id: "nexus-no-upstream",
+        name: "No Upstream",
+        description: "Tool with no upstream",
+        exposed: true,
+      });
+
+      let fetchCalled = false;
+      const originalFetch = global.fetch;
+      global.fetch = async (_url: string | Request | URL) => {
+        fetchCalled = true;
+        return new Response(null, { status: 200 });
+      };
+      try {
+        const result = await systemsApiService.probeExposedToolsHealth();
+        expect(result.probed).toBe(0);
+        expect(fetchCalled).toBe(false);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  test("does not probe non-exposed tools", async () => {
+    const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
+    try {
+      const { systemsApiService } = harness;
+
+      systemsApiService.registerSystemsApiTool({
+        id: "nexus-internal",
+        name: "Internal Tool",
+        description: "Not exposed",
+        exposed: false,
+        upstreamUrl: "http://127.0.0.1:9993",
+      });
+
+      let fetchCalled = false;
+      const originalFetch = global.fetch;
+      global.fetch = async (_url: string | Request | URL) => {
+        fetchCalled = true;
+        return new Response(null, { status: 200 });
+      };
+      try {
+        const result = await systemsApiService.probeExposedToolsHealth();
+        expect(result.probed).toBe(0);
+        expect(fetchCalled).toBe(false);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    } finally {
+      harness.cleanup();
+    }
+  });
+});
