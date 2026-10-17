@@ -78,8 +78,21 @@ describe("catalog proposal validation", () => {
 		]) {
 			expect(validateCatalogProposal({ ...proposal, ...change })).toBeNull();
 		}
-		const { keywords: _, ...missingKeywords } = proposal;
-		expect(validateCatalogProposal(missingKeywords)).toBeNull();
+	});
+
+	test("rejects each missing required proposal field", () => {
+		for (const field of [
+			"suggestedShelves",
+			"suggestedAudiences",
+			"capabilities",
+			"keywords",
+			"submittedAt",
+			"version",
+		] as const) {
+			const missing: Partial<typeof proposal> = { ...proposal };
+			delete missing[field];
+			expect(validateCatalogProposal(missing)).toBeNull();
+		}
 	});
 
 	test("trims non-empty capabilities and keywords", () => {
@@ -145,7 +158,7 @@ describe("approved catalog validation", () => {
 
 	test("returns a discoverable Explore placement for unapproved records", () => {
 		for (const reviewStatus of ["pending", "deferred", "rejected"] as const) {
-			expect(exploreFallbackCatalog(reviewStatus)).toMatchObject({
+			expect(exploreFallbackCatalog(reviewStatus)).toEqual({
 				primaryShelf: "explore",
 				secondaryShelves: [],
 				audiences: [],

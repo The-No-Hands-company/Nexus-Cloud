@@ -60,6 +60,17 @@ export type ApprovedCatalog = {
 	version: number;
 };
 
+/** Presentation placement for a tool that has no approved catalog record. */
+export type ExploreFallbackCatalog = Pick<
+	ApprovedCatalog,
+	| "primaryShelf"
+	| "secondaryShelves"
+	| "audiences"
+	| "capabilities"
+	| "maturity"
+	| "visibility"
+> & { reviewStatus: CatalogReviewStatus };
+
 /** Latest submission and last approval are independent so review cannot erase approval. */
 export type CatalogRecord = {
 	toolId: string;
@@ -195,7 +206,7 @@ export function validateApprovedCatalog(
 /** Synthetic placement for a record with no approval; the status remains visible to callers. */
 export function exploreFallbackCatalog(
 	reviewStatus: CatalogReviewStatus,
-): ApprovedCatalog & { reviewStatus: CatalogReviewStatus } {
+): ExploreFallbackCatalog {
 	return {
 		primaryShelf: "explore",
 		secondaryShelves: [],
@@ -203,9 +214,6 @@ export function exploreFallbackCatalog(
 		capabilities: [],
 		maturity: "experimental",
 		visibility: "discoverable",
-		approvedAt: "",
-		approvedBy: "",
-		version: 0,
 		reviewStatus,
 	};
 }
