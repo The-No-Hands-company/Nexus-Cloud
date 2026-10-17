@@ -63,6 +63,7 @@ export type SystemsApiToolRegistrationInput = {
   delivery?: SystemsApiDelivery;
   /** Actual backend URL so the proxy routing table can forward traffic */
   upstreamUrl?: string;
+  catalogProposal?: CatalogProposal;
 };
 
 export type SystemsApiToolPatchInput = {
@@ -76,6 +77,7 @@ export type SystemsApiToolPatchInput = {
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
   /** Operator-only gate switch; see SystemsApiTool.requiresAuth. */
   requiresAuth?: boolean;
+  catalogProposal?: CatalogProposal;
 };
 
 export type SystemsApiPublicUrlRequest = {
@@ -430,6 +432,9 @@ export function listToolHistory(toolId: string): readonly SystemsApiToolHistoryE
 }
 
 export function registerSystemsApiTool(input: SystemsApiToolRegistrationInput): SystemsApiTool {
+  if (input.catalogProposal !== undefined && !validateCatalogProposal(input.catalogProposal)) {
+    throw new Error("Invalid catalog proposal");
+  }
   const existingIndex = findToolIndex(input.id);
   const previous = existingIndex >= 0 ? registry.tools[existingIndex] : null;
   const tool = buildTool(input, previous);
@@ -443,6 +448,7 @@ export function registerSystemsApiTool(input: SystemsApiToolRegistrationInput): 
     tool.updatedAt,
   );
   persist();
+  if (input.catalogProposal !== undefined) saveCatalogProposal(tool.id, input.catalogProposal);
   return tool;
 }
 
@@ -497,6 +503,9 @@ export function expireToolHeartbeat(toolId: string, expiredAt = now()): SystemsA
 }
 
 export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): SystemsApiTool | null {
+  if (patch.catalogProposal !== undefined && !validateCatalogProposal(patch.catalogProposal)) {
+    throw new Error("Invalid catalog proposal");
+  }
   const existingIndex = findToolIndex(toolId);
   if (existingIndex < 0) return null;
 
@@ -534,6 +543,7 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
   upsertToolRecord(tool);
   pushHistory(toolId, "updated", `Edited metadata for ${tool.name}`, tool.updatedAt);
   persist();
+  if (patch.catalogProposal !== undefined) saveCatalogProposal(toolId, patch.catalogProposal);
   return tool;
 }
 

@@ -8,6 +8,11 @@ import {
   tunnelTarget,
 } from "../cloudflare-dns";
 import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
+import {
+  exploreFallbackCatalog,
+  validateCatalogProposal,
+  type CatalogRecord,
+} from "../systems-api/catalog";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane, dataPlaneService } from "../data-plane";
 import { generateZoneFile } from "../dns-zone";
@@ -72,6 +77,7 @@ import {
   type SystemsApiAddressesResponseDTO,
   type SystemsApiAppsResponseDTO,
   type SystemsApiCapabilitiesResponseDTO,
+  type SystemsApiCatalogResponseDTO,
   type SystemsApiConnectionsResponseDTO,
   type SystemsApiDeployResponseDTO,
   type SystemsApiDomainResponseDTO,
@@ -658,17 +664,25 @@ async function handleSystemsTools(request: Request, url: URL): Promise<Response>
   const authenticated = await callerIsAuthenticated(request);
   const filter = parsePhantomComplianceFilter(url);
   if (filter === "all") {
+    const tools = redactUpstreams(systemsApiService.listSystemsApiTools(), authenticated);
     return json({
-      tools: redactUpstreams(systemsApiService.listSystemsApiTools(), authenticated),
+      tools,
+      ...(requiresApiKey() && authenticated
+        ? { catalog: tools.map((tool) => catalogForTool(tool.id)) }
+        : {}),
     } satisfies SystemsApiToolsResponseDTO);
   }
 
   const { entries } = collectPhantomComplianceEntries("failing");
+  const tools = redactUpstreams(
+    entries.map((entry) => entry.tool),
+    authenticated,
+  );
   return json({
-    tools: redactUpstreams(
-      entries.map((entry) => entry.tool),
-      authenticated,
-    ),
+    tools,
+    ...(requiresApiKey() && authenticated
+      ? { catalog: tools.map((tool) => catalogForTool(tool.id)) }
+      : {}),
   } satisfies SystemsApiToolsResponseDTO);
 }
 
@@ -721,6 +735,31 @@ function handleSystemsTool(toolId: string): Response {
   return json({ tool } satisfies SystemsApiToolResponseDTO);
 }
 
+function catalogForTool(toolId: string): CatalogRecord {
+  const record = systemsApiService.getCatalogRecord(toolId) ?? {
+    toolId,
+    proposal: null,
+    approved: null,
+    reviewStatus: "pending" as const,
+  };
+  return record.approved ? record : { ...record, ...exploreFallbackCatalog(record.reviewStatus) };
+}
+
+function handleSystemsCatalog(request: Request, toolId: string): Response {
+  const authErr = checkApiKey(request);
+  if (authErr) return authErr;
+  if (!systemsApiService.getSystemsApiTool(toolId)) return notFound();
+  return json({ catalog: catalogForTool(toolId) } satisfies SystemsApiCatalogResponseDTO);
+}
+
+async function handleCatalogProposal(request: Request, toolId: string): Promise<Response> {
+  if (!systemsApiService.getSystemsApiTool(toolId)) return notFound();
+  const proposal = validateCatalogProposal(await readJson(request));
+  if (!proposal) return badRequest("Invalid catalog proposal");
+  const catalog = systemsApiService.saveCatalogProposal(toolId, proposal);
+  return json({ catalog } satisfies SystemsApiCatalogResponseDTO);
+}
+
 function handleSystemsToolHistory(toolId: string): Response {
   const tool = systemsApiService.getSystemsApiTool(toolId);
   if (!tool) return notFound();
@@ -741,7 +780,8 @@ async function handleSystemsToolPatch(request: Request, toolId: string): Promise
     body.capabilities === undefined &&
     body.upstreamUrl === undefined &&
     body.phantomSecurityProfile === undefined &&
-    body.requiresAuth === undefined
+    body.requiresAuth === undefined &&
+    body.catalogProposal === undefined
   ) {
     return badRequest("Empty tool metadata patch");
   }
@@ -750,7 +790,10 @@ async function handleSystemsToolPatch(request: Request, toolId: string): Promise
     body as SystemsApiToolPatchRequestDTO,
   );
   if (!tool) return notFound();
-  return json({ tool } satisfies SystemsApiToolResponseDTO);
+  return json({
+    tool,
+    ...(body.catalogProposal !== undefined ? { catalog: catalogForTool(toolId) } : {}),
+  } satisfies SystemsApiToolResponseDTO);
 }
 
 function handleSystemsToolEnable(toolId: string): Response {
@@ -1016,6 +1059,10 @@ async function handleSystemsToolRoute(request: Request, pathname: string): Promi
   const prefix = "/api/v1/tools/";
   const suffix = pathname.slice(prefix.length);
   if (!suffix) return notFound();
+  if (request.method === "POST" && suffix.endsWith("/catalog-proposal")) {
+    const toolId = decodeURIComponent(suffix.slice(0, -"/catalog-proposal".length));
+    return toolId && !toolId.includes("/") ? handleCatalogProposal(request, toolId) : notFound();
+  }
   if (request.method === "GET" && suffix.endsWith("/history")) {
     const toolId = decodeURIComponent(suffix.slice(0, -"/history".length));
     return toolId ? handleSystemsToolHistory(toolId) : badRequest("Missing tool id");
@@ -1214,7 +1261,13 @@ async function handleToolRegister(request: Request): Promise<Response> {
   const tool = systemsApiService.registerSystemsApiTool(
     body as SystemsApiToolRegistrationRequestDTO,
   );
-  return json({ tool } satisfies SystemsApiToolResponseDTO, 201);
+  return json(
+    {
+      tool,
+      ...(body.catalogProposal !== undefined ? { catalog: catalogForTool(tool.id) } : {}),
+    } satisfies SystemsApiToolResponseDTO,
+    201,
+  );
 }
 
 async function handleSystemsAddressRoute(request: Request, pathname: string): Promise<Response> {
@@ -1692,6 +1745,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/tools")
     return handleSystemsTools(request, url);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
+  if (request.method === "GET" && pathname.startsWith("/api/v1/catalog/")) {
+    const suffix = pathname.slice("/api/v1/catalog/".length);
+    return suffix && !suffix.includes("/") ? handleSystemsCatalog(request, decodeURIComponent(suffix)) : notFound();
+  }
   if (request.method === "GET" && pathname === "/api/v1/endpoints") return handleSystemsEndpoints();
   if (request.method === "GET" && pathname === "/api/v1/capabilities")
     return handleSystemsCapabilities();

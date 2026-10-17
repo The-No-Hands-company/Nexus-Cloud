@@ -14,7 +14,12 @@ import type { FederationSummary } from "../federation/service";
 import type { HealthCheck, ObservabilityEvent } from "../observability";
 import type { ObservabilitySummary } from "../observability/service";
 import type { GuardianDecision } from "../state";
-import type { ApprovedCatalog, CatalogProposal, CatalogRecord } from "../systems-api/catalog";
+import {
+  validateCatalogProposal,
+  type ApprovedCatalog,
+  type CatalogProposal,
+  type CatalogRecord,
+} from "../systems-api/catalog";
 import type { StorageVolume } from "../storage";
 import type {
   SystemsApiAddress,
@@ -193,10 +198,12 @@ export type TrustPeerRequestDTO = FederationSignedRequest;
 
 export type SystemsApiToolsResponseDTO = {
   tools: readonly SystemsApiTool[];
+  catalog?: readonly CatalogRecord[];
 };
 
 export type SystemsApiToolResponseDTO = {
   tool: SystemsApiTool;
+  catalog?: CatalogRecord;
 };
 
 export type SystemsApiToolHistoryResponseDTO = {
@@ -346,6 +353,7 @@ export type SystemsApiToolPatchRequestDTO = {
    * tool's own registration, which it repeats on every restart and heartbeat.
    */
   requiresAuth?: boolean;
+  catalogProposal?: CatalogProposal;
 };
 
 /** Register (or upsert) a tool with Nexus Cloud */
@@ -362,6 +370,7 @@ export type SystemsApiToolRegistrationRequestDTO = {
   path?: string;
   publicUrl?: string;
   delivery?: SystemsApiDelivery;
+  catalogProposal?: CatalogProposal;
 };
 
 export type SystemsApiNodeHeartbeatRequestDTO = {
@@ -575,7 +584,9 @@ export function isSystemsApiToolPatchRequest(
       (Array.isArray(value.capabilities) && value.capabilities.every(isString))) &&
     (value.phantomSecurityProfile === undefined ||
       isPhantomSecurityProfile(value.phantomSecurityProfile)) &&
-    (value.requiresAuth === undefined || typeof value.requiresAuth === "boolean")
+    (value.requiresAuth === undefined || typeof value.requiresAuth === "boolean") &&
+    (value.catalogProposal === undefined ||
+      validateCatalogProposal(value.catalogProposal) !== null)
   );
 }
 
@@ -601,7 +612,9 @@ export function isSystemsApiToolRegistrationRequest(
       value.delivery === "shell-native" ||
       value.delivery === "proxied-app" ||
       value.delivery === "framed" ||
-      value.delivery === "external")
+      value.delivery === "external") &&
+    (value.catalogProposal === undefined ||
+      validateCatalogProposal(value.catalogProposal) !== null)
   );
 }
 

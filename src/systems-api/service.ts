@@ -1,4 +1,5 @@
 import { cloudConfig } from "../config";
+import type { CatalogProposal } from "./catalog";
 import { systemsApiDeployIntegration as deployIntegration } from "./deploy";
 import {
   deregisterTool,
@@ -112,6 +113,7 @@ export type SystemsApiToolRegistrationInput = {
   publicUrl?: string;
   delivery?: SystemsApiDelivery;
   upstreamUrl?: string;
+  catalogProposal?: CatalogProposal;
 };
 
 export type SystemsApiToolPatchInput = {
@@ -125,12 +127,15 @@ export type SystemsApiToolPatchInput = {
   phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
   /** Operator-only gate switch; see SystemsApiTool.requiresAuth. */
   requiresAuth?: boolean;
+  catalogProposal?: CatalogProposal;
 };
 
 const endpoints = [
   { method: "GET", path: "/api/v1/tools", description: "List registered tools" },
   { method: "POST", path: "/api/v1/tools", description: "Register or upsert a tool" },
   { method: "GET", path: "/api/v1/tools/:toolId", description: "Inspect a registered tool" },
+  { method: "GET", path: "/api/v1/catalog/:toolId", description: "Inspect trusted catalog metadata for a tool" },
+  { method: "POST", path: "/api/v1/tools/:toolId/catalog-proposal", description: "Submit a tool catalog proposal" },
   {
     method: "GET",
     path: "/api/v1/tools/:toolId/history",
