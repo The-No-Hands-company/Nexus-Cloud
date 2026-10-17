@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ApprovedCatalog, CatalogProposal } from "./catalog";
 
 const originalCwd = process.cwd();
 
@@ -26,6 +27,7 @@ describe("systems api registry durability", () => {
         history: [],
         exposures: [],
         domains: [],
+        catalog: { proposals: {}, approved: {} },
       });
 
       const registryPath = storeModule.getSystemsApiRegistryPath();
@@ -52,6 +54,7 @@ describe("systems api registry durability", () => {
         history: [],
         exposures: [],
         domains: [],
+        catalog: { proposals: {}, approved: {} },
       };
 
       writeFileSync(registryPath, "{invalid-json");
@@ -109,6 +112,7 @@ describe("requiresAuth durability", () => {
         history: [],
         exposures: [],
         domains: [],
+        catalog: { proposals: {}, approved: {} },
       });
 
       const reloaded = storeModule.loadSystemsApiRegistry();
@@ -155,6 +159,54 @@ describe("requiresAuth durability", () => {
       expect(storeModule.loadSystemsApiRegistry().tools[0]?.requiresAuth).toBe(false);
     } finally {
       process.chdir(originalCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("catalog registry durability", () => {
+  test("loads an old snapshot without catalog as empty catalog maps", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "nexus-cloud-catalog-old-"));
+    try {
+      process.chdir(tempDir);
+      writeFileSync("registry.json", JSON.stringify({ tools: [], publicUrls: [], addresses: [], history: [], exposures: [], domains: [] }));
+      process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = join(tempDir, "registry.json");
+      const store = await importFreshStoreModule("catalog-old");
+      expect(store.loadSystemsApiRegistry().catalog).toEqual({ proposals: {}, approved: {} });
+    } finally {
+      delete process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH;
+      process.chdir(originalCwd);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("round trips every proposal and approval field", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "nexus-cloud-catalog-roundtrip-"));
+    try {
+      process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = join(tempDir, "registry.json");
+      const store = await importFreshStoreModule("catalog-roundtrip");
+      const proposal: CatalogProposal = { suggestedShelves: ["develop"], suggestedAudiences: ["developer"], capabilities: ["code"], keywords: ["editor"], submittedAt: "2026-10-17T00:00:00.000Z", version: 2 };
+      const approved: ApprovedCatalog = { primaryShelf: "develop", secondaryShelves: ["work"], audiences: ["developer"], capabilities: ["code"], maturity: "stable", visibility: "discoverable", approvedAt: "2026-10-17T01:00:00.000Z", approvedBy: "operator", version: 1 };
+      store.saveSystemsApiRegistry({ tools: [], publicUrls: [], addresses: [], history: [], exposures: [], domains: [], catalog: { proposals: { editor: proposal }, approved: { editor: approved } } });
+      expect(store.loadSystemsApiRegistry().catalog).toEqual({ proposals: { editor: proposal }, approved: { editor: approved } });
+    } finally {
+      delete process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH;
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("discards malformed catalog records while preserving valid tools and records", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "nexus-cloud-catalog-corrupt-"));
+    try {
+      process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = join(tempDir, "registry.json");
+      const proposal = { suggestedShelves: ["develop"], suggestedAudiences: [], capabilities: [], keywords: [], submittedAt: "2026-10-17T00:00:00.000Z", version: 1 };
+      writeFileSync(join(tempDir, "registry.json"), JSON.stringify({ tools: [{ id: "editor", name: "Editor", description: "Code editor" }], catalog: { proposals: { editor: proposal, broken: { ...proposal, version: 0 } }, approved: { editor: { primaryShelf: "invalid" } } } }));
+      const store = await importFreshStoreModule("catalog-corrupt");
+      const loaded = store.loadSystemsApiRegistry();
+      expect(loaded.tools[0]?.id).toBe("editor");
+      expect(loaded.catalog).toEqual({ proposals: { editor: proposal }, approved: {} });
+    } finally {
+      delete process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH;
       rmSync(tempDir, { recursive: true, force: true });
     }
   });

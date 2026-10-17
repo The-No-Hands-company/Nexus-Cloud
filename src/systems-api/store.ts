@@ -5,6 +5,12 @@ import {
   resolveJsonStorePath,
   writeJsonStoreAtomic,
 } from "../persistence/json-store";
+import {
+  type ApprovedCatalog,
+  type CatalogProposal,
+  validateApprovedCatalog,
+  validateCatalogProposal,
+} from "./catalog";
 import type {
   SystemsApiAddress,
   SystemsApiAddressStatus,
@@ -25,6 +31,16 @@ import type {
   SystemsApiToolRegistrationStatus,
 } from "./types";
 
+export type SystemsApiCatalogState = {
+  proposals: Record<string, CatalogProposal>;
+  approved: Record<string, ApprovedCatalog>;
+};
+
+export const emptySystemsApiCatalogState: SystemsApiCatalogState = {
+  proposals: {},
+  approved: {},
+};
+
 export type SystemsApiRegistryData = {
   tools: SystemsApiTool[];
   publicUrls: SystemsApiPublicUrl[];
@@ -32,6 +48,7 @@ export type SystemsApiRegistryData = {
   history: SystemsApiToolHistoryEntry[];
   exposures: SystemsApiExposureRecord[];
   domains: SystemsApiDomainBinding[];
+  catalog: SystemsApiCatalogState;
 };
 
 export type SystemsApiRegistryMetadata = {
@@ -51,6 +68,7 @@ const EMPTY_REGISTRY: SystemsApiRegistryData = {
   history: [],
   exposures: [],
   domains: [],
+  catalog: emptySystemsApiCatalogState,
 };
 
 function ensureStorageDir(): void {
@@ -403,11 +421,44 @@ function sanitizeRegistry(value: unknown): SystemsApiRegistryData {
         .map(sanitizeDomainBinding)
         .filter((item): item is SystemsApiDomainBinding => item !== null)
     : [];
-  return { tools, publicUrls, addresses, history, exposures, domains };
+  return {
+    tools,
+    publicUrls,
+    addresses,
+    history,
+    exposures,
+    domains,
+    catalog: sanitizeCatalog(value.catalog),
+  };
+}
+
+function sanitizeCatalog(value: unknown): SystemsApiCatalogState {
+  const proposals: [string, CatalogProposal][] = [];
+  const approved: [string, ApprovedCatalog][] = [];
+  if (!isObject(value)) return { proposals: {}, approved: {} };
+  if (isObject(value.proposals)) {
+    for (const [toolId, raw] of Object.entries(value.proposals)) {
+      if (!toolId) continue;
+      const proposal = validateCatalogProposal(raw);
+      if (proposal) proposals.push([toolId, proposal]);
+    }
+  }
+  if (isObject(value.approved)) {
+    for (const [toolId, raw] of Object.entries(value.approved)) {
+      if (!toolId) continue;
+      const record = validateApprovedCatalog(raw);
+      if (record) approved.push([toolId, record]);
+    }
+  }
+  return {
+    proposals: Object.fromEntries(proposals),
+    approved: Object.fromEntries(approved),
+  };
 }
 
 export function loadSystemsApiRegistry(): SystemsApiRegistryData {
-  return loadJsonStoreWithRecovery(getRegistryPath(), EMPTY_REGISTRY, sanitizeRegistry).value;
+  const loaded = loadJsonStoreWithRecovery(getRegistryPath(), EMPTY_REGISTRY, sanitizeRegistry);
+  return sanitizeRegistry(loaded.value);
 }
 
 export function saveSystemsApiRegistry(registry: SystemsApiRegistryData): void {
@@ -429,7 +480,7 @@ export function recoverSystemsApiRegistryFromDisk(): {
 } {
   const loaded = loadJsonStoreWithRecovery(getRegistryPath(), EMPTY_REGISTRY, sanitizeRegistry);
   return {
-    registry: loaded.value,
+    registry: sanitizeRegistry(loaded.value),
     recovery: loaded.recovery,
   };
 }

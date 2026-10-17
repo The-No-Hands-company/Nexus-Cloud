@@ -3,6 +3,13 @@ import { recordEvent } from "../observability";
 import { state } from "../state";
 import { buildPublicAddress, createAddressRecord, revokeAddressRecord } from "./address";
 import {
+  type ApprovedCatalog,
+  type CatalogProposal,
+  type CatalogRecord,
+  validateApprovedCatalog,
+  validateCatalogProposal,
+} from "./catalog";
+import {
   issueDomainVerificationChallenge as buildDomainVerificationChallenge,
   createDomainBinding,
   revokeDomainBinding as revokeDomainRecord,
@@ -16,6 +23,7 @@ import {
 } from "./exposure";
 import {
   type SystemsApiRegistryData,
+  emptySystemsApiCatalogState,
   getSystemsApiRegistryMetadata,
   loadSystemsApiRegistry,
   saveSystemsApiRegistry,
@@ -113,6 +121,31 @@ function cloneRegistryData(data: SystemsApiRegistryData): SystemsApiRegistryData
     history: data.history.map((item) => ({ ...item })),
     exposures: data.exposures.map((item) => ({ ...item })),
     domains: data.domains.map((item) => ({ ...item })),
+    catalog: {
+      proposals: Object.fromEntries(
+        Object.entries(data.catalog.proposals).map(([id, proposal]) => [
+          id,
+          {
+            ...proposal,
+            suggestedShelves: [...proposal.suggestedShelves],
+            suggestedAudiences: [...proposal.suggestedAudiences],
+            capabilities: [...proposal.capabilities],
+            keywords: [...proposal.keywords],
+          },
+        ]),
+      ),
+      approved: Object.fromEntries(
+        Object.entries(data.catalog.approved).map(([id, approved]) => [
+          id,
+          {
+            ...approved,
+            secondaryShelves: [...approved.secondaryShelves],
+            audiences: [...approved.audiences],
+            capabilities: [...approved.capabilities],
+          },
+        ]),
+      ),
+    },
   };
 }
 
@@ -124,6 +157,7 @@ export function resetSystemsApiRegistryForTests(
     history: [],
     exposures: [],
     domains: [],
+    catalog: emptySystemsApiCatalogState,
   },
 ): void {
   const snapshot = cloneRegistryData(next);
@@ -133,7 +167,41 @@ export function resetSystemsApiRegistryForTests(
   registry.history = snapshot.history;
   registry.exposures = snapshot.exposures;
   registry.domains = snapshot.domains;
+  registry.catalog = snapshot.catalog;
   persist();
+}
+
+export function getCatalogRecord(toolId: string): CatalogRecord | null {
+  const proposal = Object.hasOwn(registry.catalog.proposals, toolId)
+    ? registry.catalog.proposals[toolId] ?? null
+    : null;
+  const approved = Object.hasOwn(registry.catalog.approved, toolId)
+    ? registry.catalog.approved[toolId] ?? null
+    : null;
+  if (!proposal && !approved) return null;
+  return {
+    toolId,
+    proposal: proposal ? validateCatalogProposal(proposal) : null,
+    approved: approved ? validateApprovedCatalog(approved) : null,
+    reviewStatus:
+      proposal && (!approved || proposal.version > approved.version) ? "pending" : "approved",
+  };
+}
+
+export function saveCatalogProposal(toolId: string, proposal: CatalogProposal): CatalogRecord {
+  const valid = validateCatalogProposal(proposal);
+  if (!toolId || !valid) throw new Error("Invalid catalog proposal");
+  registry.catalog.proposals = { ...registry.catalog.proposals, [toolId]: valid };
+  persist();
+  return getCatalogRecord(toolId)!;
+}
+
+export function saveApprovedCatalog(toolId: string, approved: ApprovedCatalog): CatalogRecord {
+  const valid = validateApprovedCatalog(approved);
+  if (!toolId || !valid) throw new Error("Invalid approved catalog");
+  registry.catalog.approved = { ...registry.catalog.approved, [toolId]: valid };
+  persist();
+  return getCatalogRecord(toolId)!;
 }
 
 function now(): string {

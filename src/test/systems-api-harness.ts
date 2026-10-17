@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SystemsApiRegistryData } from "../systems-api/store";
+import { emptySystemsApiCatalogState, type SystemsApiRegistryData } from "../systems-api/store";
 
 export const emptySystemsApiRegistry: SystemsApiRegistryData = {
   tools: [],
@@ -11,6 +11,7 @@ export const emptySystemsApiRegistry: SystemsApiRegistryData = {
   history: [],
   exposures: [],
   domains: [],
+  catalog: emptySystemsApiCatalogState,
 };
 
 export type SystemsApiTestHarness = {
