@@ -14,6 +14,7 @@ import type { FederationSummary } from "../federation/service";
 import type { HealthCheck, ObservabilityEvent } from "../observability";
 import type { ObservabilitySummary } from "../observability/service";
 import type { GuardianDecision } from "../state";
+import type { ApprovedCatalog, CatalogProposal, CatalogRecord } from "../systems-api/catalog";
 import type { StorageVolume } from "../storage";
 import type {
   SystemsApiAddress,
@@ -205,6 +206,10 @@ export type SystemsApiToolHistoryResponseDTO = {
 export type SystemsApiAppsResponseDTO = {
   apps: readonly SystemsApiApp[];
 };
+
+export type SystemsApiCatalogProposalRequestDTO = CatalogProposal;
+export type SystemsApiCatalogApprovalRequestDTO = ApprovedCatalog;
+export type SystemsApiCatalogResponseDTO = { catalog: CatalogRecord };
 
 export type SystemsApiConnectionsResponseDTO = {
   connections: readonly SystemsApiConnection[];
