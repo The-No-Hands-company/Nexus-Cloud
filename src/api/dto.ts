@@ -19,6 +19,7 @@ import {
   type ApprovedCatalog,
   type CatalogProposal,
   type CatalogRecord,
+  type ExploreFallbackCatalog,
 } from "../systems-api/catalog";
 import type { StorageVolume } from "../storage";
 import type {
@@ -198,12 +199,12 @@ export type TrustPeerRequestDTO = FederationSignedRequest;
 
 export type SystemsApiToolsResponseDTO = {
   tools: readonly SystemsApiTool[];
-  catalog?: readonly CatalogRecord[];
+  catalog?: readonly SystemsApiCatalogRecordDTO[];
 };
 
 export type SystemsApiToolResponseDTO = {
   tool: SystemsApiTool;
-  catalog?: CatalogRecord;
+  catalog?: SystemsApiCatalogRecordDTO;
 };
 
 export type SystemsApiToolHistoryResponseDTO = {
@@ -216,7 +217,10 @@ export type SystemsApiAppsResponseDTO = {
 
 export type SystemsApiCatalogProposalRequestDTO = CatalogProposal;
 export type SystemsApiCatalogApprovalRequestDTO = ApprovedCatalog;
-export type SystemsApiCatalogResponseDTO = { catalog: CatalogRecord };
+export type SystemsApiCatalogRecordDTO =
+  | (CatalogRecord & { approved: ApprovedCatalog })
+  | (CatalogRecord & { approved: null } & ExploreFallbackCatalog);
+export type SystemsApiCatalogResponseDTO = { catalog: SystemsApiCatalogRecordDTO };
 
 export type SystemsApiConnectionsResponseDTO = {
   connections: readonly SystemsApiConnection[];

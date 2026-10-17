@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createSystemsApiTestHarness } from "../test/systems-api-harness";
+import type { SystemsApiCatalogResponseDTO } from "./dto";
 
 const proposal = {
   suggestedShelves: ["everyday"],
@@ -66,7 +67,11 @@ describe("catalog proposal routes", () => {
     service.registerSystemsApiTool({ id: "catalog-legacy", name: "Legacy", description: "Legacy" });
     const response = await handleRequest(request("/api/v1/catalog/catalog-legacy", "GET"));
     expect(response.status).toBe(200);
-    expect((await response.json()).catalog).toMatchObject({ toolId: "catalog-legacy", primaryShelf: "explore", reviewStatus: "pending" });
+    const { catalog } = (await response.json()) as SystemsApiCatalogResponseDTO;
+    expect(catalog).toMatchObject({ toolId: "catalog-legacy", primaryShelf: "explore", reviewStatus: "pending" });
+    if (catalog.approved !== null) throw new Error("Expected Explore fallback");
+    expect(catalog.primaryShelf).toBe("explore");
+    expect(catalog.visibility).toBe("discoverable");
   });
 
   test("patch can submit a proposal and omitted fields preserve catalog state", async () => {
@@ -103,5 +108,30 @@ describe("catalog proposal routes", () => {
     } finally {
       process.env.NEXUS_CLOUD_API_KEY = previousKey ?? "";
     }
+  });
+
+  test("rejects changed equal and lower version proposals without changing approval", async () => {
+    const toolId = "catalog-versioned";
+    const accepted = { ...proposal, version: 3 };
+    service.registerSystemsApiTool({ id: toolId, name: "Versioned", description: "Original", catalogProposal: accepted });
+    const approved = {
+      primaryShelf: "work" as const, secondaryShelves: [], audiences: ["business" as const],
+      capabilities: ["messaging"], maturity: "stable" as const, visibility: "default" as const,
+      approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform:catalog", version: 3,
+    };
+    service.saveApprovedCatalog(toolId, approved);
+    const changed = { ...accepted, keywords: ["changed"] };
+    const equal = await handleRequest(request(`/api/v1/tools/${toolId}/catalog-proposal`, "POST", changed));
+    expect(equal.status).toBe(400);
+    expect((await equal.json()).error).toBe("Stale catalog proposal version");
+    const lower = await handleRequest(request(`/api/v1/tools/${toolId}`, "PATCH", { description: "Changed", catalogProposal: { ...changed, version: 2 } }));
+    expect(lower.status).toBe(400);
+    expect((await lower.json()).error).toBe("Stale catalog proposal version");
+    const reregister = await handleRequest(request("/api/v1/tools", "POST", { id: toolId, name: "Changed", description: "Changed", catalogProposal: changed }));
+    expect(reregister.status).toBe(400);
+    expect(service.getCatalogRecord(toolId)).toMatchObject({ proposal: accepted, approved, reviewStatus: "approved" });
+    expect(service.getSystemsApiTool(toolId)).toMatchObject({ name: "Versioned", description: "Original" });
+    const repeated = await handleRequest(request("/api/v1/tools", "POST", { id: toolId, name: "Versioned", description: "Original", catalogProposal: accepted }));
+    expect(repeated.status).toBe(201);
   });
 });

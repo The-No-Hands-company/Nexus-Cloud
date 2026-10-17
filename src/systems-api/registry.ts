@@ -190,9 +190,20 @@ export function getCatalogRecord(toolId: string): CatalogRecord | null {
   };
 }
 
+export function canSubmitCatalogProposal(toolId: string, proposal: CatalogProposal): boolean {
+  const normalized = validateCatalogProposal(proposal);
+  if (!normalized) return false;
+  const approved = registry.catalog.approved[toolId];
+  if (!approved || normalized.version > approved.version) return true;
+  if (normalized.version < approved.version) return false;
+  const current = registry.catalog.proposals[toolId];
+  return current !== undefined && JSON.stringify(current) === JSON.stringify(normalized);
+}
+
 export function saveCatalogProposal(toolId: string, proposal: CatalogProposal): CatalogRecord {
   const valid = validateCatalogProposal(proposal);
   if (!toolId || !valid) throw new Error("Invalid catalog proposal");
+  if (!canSubmitCatalogProposal(toolId, valid)) throw new Error("Stale catalog proposal version");
   registry.catalog.proposals = { ...registry.catalog.proposals, [toolId]: valid };
   persist();
   return getCatalogRecord(toolId)!;
@@ -435,6 +446,9 @@ export function registerSystemsApiTool(input: SystemsApiToolRegistrationInput): 
   if (input.catalogProposal !== undefined && !validateCatalogProposal(input.catalogProposal)) {
     throw new Error("Invalid catalog proposal");
   }
+  if (input.catalogProposal !== undefined && !canSubmitCatalogProposal(input.id, input.catalogProposal)) {
+    throw new Error("Stale catalog proposal version");
+  }
   const existingIndex = findToolIndex(input.id);
   const previous = existingIndex >= 0 ? registry.tools[existingIndex] : null;
   const tool = buildTool(input, previous);
@@ -505,6 +519,9 @@ export function expireToolHeartbeat(toolId: string, expiredAt = now()): SystemsA
 export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): SystemsApiTool | null {
   if (patch.catalogProposal !== undefined && !validateCatalogProposal(patch.catalogProposal)) {
     throw new Error("Invalid catalog proposal");
+  }
+  if (patch.catalogProposal !== undefined && !canSubmitCatalogProposal(toolId, patch.catalogProposal)) {
+    throw new Error("Stale catalog proposal version");
   }
   const existingIndex = findToolIndex(toolId);
   if (existingIndex < 0) return null;

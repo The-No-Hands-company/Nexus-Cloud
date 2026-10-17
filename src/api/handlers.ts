@@ -8,11 +8,7 @@ import {
   tunnelTarget,
 } from "../cloudflare-dns";
 import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
-import {
-  exploreFallbackCatalog,
-  validateCatalogProposal,
-  type CatalogRecord,
-} from "../systems-api/catalog";
+import { exploreFallbackCatalog, validateCatalogProposal } from "../systems-api/catalog";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane, dataPlaneService } from "../data-plane";
 import { generateZoneFile } from "../dns-zone";
@@ -78,6 +74,7 @@ import {
   type SystemsApiAppsResponseDTO,
   type SystemsApiCapabilitiesResponseDTO,
   type SystemsApiCatalogResponseDTO,
+  type SystemsApiCatalogRecordDTO,
   type SystemsApiConnectionsResponseDTO,
   type SystemsApiDeployResponseDTO,
   type SystemsApiDomainResponseDTO,
@@ -735,14 +732,16 @@ function handleSystemsTool(toolId: string): Response {
   return json({ tool } satisfies SystemsApiToolResponseDTO);
 }
 
-function catalogForTool(toolId: string): CatalogRecord {
+function catalogForTool(toolId: string): SystemsApiCatalogRecordDTO {
   const record = systemsApiService.getCatalogRecord(toolId) ?? {
     toolId,
     proposal: null,
     approved: null,
     reviewStatus: "pending" as const,
   };
-  return record.approved ? record : { ...record, ...exploreFallbackCatalog(record.reviewStatus) };
+  return record.approved
+    ? { ...record, approved: record.approved }
+    : { ...record, approved: null, ...exploreFallbackCatalog(record.reviewStatus) };
 }
 
 function handleSystemsCatalog(request: Request, toolId: string): Response {
@@ -756,8 +755,11 @@ async function handleCatalogProposal(request: Request, toolId: string): Promise<
   if (!systemsApiService.getSystemsApiTool(toolId)) return notFound();
   const proposal = validateCatalogProposal(await readJson(request));
   if (!proposal) return badRequest("Invalid catalog proposal");
-  const catalog = systemsApiService.saveCatalogProposal(toolId, proposal);
-  return json({ catalog } satisfies SystemsApiCatalogResponseDTO);
+  if (!systemsApiService.canSubmitCatalogProposal(toolId, proposal)) {
+    return badRequest("Stale catalog proposal version");
+  }
+  systemsApiService.saveCatalogProposal(toolId, proposal);
+  return json({ catalog: catalogForTool(toolId) } satisfies SystemsApiCatalogResponseDTO);
 }
 
 function handleSystemsToolHistory(toolId: string): Response {
@@ -771,6 +773,10 @@ function handleSystemsToolHistory(toolId: string): Response {
 async function handleSystemsToolPatch(request: Request, toolId: string): Promise<Response> {
   const body = await readJson(request);
   if (!isSystemsApiToolPatchRequest(body)) return badRequest("Missing tool metadata fields");
+  if (
+    body.catalogProposal !== undefined &&
+    !systemsApiService.canSubmitCatalogProposal(toolId, body.catalogProposal)
+  ) return badRequest("Stale catalog proposal version");
   if (
     body.name === undefined &&
     body.description === undefined &&
@@ -1258,6 +1264,10 @@ async function handleToolRegister(request: Request): Promise<Response> {
   const body = await readJson(request);
   if (!isSystemsApiToolRegistrationRequest(body))
     return badRequest("Missing tool registration fields");
+  if (
+    body.catalogProposal !== undefined &&
+    !systemsApiService.canSubmitCatalogProposal(body.id, body.catalogProposal)
+  ) return badRequest("Stale catalog proposal version");
   const tool = systemsApiService.registerSystemsApiTool(
     body as SystemsApiToolRegistrationRequestDTO,
   );

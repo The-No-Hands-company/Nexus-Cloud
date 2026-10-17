@@ -2,6 +2,7 @@ import { cloudConfig } from "../config";
 import type { CatalogProposal } from "./catalog";
 import { systemsApiDeployIntegration as deployIntegration } from "./deploy";
 import {
+  canSubmitCatalogProposal,
   deregisterTool,
   describeStatus,
   disableSystemsApiTool as disableTool,
@@ -523,6 +524,7 @@ export async function probeExposedToolsHealth(): Promise<{
 }
 
 export const systemsApiService = {
+  canSubmitCatalogProposal,
   deregisterSystemsApiTool,
   describeSystemsApi,
   describeSystemsApiDeployIntegration,
