@@ -154,6 +154,7 @@ describe("requiresAuth durability", () => {
         history: [],
         exposures: [],
         domains: [],
+        catalog: storeModule.emptySystemsApiCatalogState,
       });
 
       expect(storeModule.loadSystemsApiRegistry().tools[0]?.requiresAuth).toBe(false);
