@@ -20,6 +20,8 @@ export type CatalogReleaseFixtureApp = {
 	maturity?: "stable" | "preview" | "experimental";
 	visibility?: "default" | "discoverable" | "restricted" | "hidden";
 	reviewStatus?: "approved" | "pending" | "deferred" | "rejected";
+	surface?: "user-app" | "developer-tool" | "admin-console" | "platform-service";
+	releaseState?: "staged" | "released" | "retired";
 };
 
 export type CatalogReleaseFixture = { apps: CatalogReleaseFixtureApp[] };
@@ -27,6 +29,23 @@ export type CatalogReleaseFixture = { apps: CatalogReleaseFixtureApp[] };
 export function buildCatalogReleaseFixture(): CatalogReleaseFixture {
 	return {
 		apps: [
+			{
+				id: "nexus-email",
+				name: "Nexus Mail",
+				description: "Sovereign mail",
+				path: "/mail",
+				delivery: "shell-native",
+				health: "healthy",
+				primaryShelf: "everyday",
+				secondaryShelves: ["work"],
+				audiences: ["general"],
+				capabilities: ["mail", "calendar-inbox"],
+				maturity: "stable",
+				visibility: "default",
+				reviewStatus: "approved",
+				surface: "user-app",
+				releaseState: "released",
+			},
 			{
 				id: "nexus-calendar",
 				name: "Nexus Calendar",
@@ -42,6 +61,8 @@ export function buildCatalogReleaseFixture(): CatalogReleaseFixture {
 				maturity: "stable",
 				visibility: "default",
 				reviewStatus: "approved",
+				surface: "user-app",
+				releaseState: "staged",
 			},
 			{
 				id: "nexus-design",
@@ -58,6 +79,8 @@ export function buildCatalogReleaseFixture(): CatalogReleaseFixture {
 				maturity: "stable",
 				visibility: "default",
 				reviewStatus: "approved",
+				surface: "user-app",
+				releaseState: "staged",
 			},
 			{
 				id: "nexus-forge",
@@ -74,6 +97,8 @@ export function buildCatalogReleaseFixture(): CatalogReleaseFixture {
 				maturity: "stable",
 				visibility: "default",
 				reviewStatus: "approved",
+				surface: "developer-tool",
+				releaseState: "released",
 			},
 			{
 				id: "nexus-cloud",
@@ -89,6 +114,8 @@ export function buildCatalogReleaseFixture(): CatalogReleaseFixture {
 				maturity: "stable",
 				visibility: "default",
 				reviewStatus: "approved",
+				surface: "admin-console",
+				releaseState: "released",
 			},
 			{
 				id: "nexus-experimental",
@@ -115,6 +142,8 @@ export function buildCatalogReleaseFixture(): CatalogReleaseFixture {
 				maturity: "stable",
 				visibility: "default",
 				reviewStatus: "approved",
+				surface: "user-app",
+				releaseState: "staged",
 			},
 			{
 				id: "legacy-notes",

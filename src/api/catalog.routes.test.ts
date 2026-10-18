@@ -87,7 +87,7 @@ describe("catalog proposal routes", () => {
     service.saveApprovedCatalog("projection-alpha", { primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "default", surface: "user-app", releaseState: "released", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
     service.registerSystemsApiTool({ id: "projection-pending", name: "Pending", description: "Pending", publicUrl: "https://pending.example", catalogProposal: proposal });
     service.registerSystemsApiTool({ id: "projection-restricted", name: "Restricted", description: "Restricted", publicUrl: "https://restricted.example", catalogProposal: proposal });
-    service.saveApprovedCatalog("projection-restricted", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "preview", visibility: "restricted", surface: "user-app", releaseState: "released", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.saveApprovedCatalog("projection-restricted", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "preview", visibility: "restricted", surface: "user-app", releaseState: "staged", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
     service.registerSystemsApiTool({ id: "projection-offline", name: "Offline", description: "Offline" });
     expireToolHeartbeat("projection-offline");
     const response = await handleRequest(request("/api/v1/catalog", "GET"));
@@ -95,10 +95,11 @@ describe("catalog proposal routes", () => {
     const { apps } = (await response.json()) as SystemsApiCatalogListResponseDTO;
     const ours = apps.filter((app) => app.id.startsWith("projection-"));
     expect(ours.map((app) => app.name)).toEqual(["Alpha", "Offline", "Pending", "Restricted", "Zeta"]);
-    expect(ours[0]).toMatchObject({ primaryShelf: "work", reviewStatus: "approved", health: "healthy", publicUrl: "https://alpha.example" });
+    expect(ours[0]).toMatchObject({ primaryShelf: "work", reviewStatus: "approved", health: "healthy", publicUrl: "https://alpha.example", surface: "user-app", releaseState: "released" });
     expect(ours[1]).toMatchObject({ primaryShelf: "explore", visibility: "discoverable", health: "offline", reviewStatus: "pending" });
     expect(ours[2]).toMatchObject({ primaryShelf: "explore", capabilities: [], reviewStatus: "pending" });
-    expect(ours[3]).toMatchObject({ primaryShelf: "operate", visibility: "restricted", maturity: "preview" });
+    expect(ours[2]).not.toHaveProperty("releaseState");
+    expect(ours[3]).toMatchObject({ primaryShelf: "operate", visibility: "restricted", maturity: "preview", surface: "user-app", releaseState: "staged" });
     expect(ours[4]).toMatchObject({ primaryShelf: "explore", secondaryShelves: [], audiences: [], maturity: "experimental" });
   });
 

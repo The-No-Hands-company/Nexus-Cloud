@@ -68,16 +68,19 @@ describe("disposable Cloud to Dashboard catalog release", () => {
 			const approved = await harness.handleRequest(
 				request("/api/v1/catalog/release-approved/approve", {
 					method: "POST",
-					headers: { authorization: "Bearer platform-session" },
+					headers: { authorization: "Bearer platform-session", "content-type": "application/json" },
+					body: JSON.stringify({ surface: "user-app", releaseState: "released" }),
 				}),
 			);
 			expect(approved.status).toBe(200);
+			expect(harness.systemsApiService.getCatalogRecord("release-approved")?.approved).toMatchObject({ surface: "user-app", releaseState: "released" });
 
 			const catalogResponse = await harness.handleRequest(
 				request("/api/v1/catalog"),
 			);
 			expect(catalogResponse.status).toBe(200);
 			const projected = await catalogResponse.json();
+			expect(projected.apps.find((app: { id: string }) => app.id === "release-approved")).toMatchObject({ surface: "user-app", releaseState: "released" });
 			const entries = toAppEntries(projected, "auth.tnhc.dev");
 
 			expect(

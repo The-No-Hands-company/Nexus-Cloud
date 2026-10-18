@@ -826,7 +826,8 @@ async function handleSystemsCatalogList(request: Request): Promise<Response> {
       const catalog = catalogForTool(tool.id);
       const placement = catalog.approved ?? exploreFallbackCatalog(catalog.reviewStatus);
       const { primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility } = placement;
-      return { ...tool, primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility, reviewStatus: catalog.reviewStatus };
+      return { ...tool, primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility, reviewStatus: catalog.reviewStatus,
+        ...(catalog.approved ? { surface: catalog.approved.surface, releaseState: catalog.approved.releaseState } : {}) };
     })
     .filter((app) => canReadHidden || app.visibility !== "hidden")
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));

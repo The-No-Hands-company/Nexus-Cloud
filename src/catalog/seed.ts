@@ -3,7 +3,9 @@ import {
 	CATALOG_AUDIENCES,
 	type CatalogAudience,
 	type CatalogMaturity,
+	type CatalogReleaseState,
 	type CatalogShelf,
+	type CatalogSurface,
 } from "../systems-api/catalog";
 import {
 	getCatalogRecord,
@@ -21,6 +23,8 @@ export type CoreCatalogSeed = {
 	audiences: CatalogAudience[];
 	capabilities: string[];
 	maturity: CatalogMaturity;
+	surface: CatalogSurface;
+	releaseState: CatalogReleaseState;
 };
 
 const general: CatalogAudience[] = ["general"];
@@ -35,6 +39,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: general,
 		capabilities: ["mail", "calendar-inbox"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "released",
 	},
 	"nexus-calendar": {
 		primaryShelf: "everyday",
@@ -42,6 +48,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: general,
 		capabilities: ["calendar", "scheduling"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-chat": {
 		primaryShelf: "work",
@@ -49,6 +57,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: general,
 		capabilities: ["chat", "messaging"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-project": {
 		primaryShelf: "work",
@@ -56,6 +66,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: ["business", "developer"],
 		capabilities: ["projects", "tasks"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-design": {
 		primaryShelf: "create",
@@ -63,6 +75,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: ["creator", "general"],
 		capabilities: ["design", "ui"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-graphic": {
 		primaryShelf: "create",
@@ -70,6 +84,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: ["creator", "general"],
 		capabilities: ["graphics", "illustration"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-photos": {
 		primaryShelf: "create",
@@ -77,6 +93,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: ["creator", "general"],
 		capabilities: ["photos", "media"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-video": {
 		primaryShelf: "create",
@@ -84,6 +102,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: ["creator", "general"],
 		capabilities: ["video", "media"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-draw": {
 		primaryShelf: "create",
@@ -91,6 +111,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: ["creator", "business"],
 		capabilities: ["canvas", "whiteboard"],
 		maturity: "stable",
+		surface: "user-app",
+		releaseState: "staged",
 	},
 	"nexus-forge": {
 		primaryShelf: "develop",
@@ -98,6 +120,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: developer,
 		capabilities: ["code", "repositories"],
 		maturity: "stable",
+		surface: "developer-tool",
+		releaseState: "released",
 	},
 	"nexus-deploy": {
 		primaryShelf: "operate",
@@ -105,6 +129,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: operations,
 		capabilities: ["deployment", "hosting"],
 		maturity: "stable",
+		surface: "developer-tool",
+		releaseState: "released",
 	},
 	"nexus-terminal": {
 		primaryShelf: "operate",
@@ -112,6 +138,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: operations,
 		capabilities: ["terminal", "cli"],
 		maturity: "stable",
+		surface: "developer-tool",
+		releaseState: "released",
 	},
 	"nexus-cloud": {
 		primaryShelf: "operate",
@@ -119,6 +147,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: operations,
 		capabilities: ["control-plane", "registry", "federation"],
 		maturity: "stable",
+		surface: "admin-console",
+		releaseState: "released",
 	},
 	"nexus-auth": {
 		primaryShelf: "operate",
@@ -126,6 +156,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: operations,
 		capabilities: ["identity", "sso"],
 		maturity: "stable",
+		surface: "platform-service",
+		releaseState: "released",
 	},
 	"nexus-network": {
 		primaryShelf: "operate",
@@ -133,6 +165,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: operations,
 		capabilities: ["network", "topology"],
 		maturity: "stable",
+		surface: "platform-service",
+		releaseState: "released",
 	},
 	"nexus-vault": {
 		primaryShelf: "operate",
@@ -140,6 +174,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: ["general", "operations"],
 		capabilities: ["secrets", "storage"],
 		maturity: "stable",
+		surface: "platform-service",
+		releaseState: "released",
 	},
 };
 
