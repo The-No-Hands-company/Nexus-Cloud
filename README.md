@@ -6,6 +6,12 @@ Self-hosted, federated cloud infrastructure and ecosystem hub for The No Hands C
 
 This repository is the control layer for the Nexus Systems ecosystem. Nexus Cloud is where the ecosystem gets a shared control plane, a canonical topology map, stable discovery, public exposure contracts, and a place to coordinate deeper or shallower integrations across the rest of the stack without relying on hyperscalers.
 
+Nexus Cloud is the hosted control-plane and operator console at `/cloud`. It is
+not an everyday user app and should not be placed in the same launcher shelf as
+Mail, Calendar, or other end-user tools. The versioned machine-readable
+boundary is `GET /api/v1/contract`; the Systems API summary at
+`GET /api/v1/summary` remains the contract for the tools Cloud manages.
+
 ## Ecosystem scope
 
 Nexus Cloud currently treats these projects as the active Nexus Systems ecosystem under development:

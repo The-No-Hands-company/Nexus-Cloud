@@ -10,6 +10,7 @@ import {
   tunnelTarget,
 } from "../cloudflare-dns";
 import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
+import { buildCloudControlContract } from "./cloud-control-contract";
 import { exploreFallbackCatalog, validateCatalogProposal, validateApprovedCatalog } from "../systems-api/catalog";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane, dataPlaneService } from "../data-plane";
@@ -1874,6 +1875,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "POST" && pathname === "/api/v1/auth/logout")
     return handleAuthLogout(request);
   if (request.method === "GET" && pathname === "/api/v1/auth/me") return handleAuthMe(request);
+  if (request.method === "GET" && pathname === "/api/v1/contract")
+    return json(buildCloudControlContract());
   if (request.method === "GET" && (pathname === "/" || pathname === "/status"))
     return handleServicePointer();
   if (request.method === "GET" && pathname === "/health") return handleHealth();

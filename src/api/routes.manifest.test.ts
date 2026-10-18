@@ -6,6 +6,7 @@ describe("API route manifest", () => {
   test("matches the documented router surface exactly", () => {
     const expected: ApiRoute[] = [
       { method: "GET", path: "/health", description: "Basic service health" },
+      { method: "GET", path: "/api/v1/contract", description: "Versioned Cloud control-plane contract" },
       { method: "GET", path: "/api/status", description: "Legacy node status summary" },
       { method: "GET", path: "/v1/architecture", description: "Project architecture summary" },
       { method: "GET", path: "/v1/state", description: "Read current scaffold state" },

@@ -6,6 +6,12 @@ import { observabilityService } from "../observability";
 import { storage } from "../storage";
 import { systemsApiService } from "../systems-api";
 import { apiRouteManifest } from "./routes";
+export { buildCloudControlContract } from "./cloud-control-contract";
+export type {
+  CloudContractAccess,
+  CloudContractRoute,
+  NexusCloudContract,
+} from "./cloud-control-contract";
 
 export type { ApiRoute } from "./dto";
 export * from "./dto";

@@ -4,6 +4,19 @@
 
 This document defines the sovereign public access flow for Nexus tools. It is the canonical contract for issuing public URLs, binding domains, and coordinating public exposure across the Nexus ecosystem.
 
+## Cloud surface boundary
+
+Nexus Cloud is the hosted control-plane and operator console, exposed at
+`/cloud`. It is a platform surface for topology, catalog governance, public
+exposure, federation, storage, and deployment coordination. It is not an
+everyday user application in the launcher.
+
+Machine clients should begin with `GET /api/v1/contract`. That response uses
+protocol `nexus-cloud/1`, identifies the `admin-console` surface, and lists the
+Cloud route inventory with its access class. `GET /api/v1/summary` is still the
+Systems API summary used to describe the tools Cloud manages; it does not
+replace the Cloud control-plane contract.
+
 ## Core principles
 
 - Public access must be issued through Nexus Cloud first.
