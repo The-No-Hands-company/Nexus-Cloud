@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
 	CATALOG_AUDIENCES,
+	CATALOG_RELEASE_STATES,
 	CATALOG_SHELVES,
+	CATALOG_SURFACES,
 	exploreFallbackCatalog,
 	validateApprovedCatalog,
 	validateCatalogProposal,
@@ -23,6 +25,8 @@ const approved = {
 	capabilities: ["messaging"],
 	maturity: "stable",
 	visibility: "default",
+	surface: "user-app",
+	releaseState: "released",
 	approvedAt: "2026-10-17T00:00:00.000Z",
 	approvedBy: "platform-steward",
 	version: 2,
@@ -110,6 +114,66 @@ describe("catalog proposal validation", () => {
 });
 
 describe("approved catalog validation", () => {
+	const validApprovedCatalog = {
+		primaryShelf: "everyday" as const,
+		secondaryShelves: [],
+		audiences: ["general" as const],
+		capabilities: ["mail"],
+		maturity: "stable" as const,
+		visibility: "default" as const,
+		surface: "user-app" as const,
+		releaseState: "released" as const,
+		approvedAt: "2026-10-18T00:00:00.000Z",
+		approvedBy: "platform",
+		version: 1,
+	};
+
+	test("accepts an explicit user-app release", () => {
+		expect(validateApprovedCatalog(validApprovedCatalog)).toMatchObject({
+			surface: "user-app",
+			releaseState: "released",
+		});
+	});
+
+	test("defines the controlled surfaces and release states", () => {
+		expect(CATALOG_SURFACES).toEqual([
+			"user-app",
+			"developer-tool",
+			"admin-console",
+			"platform-service",
+		]);
+		expect(CATALOG_RELEASE_STATES).toEqual([
+			"staged",
+			"released",
+			"retired",
+		]);
+	});
+
+	test.each([
+		["unknown surface", { surface: "unknown" }],
+		["unknown release state", { releaseState: "unknown" }],
+		["malformed surface", { surface: null }],
+		["malformed release state", { releaseState: 1 }],
+	])("rejects invalid release metadata: %s", (_case, change) => {
+		expect(validateApprovedCatalog({ ...validApprovedCatalog, ...change })).toBeNull();
+	});
+
+	test.each(["surface", "releaseState"] as const)(
+		"rejects missing %s",
+		(field) => {
+			const missing: Partial<typeof validApprovedCatalog> = { ...validApprovedCatalog };
+			delete missing[field];
+			expect(validateApprovedCatalog(missing)).toBeNull();
+		},
+	);
+
+	test("rejects missing surface and release state together", () => {
+		const missing: Partial<typeof validApprovedCatalog> = { ...validApprovedCatalog };
+		delete missing.surface;
+		delete missing.releaseState;
+		expect(validateApprovedCatalog(missing)).toBeNull();
+	});
+
 	test("accepts every controlled primary shelf, audience, maturity, and visibility", () => {
 		for (const primaryShelf of CATALOG_SHELVES) {
 			for (const maturity of ["stable", "preview", "experimental"]) {

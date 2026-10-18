@@ -61,6 +61,8 @@ describe("core catalog seed", () => {
 		const newer: ApprovedCatalog = {
 			...chatSeed,
 			visibility: "default",
+			surface: "user-app",
+			releaseState: "released",
 			approvedAt: "2026-10-17T00:00:00.000Z",
 			approvedBy: "operator",
 			version: 9,

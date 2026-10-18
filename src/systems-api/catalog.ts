@@ -31,6 +31,17 @@ export const CATALOG_VISIBILITY = [
 ] as const;
 export type CatalogVisibility = (typeof CATALOG_VISIBILITY)[number];
 
+export const CATALOG_SURFACES = [
+	"user-app",
+	"developer-tool",
+	"admin-console",
+	"platform-service",
+] as const;
+export type CatalogSurface = (typeof CATALOG_SURFACES)[number];
+
+export const CATALOG_RELEASE_STATES = ["staged", "released", "retired"] as const;
+export type CatalogReleaseState = (typeof CATALOG_RELEASE_STATES)[number];
+
 export const CATALOG_REVIEW_STATUSES = [
 	"approved",
 	"pending",
@@ -55,6 +66,8 @@ export type ApprovedCatalog = {
 	capabilities: string[];
 	maturity: CatalogMaturity;
 	visibility: CatalogVisibility;
+	surface: CatalogSurface;
+	releaseState: CatalogReleaseState;
 	approvedAt: string;
 	approvedBy: string;
 	version: number;
@@ -170,6 +183,8 @@ export function validateApprovedCatalog(
 		!isOneOf(value.primaryShelf, CATALOG_SHELVES) ||
 		!isOneOf(value.maturity, CATALOG_MATURITY) ||
 		!isOneOf(value.visibility, CATALOG_VISIBILITY) ||
+		!isOneOf(value.surface, CATALOG_SURFACES) ||
+		!isOneOf(value.releaseState, CATALOG_RELEASE_STATES) ||
 		!isTimestamp(value.approvedAt) ||
 		typeof value.approvedBy !== "string" ||
 		!value.approvedBy.trim() ||
@@ -197,6 +212,8 @@ export function validateApprovedCatalog(
 		capabilities,
 		maturity: value.maturity,
 		visibility: value.visibility,
+		surface: value.surface,
+		releaseState: value.releaseState,
 		approvedAt: value.approvedAt,
 		approvedBy: value.approvedBy,
 		version: value.version,

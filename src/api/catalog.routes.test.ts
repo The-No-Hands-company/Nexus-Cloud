@@ -60,7 +60,7 @@ describe("catalog proposal routes", () => {
     service.registerSystemsApiTool({ id: "catalog-approved", name: "Approved", description: "Approved" });
     const approved = {
       primaryShelf: "work" as const, secondaryShelves: [], audiences: ["business" as const], capabilities: ["messaging"],
-      maturity: "stable" as const, visibility: "default" as const,
+      maturity: "stable" as const, visibility: "default" as const, surface: "user-app" as const, releaseState: "released" as const,
       approvedAt: "2026-10-16T00:00:00.000Z", approvedBy: "platform:catalog", version: 1,
     };
     service.saveApprovedCatalog("catalog-approved", approved);
@@ -84,10 +84,10 @@ describe("catalog proposal routes", () => {
   test("catalog projection joins runtime, approval, pending status and stable fallback", async () => {
     service.registerSystemsApiTool({ id: "projection-zeta", name: "Zeta", description: "Legacy", publicUrl: "https://zeta.example", upstreamUrl: "http://127.0.0.1:9999" });
     service.registerSystemsApiTool({ id: "projection-alpha", name: "Alpha", description: "Approved", publicUrl: "https://alpha.example", catalogProposal: proposal });
-    service.saveApprovedCatalog("projection-alpha", { primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "default", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.saveApprovedCatalog("projection-alpha", { primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "default", surface: "user-app", releaseState: "released", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
     service.registerSystemsApiTool({ id: "projection-pending", name: "Pending", description: "Pending", publicUrl: "https://pending.example", catalogProposal: proposal });
     service.registerSystemsApiTool({ id: "projection-restricted", name: "Restricted", description: "Restricted", publicUrl: "https://restricted.example", catalogProposal: proposal });
-    service.saveApprovedCatalog("projection-restricted", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "preview", visibility: "restricted", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.saveApprovedCatalog("projection-restricted", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "preview", visibility: "restricted", surface: "user-app", releaseState: "released", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
     service.registerSystemsApiTool({ id: "projection-offline", name: "Offline", description: "Offline" });
     expireToolHeartbeat("projection-offline");
     const response = await handleRequest(request("/api/v1/catalog", "GET"));
@@ -105,7 +105,7 @@ describe("catalog proposal routes", () => {
   test("anonymous projection redacts upstream and hidden entries; platform key retains both", async () => {
     service.registerSystemsApiTool({ id: "projection-visible", name: "Visible", description: "Visible", upstreamUrl: "http://private:8081", publicUrl: "https://visible.example" });
     service.registerSystemsApiTool({ id: "projection-hidden", name: "Hidden", description: "Hidden", upstreamUrl: "http://private:8080", publicUrl: "https://hidden.example", catalogProposal: proposal });
-    service.saveApprovedCatalog("projection-hidden", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "stable", visibility: "hidden", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.saveApprovedCatalog("projection-hidden", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "stable", visibility: "hidden", surface: "user-app", releaseState: "released", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
     process.env.NEXUS_CLOUD_API_KEY = "projection-key";
     try {
       const anonymous = await handleRequest(request("/api/v1/catalog", "GET"));
@@ -123,7 +123,7 @@ describe("catalog proposal routes", () => {
 
   test("ordinary signed-in users cannot read hidden apps, but permitted catalog consumers can", async () => {
     service.registerSystemsApiTool({ id: "session-hidden", name: "Hidden", description: "Hidden", publicUrl: "https://hidden.example", catalogProposal: proposal });
-    service.saveApprovedCatalog("session-hidden", { primaryShelf: "operate", secondaryShelves: [], audiences: [], capabilities: [], maturity: "stable", visibility: "hidden", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.saveApprovedCatalog("session-hidden", { primaryShelf: "operate", secondaryShelves: [], audiences: [], capabilities: [], maturity: "stable", visibility: "hidden", surface: "user-app", releaseState: "released", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
     service.registerSystemsApiTool({ id: "session-visible", name: "Visible", description: "Visible", publicUrl: "https://visible.example", upstreamUrl: "http://private:8082" });
     process.env.NEXUS_CLOUD_API_KEY = "projection-key";
     const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (_input: string | URL | Request, init?: RequestInit) => {
@@ -257,7 +257,7 @@ describe("catalog proposal routes", () => {
     service.registerSystemsApiTool({ id: toolId, name: "Versioned", description: "Original", catalogProposal: accepted });
     const approved = {
       primaryShelf: "work" as const, secondaryShelves: [], audiences: ["business" as const],
-      capabilities: ["messaging"], maturity: "stable" as const, visibility: "default" as const,
+      capabilities: ["messaging"], maturity: "stable" as const, visibility: "default" as const, surface: "user-app" as const, releaseState: "released" as const,
       approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform:catalog", version: 3,
     };
     service.saveApprovedCatalog(toolId, approved);
@@ -295,10 +295,13 @@ describe("catalog approval routes", () => {
     harness.systemsApiService.registerSystemsApiTool({ id, name: id, description: "Catalog", catalogProposal: { ...proposal, suggestedShelves: ["everyday", "work"] } });
   }
   function decide(id: string, action: string, token?: string, body: unknown = {}, key: string | undefined = action === "rollback" ? crypto.randomUUID() : undefined) {
+    const decisionBody = action === "approve" && body && typeof body === "object" && !Array.isArray(body)
+      ? { surface: "user-app", releaseState: "released", ...body }
+      : body;
     return harness.handleRequest(new Request(`http://localhost/api/v1/catalog/${id}/${action}`, {
       method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(key ? { "idempotency-key": key } : {}),
-        "x-role": "founder", "x-permissions": permission, "x-actor": "forged" }, body: JSON.stringify(body),
+        "x-role": "founder", "x-permissions": permission, "x-actor": "forged" }, body: JSON.stringify(decisionBody),
     }));
   }
   test.each(["approve", "defer", "reject", "rollback"])("%s always requires an identity, even in local dev", async (action) => {
@@ -321,6 +324,16 @@ describe("catalog approval routes", () => {
     expect((await decide("missing", "approve", "invalid")).status).toBe(401);
     fetchSpy.mockImplementation(async () => { throw new Error("offline"); });
     expect((await decide("missing", "approve", "session")).status).toBe(503);
+  });
+  test("approval requires explicit release metadata", async () => {
+    seed("decision-missing-release"); identity("founder", [permission]);
+    const response = await harness.handleRequest(new Request("http://localhost/api/v1/catalog/decision-missing-release/approve", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer founder" },
+      body: JSON.stringify({ maturity: "stable", visibility: "default" }),
+    }));
+    expect(response.status).toBe(400);
+    expect(harness.systemsApiService.getCatalogRecord("decision-missing-release")?.approved).toBeNull();
   });
   test("founder approval maps proposal fields and persists an authenticated audit event", async () => {
     seed("decision-approved"); identity("founder", [permission]);

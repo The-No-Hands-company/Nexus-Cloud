@@ -885,7 +885,7 @@ async function handleCatalogDecision(request: Request, toolId: string, action: C
   try { body = raw.trim() ? JSON.parse(raw) : {}; } catch { return badRequest("Invalid JSON body"); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return badRequest("Invalid catalog decision");
   const overrides = body as Record<string, unknown>;
-  const fields = action === "approve" ? ["primaryShelf", "secondaryShelves", "audiences", "capabilities", "maturity", "visibility"] : [];
+  const fields = action === "approve" ? ["primaryShelf", "secondaryShelves", "audiences", "capabilities", "maturity", "visibility", "surface", "releaseState"] : [];
   if (Object.keys(overrides).some((key) => !fields.includes(key))) return badRequest("Unknown catalog decision field");
   const previous = systemsApiService.getCatalogRecord(toolId);
   let approvedCatalog: ReturnType<typeof validateApprovedCatalog> | undefined;

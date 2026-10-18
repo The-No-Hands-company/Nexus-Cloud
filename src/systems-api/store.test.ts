@@ -187,7 +187,7 @@ describe("catalog registry durability", () => {
       process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = join(tempDir, "registry.json");
       const store = await importFreshStoreModule("catalog-roundtrip");
       const proposal: CatalogProposal = { suggestedShelves: ["develop"], suggestedAudiences: ["developer"], capabilities: ["code"], keywords: ["editor"], submittedAt: "2026-10-17T00:00:00.000Z", version: 2 };
-      const approved: ApprovedCatalog = { primaryShelf: "develop", secondaryShelves: ["work"], audiences: ["developer"], capabilities: ["code"], maturity: "stable", visibility: "discoverable", approvedAt: "2026-10-17T01:00:00.000Z", approvedBy: "operator", version: 1 };
+      const approved: ApprovedCatalog = { primaryShelf: "develop", secondaryShelves: ["work"], audiences: ["developer"], capabilities: ["code"], maturity: "stable", visibility: "discoverable", surface: "user-app", releaseState: "released", approvedAt: "2026-10-17T01:00:00.000Z", approvedBy: "operator", version: 1 };
       store.saveSystemsApiRegistry({ tools: [], publicUrls: [], addresses: [], history: [], exposures: [], domains: [], catalog: { proposals: { editor: proposal }, approved: { editor: approved } } });
       expect(store.loadSystemsApiRegistry().catalog).toEqual({ proposals: { editor: proposal }, approved: { editor: approved } });
     } finally {
