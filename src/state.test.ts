@@ -41,6 +41,32 @@ afterEach(() => {
 });
 
 describe("platform state durability", () => {
+  test("allows concurrent Cloud writers to persist without losing the temp file", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "nexus-cloud-state-concurrent-"));
+    const statePath = join(tempDir, "platform-state.json");
+    const modulePath = new URL("./state.ts", import.meta.url).pathname;
+    const childScript = `
+      const state = await import(${JSON.stringify(modulePath)});
+      for (let i = 0; i < 80; i += 1) {
+        state.mutateState((draft) => {
+          draft.events.push({ id: \`writer-\${process.pid}-\${i}\`, type: "test", at: new Date().toISOString() });
+        });
+      }
+    `;
+    const env = { ...process.env, NEXUS_CLOUD_STATE_PATH: statePath };
+    try {
+      const writers = [0, 1].map(() => Bun.spawn([process.execPath, "-e", childScript], {
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      }));
+      const exits = await Promise.all(writers.map((writer) => writer.exited));
+      expect(exits).toEqual([0, 0]);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("creates a backup snapshot when persisting updates", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "nexus-cloud-state-"));
     try {

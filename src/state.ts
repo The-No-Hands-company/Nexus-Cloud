@@ -5,13 +5,15 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import type { NodeSpec, WorkloadSpec } from "./control-plane";
 import type { DataPlaneUnit } from "./data-plane";
 import type { FederationPeer } from "./federation";
@@ -69,6 +71,22 @@ function resolveStatePath(): string {
 const STATE_PATH = resolveStatePath();
 const STATE_TEMP_PATH = `${STATE_PATH}.tmp`;
 const STATE_BACKUP_PATH = `${STATE_PATH}.bak`;
+
+function stateTempPaths(): string[] {
+  const directory = dirname(STATE_PATH);
+  const fileName = basename(STATE_PATH);
+  try {
+    return readdirSync(directory)
+      .filter(
+        (name) =>
+          name === `${fileName}.tmp` ||
+          (name.startsWith(`${fileName}.`) && name.endsWith(".tmp")),
+      )
+      .map((name) => join(directory, name));
+  } catch {
+    return [];
+  }
+}
 
 const EMPTY_STATE: PlatformState = {
   nodes: [],
@@ -326,20 +344,25 @@ function writeSnapshotAtomic(
 ): void {
   ensureStorageDir();
   const payload = `${JSON.stringify(next, null, 2)}\n`;
+  // A fixed `${STATE_PATH}.tmp` is unsafe when two Cloud processes overlap
+  // during a restart: one process can rename or clean up the other process's
+  // temp file before its own rename. Keep every write on the same filesystem,
+  // but give it an independent name so the final rename cannot see ENOENT.
+  const tempPath = `${STATE_PATH}.${process.pid}.${randomUUID()}.tmp`;
 
   try {
-    writeFileSync(STATE_TEMP_PATH, payload, { mode: 0o600 });
-    fsyncPath(STATE_TEMP_PATH);
+    writeFileSync(tempPath, payload, { mode: 0o600 });
+    fsyncPath(tempPath);
 
     if (options.backupCurrentPrimary && existsSync(STATE_PATH)) {
       copyFileSync(STATE_PATH, STATE_BACKUP_PATH);
       fsyncPath(STATE_BACKUP_PATH);
     }
 
-    renameSync(STATE_TEMP_PATH, STATE_PATH);
+    renameSync(tempPath, STATE_PATH);
     fsyncDirectory(dirname(STATE_PATH));
   } catch (error) {
-    safeUnlink(STATE_TEMP_PATH);
+    safeUnlink(tempPath);
     throw error;
   }
 }
@@ -347,7 +370,7 @@ function writeSnapshotAtomic(
 function loadStateWithRecovery(): { state: PlatformState; recovery: PlatformStateRecovery } {
   const candidates = [
     readStateCandidate(STATE_PATH, "primary"),
-    readStateCandidate(STATE_TEMP_PATH, "temp"),
+    ...stateTempPaths().map((path) => readStateCandidate(path, "temp")),
     readStateCandidate(STATE_BACKUP_PATH, "backup"),
   ].filter((candidate): candidate is StateCandidate => candidate !== null);
 
@@ -387,9 +410,7 @@ function loadStateWithRecovery(): { state: PlatformState; recovery: PlatformStat
     }
   }
 
-  if (winner.source !== "temp") {
-    safeUnlink(STATE_TEMP_PATH);
-  }
+  if (winner.source !== "temp") safeUnlink(STATE_TEMP_PATH);
 
   return {
     state: cloneState(winner.state),
