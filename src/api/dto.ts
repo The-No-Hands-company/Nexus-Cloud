@@ -216,7 +216,9 @@ export type SystemsApiAppsResponseDTO = {
 };
 
 export type SystemsApiCatalogProposalRequestDTO = CatalogProposal;
-export type SystemsApiCatalogApprovalRequestDTO = ApprovedCatalog;
+export type SystemsApiCatalogApprovalRequestDTO = Partial<Pick<ApprovedCatalog,
+  "primaryShelf" | "secondaryShelves" | "audiences" | "capabilities" | "maturity" | "visibility"
+>>;
 export type SystemsApiCatalogRecordDTO =
   | (CatalogRecord & { approved: ApprovedCatalog })
   | (CatalogRecord & { approved: null } & ExploreFallbackCatalog);

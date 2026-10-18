@@ -23,6 +23,7 @@ export type NexusAuthUser = {
   username?: string;
   email?: string;
   role?: string;
+  permissions?: readonly string[];
   [key: string]: unknown;
 };
 
@@ -51,9 +52,21 @@ export async function checkSession(credential: string): Promise<NexusAuthUser | 
     authorized?: boolean;
     userId?: string;
     user?: NexusAuthUser;
+    permissions?: unknown;
   } | null;
   if (!body?.authorized || !body.userId) return null;
-  return body.user ?? { id: body.userId };
+  const permissions = Array.isArray(body.permissions) && body.permissions.every((value) => typeof value === "string")
+    ? body.permissions as string[] : [];
+  return { ...body.user, id: body.userId, permissions };
+}
+
+/** Resolve identity and permission together so authorization and audit use one Auth response. */
+export async function checkSessionPermission(
+  credential: string,
+  permission: string,
+): Promise<{ user: NexusAuthUser; allowed: boolean } | null> {
+  const user = await checkSession(credential);
+  return user ? { user, allowed: user.permissions?.includes(permission) === true } : null;
 }
 
 /**

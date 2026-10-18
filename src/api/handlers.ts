@@ -8,7 +8,7 @@ import {
   tunnelTarget,
 } from "../cloudflare-dns";
 import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
-import { exploreFallbackCatalog, validateCatalogProposal } from "../systems-api/catalog";
+import { exploreFallbackCatalog, validateCatalogProposal, validateApprovedCatalog } from "../systems-api/catalog";
 import { controlPlane, controlPlaneService } from "../control-plane";
 import { dataPlane, dataPlaneService } from "../data-plane";
 import { generateZoneFile } from "../dns-zone";
@@ -24,6 +24,7 @@ import { getNodeIdentity } from "../identity";
 import {
   NexusAuthUnavailable,
   checkSession,
+  checkSessionPermission,
   listUsers as listNexusAuthUsers,
   login as nexusAuthLogin,
   logout as nexusAuthLogout,
@@ -748,6 +749,60 @@ function handleSystemsCatalog(request: Request, toolId: string): Response {
   const authErr = checkApiKey(request);
   if (authErr) return authErr;
   if (!systemsApiService.getSystemsApiTool(toolId)) return notFound();
+  return json({ catalog: catalogForTool(toolId) } satisfies SystemsApiCatalogResponseDTO);
+}
+
+type CatalogAction = "approve" | "defer" | "reject" | "rollback";
+
+async function handleCatalogDecision(request: Request, toolId: string, action: CatalogAction): Promise<Response> {
+  const credential = callerCredential(request) ?? request.headers.get("x-api-key");
+  if (!credential) return json({ error: "Authentication required" }, 401);
+  // Cloud's shared node key is never a platform identity, even if another
+  // identity provider happens to accept the same credential string.
+  if (isValidApiKey(credential)) return json({ error: "Catalog approval permission required" }, 403);
+  let identity: Awaited<ReturnType<typeof checkSessionPermission>>;
+  try {
+    identity = await checkSessionPermission(credential, "platform:catalog:approve");
+  } catch {
+    return json({ error: "Identity service unavailable" }, 503);
+  }
+  if (!identity) {
+    return json({ error: "Catalog approval permission required" }, 401);
+  }
+  if (!identity.allowed) return json({ error: "Catalog approval permission required" }, 403);
+  if (!systemsApiService.getSystemsApiTool(toolId)) return notFound();
+  const raw = await request.text();
+  let body: unknown = {};
+  try { body = raw.trim() ? JSON.parse(raw) : {}; } catch { return badRequest("Invalid JSON body"); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return badRequest("Invalid catalog decision");
+  const overrides = body as Record<string, unknown>;
+  const fields = action === "approve" ? ["primaryShelf", "secondaryShelves", "audiences", "capabilities", "maturity", "visibility"] : [];
+  if (Object.keys(overrides).some((key) => !fields.includes(key))) return badRequest("Unknown catalog decision field");
+  const previous = systemsApiService.getCatalogRecord(toolId);
+  if (action === "approve") {
+    if (!previous?.proposal) return json({ error: "No catalog proposal to approve" }, 409);
+    const proposal = previous.proposal;
+    const approved = validateApprovedCatalog({
+      primaryShelf: proposal.suggestedShelves[0], secondaryShelves: proposal.suggestedShelves.slice(1),
+      audiences: proposal.suggestedAudiences, capabilities: proposal.capabilities,
+      maturity: "experimental", visibility: "discoverable", ...overrides,
+      approvedAt: new Date().toISOString(), approvedBy: identity.user.id, version: proposal.version,
+    });
+    if (!approved) return badRequest("Invalid approved catalog");
+    systemsApiService.saveApprovedCatalog(toolId, approved);
+  } else if (action === "rollback") {
+    if (!systemsApiService.rollbackApprovedCatalog(toolId)) return json({ error: "No previous approval to restore" }, 409);
+  } else {
+    if (!systemsApiService.setCatalogReviewStatus(toolId, action === "defer" ? "deferred" : "rejected")) {
+      return json({ error: "No catalog proposal to review" }, 409);
+    }
+  }
+  recordEvent({
+    kind: "audit", subjectId: toolId, source: "systems-api", level: "info",
+    message: `Catalog ${action}`, timestamp: new Date().toISOString(),
+    metadata: { eventType: "catalog-approval", action, actor: identity.user.id,
+      previousValue: JSON.stringify(previous), newValue: JSON.stringify(systemsApiService.getCatalogRecord(toolId)) },
+  });
   return json({ catalog: catalogForTool(toolId) } satisfies SystemsApiCatalogResponseDTO);
 }
 
@@ -1659,6 +1714,13 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       status: 204,
       headers: { ...corsHeaders(), "Access-Control-Max-Age": "86400" },
     });
+  }
+
+  // Catalog decisions always resolve a platform identity, including in local dev.
+  // The node API key gate below cannot authorize a global catalog mutation.
+  const catalogDecision = /^\/api\/v1\/catalog\/([^/]+)\/(approve|defer|reject|rollback)$/.exec(pathname);
+  if (request.method === "POST" && catalogDecision) {
+    return handleCatalogDecision(request, decodeURIComponent(catalogDecision[1]!), catalogDecision[2] as CatalogAction);
   }
 
   // Authenticate all mutating requests, except the handful that authenticate

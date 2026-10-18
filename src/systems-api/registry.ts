@@ -124,6 +124,8 @@ function cloneRegistryData(data: SystemsApiRegistryData): SystemsApiRegistryData
     exposures: data.exposures.map((item) => ({ ...item })),
     domains: data.domains.map((item) => ({ ...item })),
     catalog: {
+      ...(data.catalog.reviews ? { reviews: { ...data.catalog.reviews } } : {}),
+      ...(data.catalog.approvalHistory ? { approvalHistory: structuredClone(data.catalog.approvalHistory) } : {}),
       proposals: Object.fromEntries(
         Object.entries(data.catalog.proposals).map(([id, proposal]) => [
           id,
@@ -185,26 +187,28 @@ export function getCatalogRecord(toolId: string): CatalogRecord | null {
     toolId,
     proposal: proposal ? validateCatalogProposal(proposal) : null,
     approved: approved ? validateApprovedCatalog(approved) : null,
-    reviewStatus:
-      proposal && (!approved || proposal.version > approved.version) ? "pending" : "approved",
+    reviewStatus: (Object.hasOwn(registry.catalog.reviews ?? {}, toolId) ? registry.catalog.reviews?.[toolId] : undefined) ??
+      (proposal && (!approved || proposal.version > approved.version) ? "pending" : "approved"),
   };
 }
 
 export function canSubmitCatalogProposal(toolId: string, proposal: CatalogProposal): boolean {
   const normalized = validateCatalogProposal(proposal);
   if (!normalized) return false;
-  const approved = registry.catalog.approved[toolId];
+  const approved = getCatalogRecord(toolId)?.approved;
   if (!approved || normalized.version > approved.version) return true;
   if (normalized.version < approved.version) return false;
-  const current = registry.catalog.proposals[toolId];
-  return current !== undefined && JSON.stringify(current) === JSON.stringify(normalized);
+  const current = getCatalogRecord(toolId)?.proposal;
+  return current != null && JSON.stringify(current) === JSON.stringify(normalized);
 }
 
 export function saveCatalogProposal(toolId: string, proposal: CatalogProposal): CatalogRecord {
   const valid = validateCatalogProposal(proposal);
   if (!toolId || !valid) throw new Error("Invalid catalog proposal");
   if (!canSubmitCatalogProposal(toolId, valid)) throw new Error("Stale catalog proposal version");
+  const changed = JSON.stringify(registry.catalog.proposals[toolId]) !== JSON.stringify(valid);
   registry.catalog.proposals = { ...registry.catalog.proposals, [toolId]: valid };
+  if (changed) registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]: "pending" };
   persist();
   return getCatalogRecord(toolId)!;
 }
@@ -212,9 +216,36 @@ export function saveCatalogProposal(toolId: string, proposal: CatalogProposal): 
 export function saveApprovedCatalog(toolId: string, approved: ApprovedCatalog): CatalogRecord {
   const valid = validateApprovedCatalog(approved);
   if (!toolId || !valid) throw new Error("Invalid approved catalog");
+  const previous = getCatalogRecord(toolId)?.approved ?? null;
+  registry.catalog.approvalHistory = {
+    ...registry.catalog.approvalHistory,
+    [toolId]: [...(Object.hasOwn(registry.catalog.approvalHistory ?? {}, toolId) ? registry.catalog.approvalHistory?.[toolId] ?? [] : []), previous],
+  };
   registry.catalog.approved = { ...registry.catalog.approved, [toolId]: valid };
+  registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]:
+    (registry.catalog.proposals[toolId]?.version ?? 0) > valid.version ? "pending" : "approved" };
   persist();
   return getCatalogRecord(toolId)!;
+}
+
+export function setCatalogReviewStatus(toolId: string, status: "deferred" | "rejected"): CatalogRecord | null {
+  if (!getCatalogRecord(toolId)?.proposal) return null;
+  registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]: status };
+  persist();
+  return getCatalogRecord(toolId);
+}
+
+export function rollbackApprovedCatalog(toolId: string): CatalogRecord | null {
+  const history = Object.hasOwn(registry.catalog.approvalHistory ?? {}, toolId) ? registry.catalog.approvalHistory?.[toolId] : undefined;
+  if (!history?.length) return null;
+  const previous = history[history.length - 1];
+  if (previous) registry.catalog.approved = { ...registry.catalog.approved, [toolId]: previous };
+  else delete registry.catalog.approved[toolId];
+  registry.catalog.approvalHistory = { ...registry.catalog.approvalHistory, [toolId]: history.slice(0, -1) };
+  registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]:
+    previous && (registry.catalog.proposals[toolId]?.version ?? 0) <= previous.version ? "approved" : "pending" };
+  persist();
+  return getCatalogRecord(toolId);
 }
 
 function now(): string {

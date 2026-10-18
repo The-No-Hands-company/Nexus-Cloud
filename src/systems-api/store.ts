@@ -34,6 +34,8 @@ import type {
 export type SystemsApiCatalogState = {
   proposals: Record<string, CatalogProposal>;
   approved: Record<string, ApprovedCatalog>;
+  reviews?: Record<string, "approved" | "pending" | "deferred" | "rejected">;
+  approvalHistory?: Record<string, (ApprovedCatalog | null)[]>;
 };
 
 export const emptySystemsApiCatalogState: SystemsApiCatalogState = {
@@ -450,7 +452,24 @@ function sanitizeCatalog(value: unknown): SystemsApiCatalogState {
       if (record) approved.push([toolId, record]);
     }
   }
+  const reviews: NonNullable<SystemsApiCatalogState["reviews"]> = Object.create(null);
+  if (isObject(value.reviews)) {
+    for (const [id, status] of Object.entries(value.reviews)) {
+      if (id && (status === "approved" || status === "pending" || status === "deferred" || status === "rejected")) reviews[id] = status;
+    }
+  }
+  const approvalHistory: NonNullable<SystemsApiCatalogState["approvalHistory"]> = Object.create(null);
+  if (isObject(value.approvalHistory)) {
+    for (const [id, entries] of Object.entries(value.approvalHistory)) {
+      if (!id || !Array.isArray(entries)) continue;
+      const valid = entries.map((entry: unknown) => entry === null ? null : validateApprovedCatalog(entry));
+      // Discard an invalid stack rather than skipping a revision during rollback.
+      if (entries.every((entry: unknown, index: number) => entry === null || valid[index] !== null)) approvalHistory[id] = valid;
+    }
+  }
   return {
+    ...(Object.keys(reviews).length ? { reviews } : {}),
+    ...(Object.keys(approvalHistory).length ? { approvalHistory } : {}),
     proposals: Object.fromEntries(proposals),
     approved: Object.fromEntries(approved),
   };

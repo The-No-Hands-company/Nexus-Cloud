@@ -112,6 +112,10 @@ describe("API route manifest", () => {
         description: "Register or upsert a tool with Nexus Cloud",
       },
       { method: "GET", path: "/api/v1/tools/:toolId", description: "Inspect a registered tool" },
+      { method: "POST", path: "/api/v1/catalog/:toolId/approve", description: "Approve catalog metadata with platform permission" },
+      { method: "POST", path: "/api/v1/catalog/:toolId/defer", description: "Defer catalog metadata with platform permission" },
+      { method: "POST", path: "/api/v1/catalog/:toolId/reject", description: "Reject catalog metadata with platform permission" },
+      { method: "POST", path: "/api/v1/catalog/:toolId/rollback", description: "Rollback catalog metadata with platform permission" },
       { method: "GET", path: "/api/v1/catalog/:toolId", description: "Inspect trusted catalog metadata for a tool" },
       { method: "POST", path: "/api/v1/tools/:toolId/catalog-proposal", description: "Submit a tool catalog proposal" },
       {
