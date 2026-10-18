@@ -120,6 +120,36 @@ describe("catalog proposal routes", () => {
     }
   });
 
+  test("ordinary signed-in users cannot read hidden apps, but permitted catalog consumers can", async () => {
+    service.registerSystemsApiTool({ id: "session-hidden", name: "Hidden", description: "Hidden", publicUrl: "https://hidden.example", catalogProposal: proposal });
+    service.saveApprovedCatalog("session-hidden", { primaryShelf: "operate", secondaryShelves: [], audiences: [], capabilities: [], maturity: "stable", visibility: "hidden", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.registerSystemsApiTool({ id: "session-visible", name: "Visible", description: "Visible", publicUrl: "https://visible.example", upstreamUrl: "http://private:8082" });
+    process.env.NEXUS_CLOUD_API_KEY = "projection-key";
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (_input: string | URL | Request, init?: RequestInit) => {
+      const credential = new Headers(init?.headers).get("authorization");
+      return Response.json({ authorized: true, userId: "user-id", user: { id: "user-id", role: "founder", permissions: ["platform:catalog:approve"] }, permissions: credential === "Bearer trusted" ? ["platform:catalog:approve"] : [] });
+    }) as unknown as typeof fetch);
+    try {
+      const ordinary = await handleRequest(new Request("http://localhost/api/v1/catalog", { headers: { authorization: "Bearer ordinary" } }));
+      expect(ordinary.status).toBe(200);
+      const ordinaryApps = (await ordinary.json()).apps as Array<{ id: string; upstreamUrl?: string }>;
+      expect(ordinaryApps.some((app) => app.id === "session-hidden")).toBe(false);
+      expect(ordinaryApps.find((app) => app.id === "session-visible")?.upstreamUrl).toBe("http://private:8082");
+      const trusted = await handleRequest(new Request("http://localhost/api/v1/catalog", { headers: { authorization: "Bearer trusted" } }));
+      expect((await trusted.json()).apps).toEqual(expect.arrayContaining([expect.objectContaining({ id: "session-hidden", visibility: "hidden" })]));
+    } finally {
+      fetchSpy.mockRestore();
+      process.env.NEXUS_CLOUD_API_KEY = "";
+    }
+  });
+
+  test("catalog collection is present in endpoint discovery and summary", async () => {
+    const endpoints = (await (await handleRequest(request("/api/v1/endpoints", "GET"))).json()).endpoints as Array<{ path: string }>;
+    const summary = (await (await handleRequest(request("/api/v1/summary", "GET"))).json()).summary as { endpoints: Array<{ path: string }> };
+    expect(endpoints.some((entry) => entry.path === "/api/v1/catalog")).toBe(true);
+    expect(summary.endpoints.some((entry) => entry.path === "/api/v1/catalog")).toBe(true);
+  });
+
   test("patch can submit a proposal and omitted fields preserve catalog state", async () => {
     service.registerSystemsApiTool({ id: "catalog-patch", name: "Patch", description: "Patch" });
     const patch = await handleRequest(request("/api/v1/tools/catalog-patch", "PATCH", { catalogProposal: proposal }));

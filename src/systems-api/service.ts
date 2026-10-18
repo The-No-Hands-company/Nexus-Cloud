@@ -137,6 +137,7 @@ export type SystemsApiToolPatchInput = {
 
 const endpoints = [
   { method: "GET", path: "/api/v1/tools", description: "List registered tools" },
+  { method: "GET", path: "/api/v1/catalog", description: "List runtime apps with approved catalog placement" },
   { method: "POST", path: "/api/v1/tools", description: "Register or upsert a tool" },
   { method: "GET", path: "/api/v1/tools/:toolId", description: "Inspect a registered tool" },
   { method: "POST", path: "/api/v1/catalog/:toolId/approve", description: "Approve catalog metadata with platform permission" },

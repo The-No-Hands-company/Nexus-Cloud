@@ -749,6 +749,19 @@ function catalogForTool(toolId: string): SystemsApiCatalogRecordDTO {
 
 async function handleSystemsCatalogList(request: Request): Promise<Response> {
   const authenticated = await callerIsAuthenticated(request);
+  // A session is enough for topology redaction, but hidden catalog placement
+  // needs a platform credential or a server-verified catalog permission.
+  let canReadHidden = requiresApiKey() && checkApiKey(request) === null;
+  if (!canReadHidden && authenticated) {
+    const credential = callerCredential(request);
+    if (credential) {
+      try {
+        canReadHidden = (await checkSessionPermission(credential, "platform:catalog:approve"))?.allowed === true;
+      } catch {
+        canReadHidden = false;
+      }
+    }
+  }
   const apps = systemsApiService.listSystemsApiTools()
     .map((tool) => {
       const catalog = catalogForTool(tool.id);
@@ -756,7 +769,7 @@ async function handleSystemsCatalogList(request: Request): Promise<Response> {
       const { primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility } = placement;
       return { ...tool, primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility, reviewStatus: catalog.reviewStatus };
     })
-    .filter((app) => authenticated || app.visibility !== "hidden")
+    .filter((app) => canReadHidden || app.visibility !== "hidden")
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   return json({ apps: redactUpstreams(apps, authenticated) } satisfies SystemsApiCatalogListResponseDTO);
 }
