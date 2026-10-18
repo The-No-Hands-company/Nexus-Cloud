@@ -35,6 +35,8 @@ import type {
 export type SystemsApiCatalogState = {
   proposals: Record<string, CatalogProposal>;
   approved: Record<string, ApprovedCatalog>;
+  /** Version of the built-in catalog seed last applied to this registry. */
+  seedVersion?: number;
   reviews?: Record<string, "approved" | "pending" | "deferred" | "rejected">;
   approvalHistory?: Record<string, (ApprovedCatalog | null)[]>;
   /** Authoritative catalog decision audit ledger, committed with catalog state. */
@@ -479,6 +481,11 @@ function sanitizeCatalog(value: unknown): SystemsApiCatalogState {
       typeof entry.metadata.previousValue === "string" && typeof entry.metadata.newValue === "string")
     : [];
   return {
+    ...(typeof value.seedVersion === "number" &&
+    Number.isSafeInteger(value.seedVersion) &&
+    value.seedVersion > 0
+      ? { seedVersion: value.seedVersion }
+      : {}),
     ...(Object.keys(reviews).length ? { reviews } : {}),
     ...(Object.keys(approvalHistory).length ? { approvalHistory } : {}),
     ...(auditEvents.length ? { auditEvents } : {}),

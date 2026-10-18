@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { architecture } from "../architecture";
 import { type AuditFilter, queryAuditLog } from "../audit";
+import { NodeCatalogOverlayStore, resolveNodeOverlay } from "../catalog/node-overlay";
+import { TenantCatalogEntitlementsStore, resolveTenantEntitlements } from "../catalog/tenant-entitlements";
 import {
   bootstrapDns,
   ensureCustomDomainDns,
@@ -335,6 +337,58 @@ async function readJson(request: Request): Promise<unknown | null> {
     return await request.json();
   } catch {
     return null;
+  }
+}
+
+function scopedCatalogBody(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+async function handleTenantCatalog(request: Request, tenantId: string): Promise<Response> {
+  const authErr = checkApiKey(request);
+  if (authErr) return authErr;
+  const store = new TenantCatalogEntitlementsStore();
+  if (request.method === "GET") {
+    return json({ tenantId, entitlements: resolveTenantEntitlements(store, tenantId) });
+  }
+  const body = scopedCatalogBody(await readJson(request));
+  if (!body) return badRequest("Invalid tenant catalog payload");
+  const ids = (value: unknown) =>
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+      ? (value as string[])
+      : undefined;
+  const enabledAppIds = ids(body.enabledAppIds);
+  const disabledAppIds = ids(body.disabledAppIds);
+  if (
+    (body.enabledAppIds !== undefined && !enabledAppIds) ||
+    (body.disabledAppIds !== undefined && !disabledAppIds)
+  ) {
+    return badRequest("Catalog app ids must be string arrays");
+  }
+  return json({
+    tenantId,
+    entitlements: store.upsert(tenantId, {
+      ...(enabledAppIds ? { enabledAppIds } : {}),
+      ...(disabledAppIds ? { disabledAppIds } : {}),
+    }),
+  });
+}
+
+async function handleNodeCatalog(request: Request, nodeId: string): Promise<Response> {
+  const authErr = checkApiKey(request);
+  if (authErr) return authErr;
+  const store = new NodeCatalogOverlayStore();
+  if (request.method === "GET") {
+    return json({ nodeId, overlay: resolveNodeOverlay(store, nodeId) });
+  }
+  const body = scopedCatalogBody(await readJson(request));
+  if (!body) return badRequest("Invalid node catalog payload");
+  try {
+    return json({ nodeId, overlay: store.upsert(nodeId, body) });
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : "Invalid node catalog payload");
   }
 }
 
@@ -1869,6 +1923,16 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/tools")
     return handleSystemsTools(request, url);
+  const tenantCatalog = /^\/api\/v1\/tenants\/([^/]+)\/catalog$/.exec(pathname);
+  if (tenantCatalog && (request.method === "GET" || request.method === "PUT")) {
+    const tenantId = tenantCatalog[1];
+    if (tenantId) return handleTenantCatalog(request, decodeURIComponent(tenantId));
+  }
+  const nodeCatalog = /^\/api\/v1\/nodes\/([^/]+)\/catalog$/.exec(pathname);
+  if (nodeCatalog && (request.method === "GET" || request.method === "PUT")) {
+    const nodeId = nodeCatalog[1];
+    if (nodeId) return handleNodeCatalog(request, decodeURIComponent(nodeId));
+  }
   if (request.method === "GET" && pathname === "/api/v1/catalog")
     return handleSystemsCatalogList(request);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);

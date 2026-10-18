@@ -973,7 +973,7 @@ describe("API route handlers", () => {
           new Request(`http://localhost${path}`, {
             method,
             headers: { "content-type": "application/json" },
-            body: body ? JSON.stringify(body) : undefined,
+            ...(body ? { body: JSON.stringify(body) } : {}),
           }),
         );
         expect(res.status).toBe(401);

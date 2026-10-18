@@ -127,6 +127,9 @@ function cloneRegistryData(data: SystemsApiRegistryData): SystemsApiRegistryData
     exposures: data.exposures.map((item) => ({ ...item })),
     domains: data.domains.map((item) => ({ ...item })),
     catalog: {
+      ...(typeof data.catalog.seedVersion === "number"
+        ? { seedVersion: data.catalog.seedVersion }
+        : {}),
       ...(data.catalog.auditEvents ? { auditEvents: structuredClone(data.catalog.auditEvents) } : {}),
       ...(data.catalog.reviews ? { reviews: { ...data.catalog.reviews } } : {}),
       ...(data.catalog.approvalHistory ? { approvalHistory: structuredClone(data.catalog.approvalHistory) } : {}),
@@ -198,6 +201,19 @@ function catalogRecord(catalog: SystemsApiRegistryData["catalog"], toolId: strin
 
 export function getCatalogRecord(toolId: string): CatalogRecord | null {
   return catalogRecord(registry.catalog, toolId);
+}
+
+export function getCatalogSeedVersion(): number {
+  return registry.catalog.seedVersion ?? 0;
+}
+
+export function setCatalogSeedVersion(version: number): void {
+  if (!Number.isSafeInteger(version) || version < 1) {
+    throw new Error("Invalid catalog seed version");
+  }
+  const next = catalogDraft();
+  next.seedVersion = Math.max(next.seedVersion ?? 0, version);
+  commitCatalog(next);
 }
 
 /** Persist a complete catalog snapshot before making it visible in memory. */

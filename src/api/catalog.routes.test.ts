@@ -4,9 +4,10 @@ import type { SystemsApiCatalogResponseDTO, SystemsApiCatalogListResponseDTO } f
 
 import type { CatalogProposal } from "../systems-api/catalog";
 import { join } from "node:path";
-import { readFileSync, utimesSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, utimesSync } from "node:fs";
 import { setJsonStoreAfterReplaceHookForTests } from "../persistence/json-store";
 import { expireToolHeartbeat } from "../systems-api/registry";
+import { tmpdir } from "node:os";
 
 const proposal: CatalogProposal = {
   suggestedShelves: ["everyday"],
@@ -148,6 +149,70 @@ describe("catalog proposal routes", () => {
     const summary = (await (await handleRequest(request("/api/v1/summary", "GET"))).json()).summary as { endpoints: Array<{ path: string }> };
     expect(endpoints.some((entry) => entry.path === "/api/v1/catalog")).toBe(true);
     expect(summary.endpoints.some((entry) => entry.path === "/api/v1/catalog")).toBe(true);
+  });
+
+  test("tenant entitlements and node overlays stay scoped behind the Cloud key", async () => {
+    const previousKey = process.env.NEXUS_CLOUD_API_KEY;
+    const previousTenantPath = process.env.NEXUS_CLOUD_TENANT_CATALOG_PATH;
+    const previousNodePath = process.env.NEXUS_CLOUD_NODE_CATALOG_PATH;
+    const dir = mkdtempSync(join(tmpdir(), "nexus-catalog-routes-"));
+    process.env.NEXUS_CLOUD_API_KEY = "scoped-catalog-test-key";
+    process.env.NEXUS_CLOUD_TENANT_CATALOG_PATH = join(dir, "tenant.json");
+    process.env.NEXUS_CLOUD_NODE_CATALOG_PATH = join(dir, "node.json");
+    const keyed = (path: string, method: string, body?: unknown) =>
+      new Request(`http://localhost${path}`, {
+        method,
+        headers: { "x-api-key": "scoped-catalog-test-key", "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    try {
+      expect((await handleRequest(request("/api/v1/tenants/tenant-a/catalog", "GET"))).status).toBe(401);
+
+      const tenantPut = await handleRequest(
+        keyed("/api/v1/tenants/tenant-a/catalog", "PUT", {
+          enabledAppIds: ["nexus-calendar"],
+          disabledAppIds: ["nexus-experimental"],
+        }),
+      );
+      expect(tenantPut.status).toBe(200);
+      expect((await tenantPut.json()).entitlements).toMatchObject({
+        enabledAppIds: ["nexus-calendar"],
+        disabledAppIds: ["nexus-experimental"],
+      });
+      const tenantGet = await handleRequest(keyed("/api/v1/tenants/tenant-a/catalog", "GET"));
+      expect((await tenantGet.json()).entitlements).toMatchObject({ enabledAppIds: ["nexus-calendar"] });
+
+      const nodePut = await handleRequest(
+        keyed("/api/v1/nodes/node-a/catalog", "PUT", {
+          disabledAppIds: ["nexus-chat"],
+          shelfOverrides: { "nexus-calendar": "work" },
+          localApps: [{ toolId: "node-only", name: "Node Only", primaryShelf: "explore" }],
+        }),
+      );
+      expect(nodePut.status).toBe(200);
+      expect((await nodePut.json()).overlay).toMatchObject({
+        disabledAppIds: ["nexus-chat"],
+        shelfOverrides: { "nexus-calendar": "work" },
+      });
+      const nodeGet = await handleRequest(keyed("/api/v1/nodes/node-a/catalog", "GET"));
+      expect((await nodeGet.json()).overlay.localApps).toEqual([
+        expect.objectContaining({ toolId: "node-only", name: "Node Only" }),
+      ]);
+      const platformClaim = await handleRequest(
+        keyed("/api/v1/nodes/node-a/catalog", "PUT", {
+          localApps: [{ toolId: "platform", name: "Forbidden" }],
+        }),
+      );
+      expect(platformClaim.status).toBe(400);
+    } finally {
+      if (previousKey === undefined) process.env.NEXUS_CLOUD_API_KEY = undefined;
+      else process.env.NEXUS_CLOUD_API_KEY = previousKey;
+      if (previousTenantPath === undefined) process.env.NEXUS_CLOUD_TENANT_CATALOG_PATH = undefined;
+      else process.env.NEXUS_CLOUD_TENANT_CATALOG_PATH = previousTenantPath;
+      if (previousNodePath === undefined) process.env.NEXUS_CLOUD_NODE_CATALOG_PATH = undefined;
+      else process.env.NEXUS_CLOUD_NODE_CATALOG_PATH = previousNodePath;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("patch can submit a proposal and omitted fields preserve catalog state", async () => {

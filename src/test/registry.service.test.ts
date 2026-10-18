@@ -425,7 +425,8 @@ describe("probeExposedToolsHealth", () => {
 
       // Stub fetch to return 200
       const originalFetch = global.fetch;
-      global.fetch = async (_url: string | Request | URL) => new Response(null, { status: 200 });
+      global.fetch = (async (_url: string | Request | URL) =>
+        new Response(null, { status: 200 })) as typeof fetch;
       try {
         const result = await systemsApiService.probeExposedToolsHealth();
         expect(result.probed).toBe(1);
@@ -457,7 +458,8 @@ describe("probeExposedToolsHealth", () => {
       });
 
       const originalFetch = global.fetch;
-      global.fetch = async (_url: string | Request | URL) => new Response(null, { status: 503 });
+      global.fetch = (async (_url: string | Request | URL) =>
+        new Response(null, { status: 503 })) as typeof fetch;
       try {
         await systemsApiService.probeExposedToolsHealth();
       } finally {
@@ -485,10 +487,10 @@ describe("probeExposedToolsHealth", () => {
 
       let fetchCalled = false;
       const originalFetch = global.fetch;
-      global.fetch = async (_url: string | Request | URL) => {
+      global.fetch = (async (_url: string | Request | URL) => {
         fetchCalled = true;
         return new Response(null, { status: 200 });
-      };
+      }) as typeof fetch;
       try {
         const result = await systemsApiService.probeExposedToolsHealth();
         expect(result.probed).toBe(0);
@@ -516,10 +518,10 @@ describe("probeExposedToolsHealth", () => {
 
       let fetchCalled = false;
       const originalFetch = global.fetch;
-      global.fetch = async (_url: string | Request | URL) => {
+      global.fetch = (async (_url: string | Request | URL) => {
         fetchCalled = true;
         return new Response(null, { status: 200 });
-      };
+      }) as typeof fetch;
       try {
         const result = await systemsApiService.probeExposedToolsHealth();
         expect(result.probed).toBe(0);

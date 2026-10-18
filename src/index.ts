@@ -1,5 +1,6 @@
 import { apiRoutes, apiSurface } from "./api";
 import { architecture } from "./architecture";
+import { applyCoreCatalogSeed } from "./catalog/seed";
 import { controlPlane, controlPlaneService } from "./control-plane";
 import { dataPlane } from "./data-plane";
 import { federation } from "./federation";
@@ -8,6 +9,11 @@ import { port, server } from "./server";
 import { storage } from "./storage";
 import { startupSummary } from "./startup-summary";
 import { systemsApiService } from "./systems-api";
+
+const catalogSeed = applyCoreCatalogSeed();
+if (catalogSeed.applied.length > 0) {
+  console.log("Catalog seed applied:", catalogSeed.applied.join(", "));
+}
 
 console.log(`${architecture.project} listening on ${port}`);
 console.log(architecture.mission);

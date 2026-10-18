@@ -10,6 +10,7 @@
     "stop:ecosystem": "bash ../scripts/ecosystem-local.sh stop",
     "status:ecosystem": "bash ../scripts/ecosystem-local.sh stop",
     "health:ecosystem": "bash ../scripts/ecosystem-local.sh health",
+    "precheck": "test -e node_modules/bun-types/package.json || bun install --frozen-lockfile",
     "typecheck": "bunx tsc --noEmit",
     "lint": "biome check src",
     "format": "biome check --write src",
