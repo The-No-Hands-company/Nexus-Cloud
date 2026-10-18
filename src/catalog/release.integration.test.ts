@@ -69,7 +69,7 @@ describe("disposable Cloud to Dashboard catalog release", () => {
 				request("/api/v1/catalog/release-approved/approve", {
 					method: "POST",
 					headers: { authorization: "Bearer platform-session", "content-type": "application/json" },
-					body: JSON.stringify({ surface: "user-app", releaseState: "released" }),
+					body: JSON.stringify({ surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default" }),
 				}),
 			);
 			expect(approved.status).toBe(200);
@@ -80,7 +80,9 @@ describe("disposable Cloud to Dashboard catalog release", () => {
 			);
 			expect(catalogResponse.status).toBe(200);
 			const projected = await catalogResponse.json();
-			expect(projected.apps.find((app: { id: string }) => app.id === "release-approved")).toMatchObject({ surface: "user-app", releaseState: "released" });
+			expect(projected.apps.find((app: { id: string }) => app.id === "release-approved")).toMatchObject({ surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", health: "healthy" });
+			expect(projected.apps.find((app: { id: string }) => app.id === "release-pending")).toMatchObject({ reviewStatus: "pending" });
+			expect(projected.apps.find((app: { id: string }) => app.id === "release-offline")).toMatchObject({ health: "offline" });
 			const entries = toAppEntries(projected, "auth.tnhc.dev");
 
 			expect(
@@ -89,19 +91,11 @@ describe("disposable Cloud to Dashboard catalog release", () => {
 				primaryShelf: "everyday",
 				reviewStatus: "approved",
 				health: "healthy",
+				surface: "user-app",
+				releaseState: "released",
 			});
-			expect(
-				entries.find((entry) => entry.id === "release-pending"),
-			).toMatchObject({
-				primaryShelf: "explore",
-				reviewStatus: "pending",
-			});
-			expect(
-				entries.find((entry) => entry.id === "release-offline"),
-			).toMatchObject({
-				primaryShelf: "explore",
-				health: "offline",
-			});
+			expect(entries.map((entry) => entry.id)).not.toContain("release-pending");
+			expect(entries.map((entry) => entry.id)).not.toContain("release-offline");
 		} finally {
 			harness.cleanup();
 		}
