@@ -17,6 +17,8 @@ const approved = (
 		capabilities: ["test"],
 		maturity: "stable",
 		visibility: "default",
+		surface: "user-app",
+		releaseState: "released",
 		approvedAt: "2026-10-17T00:00:00.000Z",
 		approvedBy: "platform:catalog",
 		version: 1,
