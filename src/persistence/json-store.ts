@@ -137,6 +137,7 @@ export function isJsonStoreSnapshotCurrent<T>(path: string, expected: T): boolea
 /** Retry durability after a post-replacement directory sync error. */
 export function syncJsonStoreSnapshot(path: string): void {
   fsyncPath(path);
+  afterReplaceHookForTests?.(path);
   fsyncDirectory(dirname(path));
 }
 

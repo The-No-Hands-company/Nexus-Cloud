@@ -21,6 +21,7 @@ import {
 } from "../federation";
 import { guardianService } from "../guardian";
 import { getNodeIdentity } from "../identity";
+import { JsonStorePostReplaceError } from "../persistence/json-store";
 import {
   NexusAuthUnavailable,
   checkSession,
@@ -771,6 +772,19 @@ async function handleCatalogDecision(request: Request, toolId: string, action: C
   }
   if (!identity.allowed) return json({ error: "Catalog approval permission required" }, 403);
   if (!systemsApiService.getSystemsApiTool(toolId)) return notFound();
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+  if (action === "rollback" && (!idempotencyKey || idempotencyKey.length < 8 || idempotencyKey.length > 128)) {
+    return json({ error: "Rollback requires an Idempotency-Key of 8–128 characters" }, 428);
+  }
+  if (idempotencyKey) {
+    const prior = systemsApiService.findCatalogDecisionByKey(idempotencyKey);
+    if (prior) {
+      if (prior.subjectId !== toolId || prior.metadata?.actor !== identity.user.id || prior.metadata?.action !== action) {
+        return json({ error: "Idempotency-Key already belongs to another catalog decision" }, 409);
+      }
+      return json({ catalog: catalogForTool(toolId), replayed: true });
+    }
+  }
   const raw = await request.text();
   let body: unknown = {};
   try { body = raw.trim() ? JSON.parse(raw) : {}; } catch { return badRequest("Invalid JSON body"); }
@@ -797,10 +811,13 @@ async function handleCatalogDecision(request: Request, toolId: string, action: C
     return json({ error: "No catalog proposal to review" }, 409);
   }
   try {
-    if (!systemsApiService.decideCatalog(toolId, action, identity.user.id, approvedCatalog ?? undefined)) {
+    if (!systemsApiService.decideCatalog(toolId, action, identity.user.id, approvedCatalog ?? undefined, idempotencyKey)) {
       return json({ error: "No previous approval to restore" }, 409);
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof JsonStorePostReplaceError) {
+      return json({ catalog: catalogForTool(toolId), durability: "unconfirmed", retryWithSameKey: idempotencyKey }, 202);
+    }
     return json({ error: "Catalog decision could not be persisted" }, 503);
   }
   return json({ catalog: catalogForTool(toolId) } satisfies SystemsApiCatalogResponseDTO);

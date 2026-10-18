@@ -158,9 +158,10 @@ describe("catalog approval routes", () => {
   function seed(id: string) {
     harness.systemsApiService.registerSystemsApiTool({ id, name: id, description: "Catalog", catalogProposal: { ...proposal, suggestedShelves: ["everyday", "work"] } });
   }
-  function decide(id: string, action: string, token?: string, body: unknown = {}) {
+  function decide(id: string, action: string, token?: string, body: unknown = {}, key: string | undefined = action === "rollback" ? crypto.randomUUID() : undefined) {
     return harness.handleRequest(new Request(`http://localhost/api/v1/catalog/${id}/${action}`, {
       method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(key ? { "idempotency-key": key } : {}),
         "x-role": "founder", "x-permissions": permission, "x-actor": "forged" }, body: JSON.stringify(body),
     }));
   }
@@ -302,6 +303,47 @@ describe("catalog approval routes", () => {
     expect(loadSystemsApiRegistry().catalog.approved[id]).toBeUndefined();
     expect(queryAuditLog({ subjectId: id, action: "rollback" })).toHaveLength(1);
     expect((await decide(id, "rollback", "admin")).status).toBe(409);
+  });
+  test("rollback requires an idempotency key and rejects key reuse for another tool", async () => {
+    seed("decision-key-a"); seed("decision-key-b"); identity("admin", [permission]);
+    expect((await decide("decision-key-a", "approve", "admin")).status).toBe(200);
+    expect((await decide("decision-key-b", "approve", "admin")).status).toBe(200);
+    expect((await decide("decision-key-a", "rollback", "admin", {}, "")).status).toBe(428);
+    const key = "shared-rollback-key";
+    expect((await decide("decision-key-a", "rollback", "admin", {}, key)).status).toBe(200);
+    expect((await decide("decision-key-b", "rollback", "admin", {}, key)).status).toBe(409);
+    expect(harness.systemsApiService.getCatalogRecord("decision-key-b")?.approved).not.toBeNull();
+  });
+  test("persistent post-replacement sync failure makes rollback retries idempotent", async () => {
+    const id = "decision-persistent-sync"; seed(id); identity("admin", [permission]);
+    const { getSystemsApiRegistryPath, loadSystemsApiRegistry } = await import("../systems-api/store");
+    const { resetSystemsApiRegistryForTests } = await import("../systems-api/registry");
+    const path = getSystemsApiRegistryPath();
+    expect((await decide(id, "approve", "admin")).status).toBe(200);
+    const version2 = harness.systemsApiService.getCatalogRecord(id)?.approved;
+    harness.systemsApiService.saveCatalogProposal(id, { ...proposal, suggestedShelves: ["create"], version: 3 });
+    expect((await decide(id, "approve", "admin")).status).toBe(200);
+    const version3 = harness.systemsApiService.getCatalogRecord(id)?.approved;
+    harness.systemsApiService.saveCatalogProposal(id, { ...proposal, suggestedShelves: ["develop"], version: 4 });
+    expect((await decide(id, "approve", "admin")).status).toBe(200);
+    const key = "persistent-rollback-retry";
+    setJsonStoreAfterReplaceHookForTests((candidate) => {
+      if (candidate === path) throw new Error("persistent directory sync failure");
+    });
+    const first = await decide(id, "rollback", "admin", {}, key);
+    expect(first.status).toBe(202);
+    expect(await first.json()).toMatchObject({ durability: "unconfirmed", retryWithSameKey: key });
+    expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(version3);
+    setJsonStoreAfterReplaceHookForTests(null);
+    resetSystemsApiRegistryForTests(loadSystemsApiRegistry()); // simulated restart
+    const historyAfterFirst = loadSystemsApiRegistry().catalog.approvalHistory?.[id];
+    const replay = await decide(id, "rollback", "admin", {}, key);
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).replayed).toBe(true);
+    expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(version3);
+    expect(loadSystemsApiRegistry().catalog.approvalHistory?.[id]).toEqual(historyAfterFirst);
+    expect((await decide(id, "rollback", "admin", {}, "intentional-next-rollback")).status).toBe(200);
+    expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(version2);
   });
   test("failed approval and rollback writes leave state, history and audit unchanged for retry", async () => {
     const id = "decision-store-failure"; seed(id); identity("admin", [permission]);

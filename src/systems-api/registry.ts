@@ -213,7 +213,8 @@ function commitCatalog(next: SystemsApiRegistryData["catalog"]): void {
     // failing. Retry the sync, then acknowledge the committed snapshot.
     // If retry also fails, keep memory aligned with the visible disk state.
     registry.catalog = next;
-    syncJsonStoreSnapshot(path);
+    try { syncJsonStoreSnapshot(path); }
+    catch (syncError) { throw new JsonStorePostReplaceError(path, syncError); }
     return;
   }
   registry.catalog = next;
@@ -302,7 +303,9 @@ export function decideCatalog(
   action: "approve" | "defer" | "reject" | "rollback",
   actor: string,
   approved?: ApprovedCatalog,
+  idempotencyKey?: string,
 ): CatalogRecord | null {
+  if (idempotencyKey && findCatalogDecisionByKey(idempotencyKey)) return getCatalogRecord(toolId);
   const next = catalogDraft();
   const previous = catalogRecord(next, toolId);
   if (action === "approve") {
@@ -320,6 +323,7 @@ export function decideCatalog(
     kind: "audit", subjectId: toolId, source: "systems-api", level: "info",
     message: `Catalog ${action}`, timestamp: new Date().toISOString(),
     metadata: { eventType: "catalog-approval", action, actor,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
       previousValue: JSON.stringify(previous), newValue: JSON.stringify(current) },
   };
   next.auditEvents = [...(next.auditEvents ?? []), event];
@@ -328,6 +332,10 @@ export function decideCatalog(
   // ledger above is committed before either best-effort operation runs.
   try { recordEvent(event); } catch { /* The committed registry ledger remains authoritative. */ }
   return current;
+}
+
+export function findCatalogDecisionByKey(key: string): ObservabilityEvent | undefined {
+  return registry.catalog.auditEvents?.find((event) => event.metadata?.idempotencyKey === key);
 }
 
 function now(): string {
