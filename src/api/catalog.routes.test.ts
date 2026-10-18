@@ -1,11 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createSystemsApiTestHarness } from "../test/systems-api-harness";
-import type { SystemsApiCatalogResponseDTO } from "./dto";
+import type { SystemsApiCatalogResponseDTO, SystemsApiCatalogListResponseDTO } from "./dto";
 
 import type { CatalogProposal } from "../systems-api/catalog";
 import { join } from "node:path";
 import { readFileSync, utimesSync } from "node:fs";
 import { setJsonStoreAfterReplaceHookForTests } from "../persistence/json-store";
+import { expireToolHeartbeat } from "../systems-api/registry";
 
 const proposal: CatalogProposal = {
   suggestedShelves: ["everyday"],
@@ -77,6 +78,46 @@ describe("catalog proposal routes", () => {
     if (catalog.approved !== null) throw new Error("Expected Explore fallback");
     expect(catalog.primaryShelf).toBe("explore");
     expect(catalog.visibility).toBe("discoverable");
+  });
+
+  test("catalog projection joins runtime, approval, pending status and stable fallback", async () => {
+    service.registerSystemsApiTool({ id: "projection-zeta", name: "Zeta", description: "Legacy", publicUrl: "https://zeta.example", upstreamUrl: "http://127.0.0.1:9999" });
+    service.registerSystemsApiTool({ id: "projection-alpha", name: "Alpha", description: "Approved", publicUrl: "https://alpha.example", catalogProposal: proposal });
+    service.saveApprovedCatalog("projection-alpha", { primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "default", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.registerSystemsApiTool({ id: "projection-pending", name: "Pending", description: "Pending", publicUrl: "https://pending.example", catalogProposal: proposal });
+    service.registerSystemsApiTool({ id: "projection-restricted", name: "Restricted", description: "Restricted", publicUrl: "https://restricted.example", catalogProposal: proposal });
+    service.saveApprovedCatalog("projection-restricted", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "preview", visibility: "restricted", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    service.registerSystemsApiTool({ id: "projection-offline", name: "Offline", description: "Offline" });
+    expireToolHeartbeat("projection-offline");
+    const response = await handleRequest(request("/api/v1/catalog", "GET"));
+    expect(response.status).toBe(200);
+    const { apps } = (await response.json()) as SystemsApiCatalogListResponseDTO;
+    const ours = apps.filter((app) => app.id.startsWith("projection-"));
+    expect(ours.map((app) => app.name)).toEqual(["Alpha", "Offline", "Pending", "Restricted", "Zeta"]);
+    expect(ours[0]).toMatchObject({ primaryShelf: "work", reviewStatus: "approved", health: "healthy", publicUrl: "https://alpha.example" });
+    expect(ours[1]).toMatchObject({ primaryShelf: "explore", visibility: "discoverable", health: "offline", reviewStatus: "pending" });
+    expect(ours[2]).toMatchObject({ primaryShelf: "explore", capabilities: [], reviewStatus: "pending" });
+    expect(ours[3]).toMatchObject({ primaryShelf: "operate", visibility: "restricted", maturity: "preview" });
+    expect(ours[4]).toMatchObject({ primaryShelf: "explore", secondaryShelves: [], audiences: [], maturity: "experimental" });
+  });
+
+  test("anonymous projection redacts upstream and hidden entries; platform key retains both", async () => {
+    service.registerSystemsApiTool({ id: "projection-visible", name: "Visible", description: "Visible", upstreamUrl: "http://private:8081", publicUrl: "https://visible.example" });
+    service.registerSystemsApiTool({ id: "projection-hidden", name: "Hidden", description: "Hidden", upstreamUrl: "http://private:8080", publicUrl: "https://hidden.example", catalogProposal: proposal });
+    service.saveApprovedCatalog("projection-hidden", { primaryShelf: "operate", secondaryShelves: [], audiences: ["operations"], capabilities: [], maturity: "stable", visibility: "hidden", approvedAt: "2026-10-17T00:00:00.000Z", approvedBy: "platform", version: 2 });
+    process.env.NEXUS_CLOUD_API_KEY = "projection-key";
+    try {
+      const anonymous = await handleRequest(request("/api/v1/catalog", "GET"));
+      expect(anonymous.status).toBe(200);
+      const anonymousApps = (await anonymous.json()).apps as Array<{ id: string; upstreamUrl?: string }>;
+      expect(anonymousApps.some((app) => app.id === "projection-hidden")).toBe(false);
+      expect(anonymousApps.find((app) => app.id === "projection-visible")?.upstreamUrl).toBeUndefined();
+      const trusted = await handleRequest(new Request("http://localhost/api/v1/catalog", { headers: { "x-api-key": "projection-key" } }));
+      expect(trusted.status).toBe(200);
+      expect((await trusted.json()).apps).toEqual(expect.arrayContaining([expect.objectContaining({ id: "projection-hidden", visibility: "hidden", upstreamUrl: "http://private:8080" })]));
+    } finally {
+      process.env.NEXUS_CLOUD_API_KEY = "";
+    }
   });
 
   test("patch can submit a proposal and omitted fields preserve catalog state", async () => {

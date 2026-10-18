@@ -76,6 +76,7 @@ import {
   type SystemsApiAppsResponseDTO,
   type SystemsApiCapabilitiesResponseDTO,
   type SystemsApiCatalogResponseDTO,
+  type SystemsApiCatalogListResponseDTO,
   type SystemsApiCatalogRecordDTO,
   type SystemsApiConnectionsResponseDTO,
   type SystemsApiDeployResponseDTO,
@@ -744,6 +745,20 @@ function catalogForTool(toolId: string): SystemsApiCatalogRecordDTO {
   return record.approved
     ? { ...record, approved: record.approved }
     : { ...record, approved: null, ...exploreFallbackCatalog(record.reviewStatus) };
+}
+
+async function handleSystemsCatalogList(request: Request): Promise<Response> {
+  const authenticated = await callerIsAuthenticated(request);
+  const apps = systemsApiService.listSystemsApiTools()
+    .map((tool) => {
+      const catalog = catalogForTool(tool.id);
+      const placement = catalog.approved ?? exploreFallbackCatalog(catalog.reviewStatus);
+      const { primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility } = placement;
+      return { ...tool, primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility, reviewStatus: catalog.reviewStatus };
+    })
+    .filter((app) => authenticated || app.visibility !== "hidden")
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  return json({ apps: redactUpstreams(apps, authenticated) } satisfies SystemsApiCatalogListResponseDTO);
 }
 
 function handleSystemsCatalog(request: Request, toolId: string): Response {
@@ -1841,6 +1856,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   if (request.method === "POST" && pathname === "/api/v1/users") return handleUserRegister(request);
   if (request.method === "GET" && pathname === "/api/v1/tools")
     return handleSystemsTools(request, url);
+  if (request.method === "GET" && pathname === "/api/v1/catalog")
+    return handleSystemsCatalogList(request);
   if (request.method === "POST" && pathname === "/api/v1/tools") return handleToolRegister(request);
   if (request.method === "GET" && pathname.startsWith("/api/v1/catalog/")) {
     const suffix = pathname.slice("/api/v1/catalog/".length);

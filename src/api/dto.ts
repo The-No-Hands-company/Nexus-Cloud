@@ -223,6 +223,9 @@ export type SystemsApiCatalogRecordDTO =
   | (CatalogRecord & { approved: ApprovedCatalog })
   | (CatalogRecord & { approved: null } & ExploreFallbackCatalog);
 export type SystemsApiCatalogResponseDTO = { catalog: SystemsApiCatalogRecordDTO };
+/** Runtime launch data plus trusted placement. Placement never grants access. */
+export type DashboardCatalogEntryDTO = Omit<SystemsApiTool, "capabilities"> & ExploreFallbackCatalog;
+export type SystemsApiCatalogListResponseDTO = { apps: readonly DashboardCatalogEntryDTO[] };
 
 export type SystemsApiConnectionsResponseDTO = {
   connections: readonly SystemsApiConnection[];

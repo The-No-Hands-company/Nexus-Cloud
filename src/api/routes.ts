@@ -73,6 +73,7 @@ export const apiRouteManifest = [
     description: "Register a username on this node — issues a free @user:shortId address",
   },
   { method: "GET", path: "/api/v1/tools", description: "List registered tools" },
+  { method: "GET", path: "/api/v1/catalog", description: "List runtime apps with approved catalog placement" },
   { method: "GET", path: "/api/v1/endpoints", description: "List Systems API endpoints" },
   { method: "GET", path: "/api/v1/capabilities", description: "List Systems API capabilities" },
   { method: "GET", path: "/api/v1/summary", description: "Describe the Systems API contract" },
