@@ -63,7 +63,7 @@ export function appendAuditEntry(event: ObservabilityEvent): void {
   const logPath = resolveAuditLogPath();
   try {
     ensureParentDir(logPath);
-    appendFileSync(logPath, JSON.stringify(event) + "\n", "utf8");
+    appendFileSync(logPath, `${JSON.stringify(event)}\n`, "utf8");
   } catch {
     // best-effort: never propagate a log-write failure to the caller
   }

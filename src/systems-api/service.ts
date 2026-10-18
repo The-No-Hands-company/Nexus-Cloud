@@ -508,7 +508,7 @@ export async function probeExposedToolsHealth(): Promise<{
   await Promise.allSettled(
     exposed.map(async (tool) => {
       try {
-        const healthUrl = tool.upstreamUrl!.replace(/\/$/, "") + "/health";
+        const healthUrl = `${tool.upstreamUrl!.replace(/\/$/, "")}/health`;
         const res = await fetch(healthUrl, { signal: AbortSignal.timeout(5_000) });
         await res.body?.cancel();
         if (res.ok) {
