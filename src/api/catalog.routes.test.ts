@@ -334,14 +334,29 @@ describe("catalog approval routes", () => {
     expect(first.status).toBe(202);
     expect(await first.json()).toMatchObject({ durability: "unconfirmed", retryWithSameKey: key });
     expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(version3);
+    const catalogAfterFirst = loadSystemsApiRegistry().catalog;
+    const historyAfterFirst = catalogAfterFirst.approvalHistory?.[id];
+    const auditAfterFirst = (catalogAfterFirst.auditEvents ?? []).filter((event) => event.metadata?.idempotencyKey === key);
+    expect(auditAfterFirst).toHaveLength(1);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const retry = await decide(id, "rollback", "admin", {}, key);
+      expect(retry.status).toBe(202);
+      expect(await retry.json()).toMatchObject({ durability: "unconfirmed", retryWithSameKey: key, replayed: true });
+      expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(version3);
+      expect(loadSystemsApiRegistry().catalog).toEqual(catalogAfterFirst);
+    }
     setJsonStoreAfterReplaceHookForTests(null);
-    resetSystemsApiRegistryForTests(loadSystemsApiRegistry()); // simulated restart
-    const historyAfterFirst = loadSystemsApiRegistry().catalog.approvalHistory?.[id];
+    // Recovery must be confirmed by replay itself, before any reload helper persists.
     const replay = await decide(id, "rollback", "admin", {}, key);
     expect(replay.status).toBe(200);
     expect((await replay.json()).replayed).toBe(true);
     expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(version3);
     expect(loadSystemsApiRegistry().catalog.approvalHistory?.[id]).toEqual(historyAfterFirst);
+    const { queryAuditLog } = await import("../audit");
+    expect(queryAuditLog({ subjectId: id }).filter((event) => event.metadata?.idempotencyKey === key)).toEqual(auditAfterFirst);
+    resetSystemsApiRegistryForTests(loadSystemsApiRegistry()); // simulated restart after recovery
+    expect((await decide(id, "rollback", "admin", {}, key)).status).toBe(200);
+    expect(loadSystemsApiRegistry().catalog).toEqual(catalogAfterFirst);
     expect((await decide(id, "rollback", "admin", {}, "intentional-next-rollback")).status).toBe(200);
     expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(version2);
   });

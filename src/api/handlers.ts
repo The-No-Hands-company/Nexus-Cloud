@@ -782,6 +782,14 @@ async function handleCatalogDecision(request: Request, toolId: string, action: C
       if (prior.subjectId !== toolId || prior.metadata?.actor !== identity.user.id || prior.metadata?.action !== action) {
         return json({ error: "Idempotency-Key already belongs to another catalog decision" }, 409);
       }
+      try {
+        systemsApiService.decideCatalog(toolId, action, identity.user.id, undefined, idempotencyKey);
+      } catch (error) {
+        if (error instanceof JsonStorePostReplaceError) {
+          return json({ catalog: catalogForTool(toolId), replayed: true, durability: "unconfirmed", retryWithSameKey: idempotencyKey }, 202);
+        }
+        return json({ error: "Catalog decision could not be persisted" }, 503);
+      }
       return json({ catalog: catalogForTool(toolId), replayed: true });
     }
   }

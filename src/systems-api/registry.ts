@@ -305,7 +305,12 @@ export function decideCatalog(
   approved?: ApprovedCatalog,
   idempotencyKey?: string,
 ): CatalogRecord | null {
-  if (idempotencyKey && findCatalogDecisionByKey(idempotencyKey)) return getCatalogRecord(toolId);
+  if (idempotencyKey && findCatalogDecisionByKey(idempotencyKey)) {
+    // A visible ledger entry may have survived a failed directory sync. Persist
+    // the unchanged catalog and audit together before acknowledging its replay.
+    commitCatalog(registry.catalog);
+    return getCatalogRecord(toolId);
+  }
   const next = catalogDraft();
   const previous = catalogRecord(next, toolId);
   if (action === "approve") {
