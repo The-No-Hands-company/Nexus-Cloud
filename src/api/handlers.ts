@@ -178,7 +178,11 @@ function callerCredential(request: Request): string | null {
 
 function jsonWithConditionalEtag(request: Request, data: unknown, status = 200): Response {
   const body = JSON.stringify(data);
-  const etag = `W/\"${createHash("sha1").update(body).digest("hex")}\"`;
+  // Polling responses include an informational timestamp. It must not make a
+  // semantically unchanged response miss its conditional request on the next
+  // tick, otherwise a client can never receive a 304 after a slow round trip.
+  const etagBody = JSON.stringify(data, (key, value) => (key === "updatedAt" ? undefined : value));
+  const etag = `W/\"${createHash("sha1").update(etagBody).digest("hex")}\"`;
   const ifNoneMatch = request.headers.get("if-none-match")?.trim();
   if (ifNoneMatch === etag || ifNoneMatch === "*") {
     return new Response(null, {
