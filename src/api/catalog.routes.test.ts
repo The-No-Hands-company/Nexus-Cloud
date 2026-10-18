@@ -4,6 +4,8 @@ import type { SystemsApiCatalogResponseDTO } from "./dto";
 
 import type { CatalogProposal } from "../systems-api/catalog";
 import { join } from "node:path";
+import { readFileSync, utimesSync } from "node:fs";
+import { setJsonStoreAfterReplaceHookForTests } from "../persistence/json-store";
 
 const proposal: CatalogProposal = {
   suggestedShelves: ["everyday"],
@@ -145,7 +147,7 @@ describe("catalog approval routes", () => {
   let fetchSpy: ReturnType<typeof spyOn> | undefined;
   const permission = "platform:catalog:approve";
   beforeAll(async () => { harness = await createSystemsApiTestHarness(); });
-  afterEach(() => { fetchSpy?.mockRestore(); fetchSpy = undefined; process.env.NEXUS_CLOUD_API_KEY = ""; });
+  afterEach(() => { fetchSpy?.mockRestore(); fetchSpy = undefined; process.env.NEXUS_CLOUD_API_KEY = ""; setJsonStoreAfterReplaceHookForTests(null); });
   afterAll(() => harness.cleanup());
 
   function identity(role: string, permissions: string[] = []) {
@@ -205,7 +207,7 @@ describe("catalog approval routes", () => {
   test.each(["defer", "reject"])("%s preserves approval and persists review status", async (action) => {
     const id = `decision-${action}`; seed(id); identity("admin", [permission]);
     expect((await decide(id, "approve", "admin-key")).status).toBe(200);
-    const approved = harness.systemsApiService.getCatalogRecord(id)?.approved;
+    const approved = harness.systemsApiService.getCatalogRecord(id)?.approved ?? undefined;
     const response = await decide(id, action, "admin-key");
     expect(response.status).toBe(200);
     expect((await response.json()).catalog).toMatchObject({ approved, reviewStatus: action === "defer" ? "deferred" : "rejected" });
@@ -219,7 +221,7 @@ describe("catalog approval routes", () => {
   test("rollback restores the previous approval after registry reload and records both values", async () => {
     const id = "decision-rollback"; seed(id); identity("founder", [permission]);
     await decide(id, "approve", "founder");
-    const approved = harness.systemsApiService.getCatalogRecord(id)?.approved;
+    const approved = harness.systemsApiService.getCatalogRecord(id)?.approved ?? undefined;
     harness.systemsApiService.saveCatalogProposal(id, { ...proposal, suggestedShelves: ["create"], version: 3 });
     await decide(id, "approve", "founder");
     const previous = harness.systemsApiService.getCatalogRecord(id);
@@ -265,6 +267,41 @@ describe("catalog approval routes", () => {
       if (previousPath === undefined) delete process.env.NEXUS_CLOUD_AUDIT_PATH;
       else process.env.NEXUS_CLOUD_AUDIT_PATH = previousPath;
     }
+  });
+  test("audit reads retain a valid primary when its older backup has a newer mtime", async () => {
+    const id = "decision-primary-precedence"; seed(id); identity("admin", [permission]);
+    expect((await decide(id, "approve", "admin")).status).toBe(200);
+    const { getSystemsApiRegistryPath, loadSystemsApiRegistry } = await import("../systems-api/store");
+    const { queryAuditLog } = await import("../audit");
+    const path = getSystemsApiRegistryPath();
+    const approved = harness.systemsApiService.getCatalogRecord(id)?.approved ?? undefined;
+    const future = new Date(Date.now() + 60_000);
+    utimesSync(`${path}.bak`, future, future);
+    expect(queryAuditLog({ subjectId: id, eventType: "catalog-approval" })).toHaveLength(1);
+    expect(loadSystemsApiRegistry().catalog.approved[id]).toEqual(approved);
+    expect(JSON.parse(readFileSync(path, "utf8")).catalog.approved[id]).toEqual(approved);
+  });
+  test("post-replacement sync faults reconcile approval and rollback before responding", async () => {
+    const id = "decision-post-replace"; seed(id); identity("admin", [permission]);
+    const { getSystemsApiRegistryPath, loadSystemsApiRegistry } = await import("../systems-api/store");
+    const { queryAuditLog } = await import("../audit");
+    const registryPath = getSystemsApiRegistryPath();
+    const failAfterReplaceOnce = () => setJsonStoreAfterReplaceHookForTests((path) => {
+      if (path !== registryPath) return;
+      setJsonStoreAfterReplaceHookForTests(null);
+      throw new Error("simulated directory sync fault after rename");
+    });
+    failAfterReplaceOnce();
+    expect((await decide(id, "approve", "admin")).status).toBe(200);
+    const approved = harness.systemsApiService.getCatalogRecord(id)?.approved ?? undefined;
+    expect(loadSystemsApiRegistry().catalog.approved[id]).toEqual(approved);
+    expect(queryAuditLog({ subjectId: id, action: "approve" })).toHaveLength(1);
+    failAfterReplaceOnce();
+    expect((await decide(id, "rollback", "admin")).status).toBe(200);
+    expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toBeNull();
+    expect(loadSystemsApiRegistry().catalog.approved[id]).toBeUndefined();
+    expect(queryAuditLog({ subjectId: id, action: "rollback" })).toHaveLength(1);
+    expect((await decide(id, "rollback", "admin")).status).toBe(409);
   });
   test("failed approval and rollback writes leave state, history and audit unchanged for retry", async () => {
     const id = "decision-store-failure"; seed(id); identity("admin", [permission]);

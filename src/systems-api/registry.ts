@@ -1,6 +1,7 @@
 import { guardianService } from "../guardian";
 import { recordEvent } from "../observability";
 import type { ObservabilityEvent } from "../observability";
+import { JsonStorePostReplaceError, isJsonStoreSnapshotCurrent, syncJsonStoreSnapshot } from "../persistence/json-store";
 import { state } from "../state";
 import { buildPublicAddress, createAddressRecord, revokeAddressRecord } from "./address";
 import {
@@ -26,6 +27,7 @@ import {
   type SystemsApiRegistryData,
   emptySystemsApiCatalogState,
   getSystemsApiRegistryMetadata,
+  getSystemsApiRegistryPath,
   loadSystemsApiRegistry,
   saveSystemsApiRegistry,
 } from "./store";
@@ -200,7 +202,20 @@ export function getCatalogRecord(toolId: string): CatalogRecord | null {
 
 /** Persist a complete catalog snapshot before making it visible in memory. */
 function commitCatalog(next: SystemsApiRegistryData["catalog"]): void {
-  saveSystemsApiRegistry({ ...registry, catalog: next });
+  const snapshot = { ...registry, catalog: next };
+  try {
+    saveSystemsApiRegistry(snapshot);
+  } catch (error) {
+    if (!(error instanceof JsonStorePostReplaceError)) throw error;
+    const path = getSystemsApiRegistryPath();
+    if (!isJsonStoreSnapshotCurrent(path, snapshot)) throw error;
+    // A replacement may already be visible despite the first directory fsync
+    // failing. Retry the sync, then acknowledge the committed snapshot.
+    // If retry also fails, keep memory aligned with the visible disk state.
+    registry.catalog = next;
+    syncJsonStoreSnapshot(path);
+    return;
+  }
   registry.catalog = next;
 }
 

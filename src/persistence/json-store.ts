@@ -28,10 +28,22 @@ export type JsonStoreRecovery = {
   recoveredAt: string;
 };
 
+/** The replacement happened, but its directory sync did not complete. */
+export class JsonStorePostReplaceError extends Error {
+  constructor(public readonly path: string, cause: unknown) {
+    super(`JSON store replacement needs reconciliation: ${path}`, { cause });
+  }
+}
+
+let afterReplaceHookForTests: ((path: string) => void) | null = null;
+
+export function setJsonStoreAfterReplaceHookForTests(hook: ((path: string) => void) | null): void {
+  afterReplaceHookForTests = hook;
+}
+
 type JsonStoreCandidate<T> = {
   source: "primary" | "temp" | "backup";
   value: T;
-  mtimeMs: number;
 };
 
 export function resolveJsonStorePath(defaultRelativePath: string, envVarName?: string): string {
@@ -74,12 +86,10 @@ function readCandidate<T>(
 ): JsonStoreCandidate<T> | null {
   if (!existsSync(path)) return null;
   try {
-    const stats = statSync(path);
     const parsed = JSON.parse(readFileSync(path, "utf8"));
     return {
       source,
       value: sanitize(parsed),
-      mtimeMs: stats.mtimeMs,
     };
   } catch {
     return null;
@@ -95,22 +105,39 @@ export function writeJsonStoreAtomic<T>(
   const backupPath = `${path}.bak`;
   mkdirSync(dirname(path), { recursive: true });
   const payload = `${JSON.stringify(value, null, 2)}\n`;
+  let replaced = false;
 
   try {
-    writeFileSync(tempPath, payload, { mode: 0o600 });
-    fsyncPath(tempPath);
-
     if (options.backupCurrentPrimary && existsSync(path)) {
       copyFileSync(path, backupPath);
       fsyncPath(backupPath);
     }
 
+    writeFileSync(tempPath, payload, { mode: 0o600 });
+    fsyncPath(tempPath);
     renameSync(tempPath, path);
+    replaced = true;
+    afterReplaceHookForTests?.(path);
     fsyncDirectory(dirname(path));
   } catch (error) {
     safeUnlink(tempPath);
+    if (replaced) throw new JsonStorePostReplaceError(path, error);
     throw error;
   }
+}
+
+export function isJsonStoreSnapshotCurrent<T>(path: string, expected: T): boolean {
+  try {
+    return JSON.stringify(JSON.parse(readFileSync(path, "utf8"))) === JSON.stringify(expected);
+  } catch {
+    return false;
+  }
+}
+
+/** Retry durability after a post-replacement directory sync error. */
+export function syncJsonStoreSnapshot(path: string): void {
+  fsyncPath(path);
+  fsyncDirectory(dirname(path));
 }
 
 export function loadJsonStoreWithRecovery<T>(
@@ -137,7 +164,10 @@ export function loadJsonStoreWithRecovery<T>(
     };
   }
 
-  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  // A valid primary is the committed value regardless of backup mtimes.
+  // A temp file is considered only when the primary is missing or invalid.
+  const priority = { primary: 0, temp: 1, backup: 2 } as const;
+  candidates.sort((a, b) => priority[a.source] - priority[b.source]);
   const winner = candidates[0];
   if (!winner) {
     return {
