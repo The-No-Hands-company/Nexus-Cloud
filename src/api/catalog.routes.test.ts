@@ -3,6 +3,7 @@ import { createSystemsApiTestHarness } from "../test/systems-api-harness";
 import type { SystemsApiCatalogResponseDTO } from "./dto";
 
 import type { CatalogProposal } from "../systems-api/catalog";
+import { join } from "node:path";
 
 const proposal: CatalogProposal = {
   suggestedShelves: ["everyday"],
@@ -247,6 +248,60 @@ describe("catalog approval routes", () => {
     const response = await decide("decision-same-version", "rollback", "admin");
     expect(response.status).toBe(200);
     expect((await response.json()).catalog).toMatchObject({ approved: original, reviewStatus: "approved" });
+  });
+  test("a failed audit append still leaves a durable, queryable decision event", async () => {
+    seed("decision-audit-failure"); identity("admin", [permission]);
+    const previousPath = process.env.NEXUS_CLOUD_AUDIT_PATH;
+    process.env.NEXUS_CLOUD_AUDIT_PATH = join(process.cwd(), "data"); // a directory, so append fails
+    try {
+      expect((await decide("decision-audit-failure", "approve", "admin")).status).toBe(200);
+      const { loadSystemsApiRegistry } = await import("../systems-api/store");
+      const { resetSystemsApiRegistryForTests } = await import("../systems-api/registry");
+      const { queryAuditLog } = await import("../audit");
+      expect(loadSystemsApiRegistry().catalog.auditEvents?.filter((event) => event.subjectId === "decision-audit-failure")).toHaveLength(1);
+      resetSystemsApiRegistryForTests(loadSystemsApiRegistry());
+      expect(queryAuditLog({ subjectId: "decision-audit-failure", eventType: "catalog-approval" })).toHaveLength(1);
+    } finally {
+      if (previousPath === undefined) delete process.env.NEXUS_CLOUD_AUDIT_PATH;
+      else process.env.NEXUS_CLOUD_AUDIT_PATH = previousPath;
+    }
+  });
+  test("failed approval and rollback writes leave state, history and audit unchanged for retry", async () => {
+    const id = "decision-store-failure"; seed(id); identity("admin", [permission]);
+    const { loadSystemsApiRegistry } = await import("../systems-api/store");
+    const { queryAuditLog } = await import("../audit");
+    const previousPath = process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH;
+    const before = harness.systemsApiService.getCatalogRecord(id);
+    const diskBefore = loadSystemsApiRegistry().catalog;
+    try {
+      process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = join(process.cwd(), "data"); // a directory
+      expect((await decide(id, "approve", "admin")).status).toBe(503);
+    } finally {
+      if (previousPath === undefined) delete process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH;
+      else process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = previousPath;
+    }
+    expect(harness.systemsApiService.getCatalogRecord(id)).toEqual(before);
+    expect(loadSystemsApiRegistry().catalog).toEqual(diskBefore);
+    expect(queryAuditLog({ subjectId: id })).toHaveLength(0);
+    expect((await decide(id, "approve", "admin")).status).toBe(200);
+    const first = harness.systemsApiService.getCatalogRecord(id)?.approved;
+    harness.systemsApiService.saveCatalogProposal(id, { ...proposal, suggestedShelves: ["create"], version: 3 });
+    expect((await decide(id, "approve", "admin")).status).toBe(200);
+    const beforeRollback = harness.systemsApiService.getCatalogRecord(id);
+    const diskBeforeRollback = loadSystemsApiRegistry().catalog;
+    const auditsBeforeRollback = queryAuditLog({ subjectId: id }).length;
+    try {
+      process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = join(process.cwd(), "data");
+      expect((await decide(id, "rollback", "admin")).status).toBe(503);
+    } finally {
+      if (previousPath === undefined) delete process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH;
+      else process.env.NEXUS_CLOUD_SYSTEMS_API_REGISTRY_PATH = previousPath;
+    }
+    expect(harness.systemsApiService.getCatalogRecord(id)).toEqual(beforeRollback);
+    expect(loadSystemsApiRegistry().catalog).toEqual(diskBeforeRollback);
+    expect(queryAuditLog({ subjectId: id })).toHaveLength(auditsBeforeRollback);
+    expect((await decide(id, "rollback", "admin")).status).toBe(200);
+    expect(harness.systemsApiService.getCatalogRecord(id)?.approved).toEqual(first);
   });
   test("missing tools, absent proposals and invalid approval overrides fail without mutation", async () => {
     identity("admin", [permission]);

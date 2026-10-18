@@ -779,6 +779,7 @@ async function handleCatalogDecision(request: Request, toolId: string, action: C
   const fields = action === "approve" ? ["primaryShelf", "secondaryShelves", "audiences", "capabilities", "maturity", "visibility"] : [];
   if (Object.keys(overrides).some((key) => !fields.includes(key))) return badRequest("Unknown catalog decision field");
   const previous = systemsApiService.getCatalogRecord(toolId);
+  let approvedCatalog: ReturnType<typeof validateApprovedCatalog> | undefined;
   if (action === "approve") {
     if (!previous?.proposal) return json({ error: "No catalog proposal to approve" }, 409);
     const proposal = previous.proposal;
@@ -789,20 +790,19 @@ async function handleCatalogDecision(request: Request, toolId: string, action: C
       approvedAt: new Date().toISOString(), approvedBy: identity.user.id, version: proposal.version,
     });
     if (!approved) return badRequest("Invalid approved catalog");
-    systemsApiService.saveApprovedCatalog(toolId, approved);
-  } else if (action === "rollback") {
-    if (!systemsApiService.rollbackApprovedCatalog(toolId)) return json({ error: "No previous approval to restore" }, 409);
-  } else {
-    if (!systemsApiService.setCatalogReviewStatus(toolId, action === "defer" ? "deferred" : "rejected")) {
-      return json({ error: "No catalog proposal to review" }, 409);
-    }
+    approvedCatalog = approved;
+  } else if (action === "rollback" && !previous?.approved) {
+    return json({ error: "No previous approval to restore" }, 409);
+  } else if (action !== "rollback" && !previous?.proposal) {
+    return json({ error: "No catalog proposal to review" }, 409);
   }
-  recordEvent({
-    kind: "audit", subjectId: toolId, source: "systems-api", level: "info",
-    message: `Catalog ${action}`, timestamp: new Date().toISOString(),
-    metadata: { eventType: "catalog-approval", action, actor: identity.user.id,
-      previousValue: JSON.stringify(previous), newValue: JSON.stringify(systemsApiService.getCatalogRecord(toolId)) },
-  });
+  try {
+    if (!systemsApiService.decideCatalog(toolId, action, identity.user.id, approvedCatalog ?? undefined)) {
+      return json({ error: "No previous approval to restore" }, 409);
+    }
+  } catch {
+    return json({ error: "Catalog decision could not be persisted" }, 503);
+  }
   return json({ catalog: catalogForTool(toolId) } satisfies SystemsApiCatalogResponseDTO);
 }
 

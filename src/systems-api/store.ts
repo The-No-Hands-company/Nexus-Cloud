@@ -11,6 +11,7 @@ import {
   validateApprovedCatalog,
   validateCatalogProposal,
 } from "./catalog";
+import type { ObservabilityEvent } from "../observability";
 import type {
   SystemsApiAddress,
   SystemsApiAddressStatus,
@@ -36,6 +37,8 @@ export type SystemsApiCatalogState = {
   approved: Record<string, ApprovedCatalog>;
   reviews?: Record<string, "approved" | "pending" | "deferred" | "rejected">;
   approvalHistory?: Record<string, (ApprovedCatalog | null)[]>;
+  /** Authoritative catalog decision audit ledger, committed with catalog state. */
+  auditEvents?: ObservabilityEvent[];
 };
 
 export const emptySystemsApiCatalogState: SystemsApiCatalogState = {
@@ -467,9 +470,18 @@ function sanitizeCatalog(value: unknown): SystemsApiCatalogState {
       if (entries.every((entry: unknown, index: number) => entry === null || valid[index] !== null)) approvalHistory[id] = valid;
     }
   }
+  const auditEvents: ObservabilityEvent[] = Array.isArray(value.auditEvents)
+    ? value.auditEvents.filter((entry: unknown): entry is ObservabilityEvent =>
+      isObject(entry) && entry.kind === "audit" && entry.source === "systems-api" &&
+      typeof entry.subjectId === "string" && typeof entry.timestamp === "string" &&
+      isObject(entry.metadata) && entry.metadata.eventType === "catalog-approval" &&
+      typeof entry.metadata.actor === "string" && typeof entry.metadata.action === "string" &&
+      typeof entry.metadata.previousValue === "string" && typeof entry.metadata.newValue === "string")
+    : [];
   return {
     ...(Object.keys(reviews).length ? { reviews } : {}),
     ...(Object.keys(approvalHistory).length ? { approvalHistory } : {}),
+    ...(auditEvents.length ? { auditEvents } : {}),
     proposals: Object.fromEntries(proposals),
     approved: Object.fromEntries(approved),
   };

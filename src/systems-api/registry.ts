@@ -1,5 +1,6 @@
 import { guardianService } from "../guardian";
 import { recordEvent } from "../observability";
+import type { ObservabilityEvent } from "../observability";
 import { state } from "../state";
 import { buildPublicAddress, createAddressRecord, revokeAddressRecord } from "./address";
 import {
@@ -124,6 +125,7 @@ function cloneRegistryData(data: SystemsApiRegistryData): SystemsApiRegistryData
     exposures: data.exposures.map((item) => ({ ...item })),
     domains: data.domains.map((item) => ({ ...item })),
     catalog: {
+      ...(data.catalog.auditEvents ? { auditEvents: structuredClone(data.catalog.auditEvents) } : {}),
       ...(data.catalog.reviews ? { reviews: { ...data.catalog.reviews } } : {}),
       ...(data.catalog.approvalHistory ? { approvalHistory: structuredClone(data.catalog.approvalHistory) } : {}),
       proposals: Object.fromEntries(
@@ -175,21 +177,35 @@ export function resetSystemsApiRegistryForTests(
   persist();
 }
 
-export function getCatalogRecord(toolId: string): CatalogRecord | null {
-  const proposal = Object.hasOwn(registry.catalog.proposals, toolId)
-    ? registry.catalog.proposals[toolId] ?? null
+function catalogRecord(catalog: SystemsApiRegistryData["catalog"], toolId: string): CatalogRecord | null {
+  const proposal = Object.hasOwn(catalog.proposals, toolId)
+    ? catalog.proposals[toolId] ?? null
     : null;
-  const approved = Object.hasOwn(registry.catalog.approved, toolId)
-    ? registry.catalog.approved[toolId] ?? null
+  const approved = Object.hasOwn(catalog.approved, toolId)
+    ? catalog.approved[toolId] ?? null
     : null;
   if (!proposal && !approved) return null;
   return {
     toolId,
     proposal: proposal ? validateCatalogProposal(proposal) : null,
     approved: approved ? validateApprovedCatalog(approved) : null,
-    reviewStatus: (Object.hasOwn(registry.catalog.reviews ?? {}, toolId) ? registry.catalog.reviews?.[toolId] : undefined) ??
+    reviewStatus: (Object.hasOwn(catalog.reviews ?? {}, toolId) ? catalog.reviews?.[toolId] : undefined) ??
       (proposal && (!approved || proposal.version > approved.version) ? "pending" : "approved"),
   };
+}
+
+export function getCatalogRecord(toolId: string): CatalogRecord | null {
+  return catalogRecord(registry.catalog, toolId);
+}
+
+/** Persist a complete catalog snapshot before making it visible in memory. */
+function commitCatalog(next: SystemsApiRegistryData["catalog"]): void {
+  saveSystemsApiRegistry({ ...registry, catalog: next });
+  registry.catalog = next;
+}
+
+function catalogDraft(): SystemsApiRegistryData["catalog"] {
+  return structuredClone(registry.catalog);
 }
 
 export function canSubmitCatalogProposal(toolId: string, proposal: CatalogProposal): boolean {
@@ -206,46 +222,97 @@ export function saveCatalogProposal(toolId: string, proposal: CatalogProposal): 
   const valid = validateCatalogProposal(proposal);
   if (!toolId || !valid) throw new Error("Invalid catalog proposal");
   if (!canSubmitCatalogProposal(toolId, valid)) throw new Error("Stale catalog proposal version");
-  const changed = JSON.stringify(registry.catalog.proposals[toolId]) !== JSON.stringify(valid);
-  registry.catalog.proposals = { ...registry.catalog.proposals, [toolId]: valid };
-  if (changed) registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]: "pending" };
-  persist();
+  const next = catalogDraft();
+  const changed = JSON.stringify(next.proposals[toolId]) !== JSON.stringify(valid);
+  next.proposals = { ...next.proposals, [toolId]: valid };
+  if (changed) next.reviews = { ...next.reviews, [toolId]: "pending" };
+  commitCatalog(next);
   return getCatalogRecord(toolId)!;
 }
 
 export function saveApprovedCatalog(toolId: string, approved: ApprovedCatalog): CatalogRecord {
   const valid = validateApprovedCatalog(approved);
   if (!toolId || !valid) throw new Error("Invalid approved catalog");
-  const previous = getCatalogRecord(toolId)?.approved ?? null;
-  registry.catalog.approvalHistory = {
-    ...registry.catalog.approvalHistory,
-    [toolId]: [...(Object.hasOwn(registry.catalog.approvalHistory ?? {}, toolId) ? registry.catalog.approvalHistory?.[toolId] ?? [] : []), previous],
-  };
-  registry.catalog.approved = { ...registry.catalog.approved, [toolId]: valid };
-  registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]:
-    (registry.catalog.proposals[toolId]?.version ?? 0) > valid.version ? "pending" : "approved" };
-  persist();
+  const next = catalogDraft();
+  applyApproval(next, toolId, valid);
+  commitCatalog(next);
   return getCatalogRecord(toolId)!;
 }
 
 export function setCatalogReviewStatus(toolId: string, status: "deferred" | "rejected"): CatalogRecord | null {
   if (!getCatalogRecord(toolId)?.proposal) return null;
-  registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]: status };
-  persist();
+  const next = catalogDraft();
+  applyReview(next, toolId, status);
+  commitCatalog(next);
   return getCatalogRecord(toolId);
 }
 
 export function rollbackApprovedCatalog(toolId: string): CatalogRecord | null {
-  const history = Object.hasOwn(registry.catalog.approvalHistory ?? {}, toolId) ? registry.catalog.approvalHistory?.[toolId] : undefined;
-  if (!history?.length) return null;
-  const previous = history[history.length - 1];
-  if (previous) registry.catalog.approved = { ...registry.catalog.approved, [toolId]: previous };
-  else delete registry.catalog.approved[toolId];
-  registry.catalog.approvalHistory = { ...registry.catalog.approvalHistory, [toolId]: history.slice(0, -1) };
-  registry.catalog.reviews = { ...registry.catalog.reviews, [toolId]:
-    previous && (registry.catalog.proposals[toolId]?.version ?? 0) <= previous.version ? "approved" : "pending" };
-  persist();
+  const next = catalogDraft();
+  if (!applyRollback(next, toolId)) return null;
+  commitCatalog(next);
   return getCatalogRecord(toolId);
+}
+
+function applyApproval(catalog: SystemsApiRegistryData["catalog"], toolId: string, valid: ApprovedCatalog): void {
+  const previous = catalogRecord(catalog, toolId)?.approved ?? null;
+  catalog.approvalHistory = {
+    ...catalog.approvalHistory,
+    [toolId]: [...(Object.hasOwn(catalog.approvalHistory ?? {}, toolId) ? catalog.approvalHistory?.[toolId] ?? [] : []), previous],
+  };
+  catalog.approved = { ...catalog.approved, [toolId]: valid };
+  catalog.reviews = { ...catalog.reviews, [toolId]:
+    (catalog.proposals[toolId]?.version ?? 0) > valid.version ? "pending" : "approved" };
+}
+
+function applyReview(catalog: SystemsApiRegistryData["catalog"], toolId: string, status: "deferred" | "rejected"): void {
+  catalog.reviews = { ...catalog.reviews, [toolId]: status };
+}
+
+function applyRollback(catalog: SystemsApiRegistryData["catalog"], toolId: string): boolean {
+  const history = Object.hasOwn(catalog.approvalHistory ?? {}, toolId) ? catalog.approvalHistory?.[toolId] : undefined;
+  if (!history?.length) return false;
+  const previous = history[history.length - 1];
+  if (previous) catalog.approved = { ...catalog.approved, [toolId]: previous };
+  else delete catalog.approved[toolId];
+  catalog.approvalHistory = { ...catalog.approvalHistory, [toolId]: history.slice(0, -1) };
+  catalog.reviews = { ...catalog.reviews, [toolId]:
+    previous && (catalog.proposals[toolId]?.version ?? 0) <= previous.version ? "approved" : "pending" };
+  return true;
+}
+
+/** Catalog state and its audit event share one atomic registry write. */
+export function decideCatalog(
+  toolId: string,
+  action: "approve" | "defer" | "reject" | "rollback",
+  actor: string,
+  approved?: ApprovedCatalog,
+): CatalogRecord | null {
+  const next = catalogDraft();
+  const previous = catalogRecord(next, toolId);
+  if (action === "approve") {
+    const valid = validateApprovedCatalog(approved);
+    if (!previous?.proposal || !valid) return null;
+    applyApproval(next, toolId, valid);
+  } else if (action === "rollback") {
+    if (!applyRollback(next, toolId)) return null;
+  } else {
+    if (!previous?.proposal) return null;
+    applyReview(next, toolId, action === "defer" ? "deferred" : "rejected");
+  }
+  const current = catalogRecord(next, toolId);
+  const event: ObservabilityEvent = {
+    kind: "audit", subjectId: toolId, source: "systems-api", level: "info",
+    message: `Catalog ${action}`, timestamp: new Date().toISOString(),
+    metadata: { eventType: "catalog-approval", action, actor,
+      previousValue: JSON.stringify(previous), newValue: JSON.stringify(current) },
+  };
+  next.auditEvents = [...(next.auditEvents ?? []), event];
+  commitCatalog(next);
+  // The NDJSON log and in-memory event list are secondary copies. The registry
+  // ledger above is committed before either best-effort operation runs.
+  try { recordEvent(event); } catch { /* The committed registry ledger remains authoritative. */ }
+  return current;
 }
 
 function now(): string {

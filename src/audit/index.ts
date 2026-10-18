@@ -13,6 +13,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import type { ObservabilityEvent } from "../observability";
+import { loadSystemsApiRegistry } from "../systems-api/store";
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
@@ -77,10 +78,8 @@ export function appendAuditEntry(event: ObservabilityEvent): void {
  */
 export function queryAuditLog(filter: AuditFilter = {}): ObservabilityEvent[] {
   const logPath = resolveAuditLogPath();
-  if (!existsSync(logPath)) return [];
-
-  let entries: ObservabilityEvent[];
-  try {
+  let entries: ObservabilityEvent[] = [];
+  if (existsSync(logPath)) try {
     entries = readFileSync(logPath, "utf8")
       .split("\n")
       .filter(Boolean)
@@ -93,7 +92,17 @@ export function queryAuditLog(filter: AuditFilter = {}): ObservabilityEvent[] {
       })
       .filter((e): e is ObservabilityEvent => e !== null);
   } catch {
-    return [];
+    // Catalog decisions are still readable from their authoritative ledger.
+  }
+  try {
+    const catalogEvents = loadSystemsApiRegistry().catalog.auditEvents ?? [];
+    const seen = new Set(entries.map((entry) => JSON.stringify(entry)));
+    for (const event of catalogEvents) {
+      const key = JSON.stringify(event);
+      if (!seen.has(key)) { entries.push(event); seen.add(key); }
+    }
+  } catch {
+    // The regular audit log remains available if the registry cannot be read.
   }
 
   if (filter.subjectId !== undefined)
