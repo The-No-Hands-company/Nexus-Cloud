@@ -15,7 +15,7 @@
     "lint": "biome check src",
     "format": "biome check --write src",
     "check": "bun run typecheck && bun run lint",
-    "test": "bun test src --timeout 15000"
+    "test": "bun test --timeout=15000 --max-concurrency=1 src"
   },
   "dependencies": {
     "pg": "^8.22.0"
