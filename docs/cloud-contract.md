@@ -29,6 +29,7 @@ replace the Cloud control-plane contract.
 
 ### Discovery
 
+- `GET /api/v1/contract`
 - `GET /api/v1/topology`
 - `GET /api/v1/apps`
 - `GET /api/v1/connections`

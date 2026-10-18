@@ -1401,6 +1401,7 @@ function handleWellKnown(): Response {
       "node-identity",
     ],
     endpoints: {
+      contract: "/api/v1/contract",
       register: "/api/v1/tools",
       heartbeat: "/api/v1/tools/:toolId/heartbeat",
       addresses: "/api/v1/addresses",

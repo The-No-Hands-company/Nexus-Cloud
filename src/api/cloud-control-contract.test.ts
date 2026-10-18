@@ -49,4 +49,14 @@ describe("Nexus Cloud control-plane contract", () => {
       apiRouteManifest.length,
     );
   });
+
+  test("advertises the contract from the Cloud discovery document", async () => {
+    const response = await handleRequest(
+      new Request("http://localhost/.well-known/nexus-cloud", { method: "GET" }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.endpoints.contract).toBe("/api/v1/contract");
+  });
 });

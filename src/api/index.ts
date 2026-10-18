@@ -22,6 +22,7 @@ export const cloudContract = {
   scope: "public-access-and-domain-issuance",
   canonicalDocs: "/docs/cloud-contract.md",
   discovery: [
+    "/api/v1/contract",
     "/api/v1/topology",
     "/api/v1/apps",
     "/api/v1/connections",
