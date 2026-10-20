@@ -313,7 +313,7 @@ describe("Systems API registry/service behavior", () => {
     }
   });
 
-  test("persists authoritative heartbeat state and expires stale tools from persisted timestamps", async () => {
+  test("keeps heartbeat state in memory without rewriting the durable registry", async () => {
     const harness = await createSystemsApiTestHarness(emptySystemsApiRegistry);
     try {
       const { systemsApiService } = harness;
@@ -343,9 +343,9 @@ describe("Systems API registry/service behavior", () => {
 
       const registryPath = systemsApiService.describeSystemsApiStatus().registry.path;
       const persisted = JSON.parse(readFileSync(registryPath, "utf8"));
-      expect(persisted.tools[0]?.registrationStatus).toBe("active");
-      expect(persisted.tools[0]?.heartbeatCount).toBe(1);
-      expect(typeof persisted.tools[0]?.lastHeartbeatAt).toBe("string");
+      expect(persisted.tools[0]?.registrationStatus).toBe("registered");
+      expect(persisted.tools[0]?.heartbeatCount).toBe(0);
+      expect(persisted.tools[0]?.lastHeartbeatAt).toBeUndefined();
 
       const expiredCount = systemsApiService.applyHeartbeatExpiry(-1);
       expect(expiredCount).toBe(1);
@@ -439,6 +439,11 @@ describe("probeExposedToolsHealth", () => {
       const after = systemsApiService.getSystemsApiTool("nexus-chat");
       expect(after?.health).toBe("healthy");
       expect(after?.registrationStatus).toBe("active");
+
+      const registryPath = systemsApiService.describeSystemsApiStatus().registry.path;
+      const persisted = JSON.parse(readFileSync(registryPath, "utf8"));
+      expect(persisted.tools[0]?.heartbeatCount).toBe(0);
+      expect(persisted.tools[0]?.lastHeartbeatAt).toBeUndefined();
     } finally {
       harness.cleanup();
     }

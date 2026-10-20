@@ -460,7 +460,12 @@ export function heartbeatSystemsApiTool(
     phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
   },
 ): SystemsApiTool | null {
-  return recordToolHeartbeat(toolId, patch);
+  // Liveness is runtime state. Persisting every SDK heartbeat rewrites the
+  // full registry synchronously on the mounted production filesystem and can
+  // block the Cloud event loop during a heartbeat burst. Registration and
+  // operator mutations remain durable; the next registration/probe rebuilds
+  // this state after a restart.
+  return recordToolHeartbeat(toolId, patch, { persist: false });
 }
 
 /**
@@ -478,7 +483,7 @@ export function applyHeartbeatExpiry(thresholdMs = 90_000): number {
     const lastHeartbeatMs = Date.parse(tool.lastHeartbeatAt);
     if (Number.isNaN(lastHeartbeatMs)) continue;
     if (lastHeartbeatMs < cutoff) {
-      expireToolHeartbeat(tool.id, new Date().toISOString());
+      expireToolHeartbeat(tool.id, new Date().toISOString(), { persist: false });
       count++;
     }
   }
@@ -512,17 +517,17 @@ export async function probeExposedToolsHealth(): Promise<{
         const res = await fetch(healthUrl, { signal: AbortSignal.timeout(5_000) });
         await res.body?.cancel();
         if (res.ok) {
-          recordToolHeartbeat(tool.id, {});
+          recordToolHeartbeat(tool.id, {}, { persist: false });
           recovered++;
         } else {
           if (tool.health !== "offline") {
-            expireToolHeartbeat(tool.id, new Date().toISOString());
+            expireToolHeartbeat(tool.id, new Date().toISOString(), { persist: false });
             failed++;
           }
         }
       } catch {
         if (tool.health !== "offline") {
-          expireToolHeartbeat(tool.id, new Date().toISOString());
+          expireToolHeartbeat(tool.id, new Date().toISOString(), { persist: false });
           failed++;
         }
       }

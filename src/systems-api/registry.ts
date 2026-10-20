@@ -615,6 +615,7 @@ export function recordToolHeartbeat(
     health?: SystemsApiToolHealth;
     phantomSecurityProfile?: SystemsApiPhantomSecurityProfile;
   },
+  options: { persist?: boolean } = {},
 ): SystemsApiTool | null {
   const heartbeatAt = now();
   const tool = updateToolRecord(toolId, (current) => ({
@@ -639,11 +640,15 @@ export function recordToolHeartbeat(
   if (!tool) return null;
 
   pushHistory(toolId, "heartbeat-received", `Recorded heartbeat for ${tool.name}`, heartbeatAt);
-  persist();
+  if (options.persist !== false) persist();
   return tool;
 }
 
-export function expireToolHeartbeat(toolId: string, expiredAt = now()): SystemsApiTool | null {
+export function expireToolHeartbeat(
+  toolId: string,
+  expiredAt = now(),
+  options: { persist?: boolean } = {},
+): SystemsApiTool | null {
   const tool = updateToolRecord(toolId, (current) => ({
     ...current,
     health: "offline",
@@ -654,7 +659,7 @@ export function expireToolHeartbeat(toolId: string, expiredAt = now()): SystemsA
   if (!tool) return null;
 
   pushHistory(toolId, "updated", `Marked ${tool.name} offline after missed heartbeat`, expiredAt);
-  persist();
+  if (options.persist !== false) persist();
   return tool;
 }
 
