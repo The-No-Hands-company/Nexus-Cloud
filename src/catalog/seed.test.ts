@@ -70,9 +70,9 @@ describe("core catalog seed", () => {
 		expect(registry.records["nexus-cloud"]).toMatchObject({ surface: "admin-console", releaseState: "released" });
 		for (const id of ["nexus-terminal", "nexus-forge"])
 			expect(registry.records[id]).toMatchObject({ surface: "developer-tool", releaseState: "released" });
-		for (const id of ["nexus-email", "nexus-hosting"])
+		for (const id of ["nexus-email", "nexus-hosting", "nexus-chat"])
 			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "released" });
-		for (const id of ["nexus-calendar", "nexus-chat", "nexus-project", "nexus-design", "nexus-graphic", "nexus-photos", "nexus-video", "nexus-draw", "nexus-deploy"])
+		for (const id of ["nexus-calendar", "nexus-project", "nexus-design", "nexus-graphic", "nexus-photos", "nexus-video", "nexus-draw", "nexus-deploy"])
 			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "staged" });
 	});
 

@@ -15,7 +15,7 @@ import {
 	setCatalogSeedVersion,
 } from "../systems-api/registry";
 
-export const CATALOG_SEED_VERSION = 2;
+export const CATALOG_SEED_VERSION = 3;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;
@@ -58,7 +58,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["chat", "messaging"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-project": {
 		primaryShelf: "work",
