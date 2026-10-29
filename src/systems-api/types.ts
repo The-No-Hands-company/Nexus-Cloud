@@ -324,6 +324,16 @@ export type SystemsApiRouteSecurityTag = "phantom-hardened" | "transitional";
  * A live routing entry: maps a public-facing domain to a backend upstream.
  * Consumed by reverse proxies (Caddy, Nginx, Traefik) to route external traffic.
  */
+/** The display facts the proxy needs to render the maintenance page for a
+ *  route whose part an operator has put in maintenance. Omitted when the part
+ *  is serving normally. `setBy` is deliberately not exposed here. */
+export type SystemsApiRouteMaintenance = {
+  part: string;
+  reason?: string;
+  startedAt: string;
+  expectedEndAt?: string;
+};
+
 export type SystemsApiRoute = {
   domain: string;
   upstream: string;
@@ -334,6 +344,9 @@ export type SystemsApiRoute = {
   /** Mirrors the tool's flag; the proxy reads this to decide whether to gate. */
   requiresAuth: boolean;
   status: "active";
+  /** Present when an operator has this part in maintenance; the proxy serves
+   *  the maintenance page instead of proxying. */
+  maintenance?: SystemsApiRouteMaintenance;
 };
 
 export type SystemsApiDeployRequest = {

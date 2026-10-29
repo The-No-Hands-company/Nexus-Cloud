@@ -14,6 +14,7 @@ function resetState(): void {
     units: [],
     healthChecks: [],
     guardianDecisions: [],
+    maintenance: [],
   });
 }
 

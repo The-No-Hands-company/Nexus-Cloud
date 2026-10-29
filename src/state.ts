@@ -35,6 +35,22 @@ export type GuardianDecision = {
   metadata?: Record<string, string>;
 };
 
+/**
+ * An operator-set maintenance window for one platform part. `subjectId` is the
+ * route key the part answers on — a tool id or a domain — so the proxy can look
+ * it up when routing. `expectedEndAt` is display-only: maintenance stays active
+ * until an operator clears it, the countdown just tells visitors when to expect
+ * it back.
+ */
+export type MaintenanceRecord = {
+  subjectId: string;
+  part: string;
+  reason?: string;
+  startedAt: string;
+  expectedEndAt?: string;
+  setBy: string;
+};
+
 export type PlatformState = {
   nodes: NodeSpec[];
   workloads: WorkloadSpec[];
@@ -45,6 +61,7 @@ export type PlatformState = {
   units: DataPlaneUnit[];
   healthChecks: HealthCheck[];
   guardianDecisions: GuardianDecision[];
+  maintenance: MaintenanceRecord[];
 };
 
 export type PlatformStateMetadata = {
@@ -98,6 +115,7 @@ const EMPTY_STATE: PlatformState = {
   units: [],
   healthChecks: [],
   guardianDecisions: [],
+  maintenance: [],
 };
 
 function ensureStorageDir(): void {
@@ -167,6 +185,7 @@ function cloneState(next: PlatformState): PlatformState {
       ...item,
       ...(item.metadata ? { metadata: { ...item.metadata } } : {}),
     })),
+    maintenance: (next.maintenance ?? []).map((item) => ({ ...item })),
   };
 }
 
@@ -300,6 +319,9 @@ function sanitizeState(value: unknown): PlatformState {
     guardianDecisions: Array.isArray(value.guardianDecisions)
       ? (value.guardianDecisions as GuardianDecision[])
       : [],
+    maintenance: Array.isArray(value.maintenance)
+      ? (value.maintenance as MaintenanceRecord[])
+      : [],
   };
 }
 
@@ -313,6 +335,7 @@ function applyStateSnapshot(next: PlatformState): void {
   state.units = next.units;
   state.healthChecks = next.healthChecks;
   state.guardianDecisions = next.guardianDecisions;
+  state.maintenance = next.maintenance ?? [];
 }
 
 type StateCandidate = {

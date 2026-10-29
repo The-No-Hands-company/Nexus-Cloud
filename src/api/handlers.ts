@@ -23,6 +23,7 @@ import {
   selfAnnouncement,
 } from "../federation";
 import { guardianService } from "../guardian";
+import { clearMaintenance, listMaintenance, setMaintenance } from "../maintenance";
 import { getNodeIdentity } from "../identity";
 import { JsonStorePostReplaceError } from "../persistence/json-store";
 import {
@@ -1088,6 +1089,67 @@ function handleGuardianDecisions(): Response {
   } satisfies GuardianDecisionsResponse);
 }
 
+function handleMaintenanceList(): Response {
+  return json({ maintenance: listMaintenance() });
+}
+
+/**
+ * Set or clear maintenance for one part. Operator-only: a session with
+ * system:config, verified against Auth exactly as catalog decisions are. The
+ * node/service API key is explicitly not an operator identity.
+ */
+async function handleMaintenanceWrite(
+  request: Request,
+  subjectId: string,
+  action: "set" | "clear",
+): Promise<Response> {
+  const credential = callerCredential(request) ?? request.headers.get("x-api-key");
+  if (!credential) return json({ error: "Authentication required" }, 401);
+  if (isValidApiKey(credential)) return json({ error: "Operator permission required" }, 403);
+  let identity: Awaited<ReturnType<typeof checkSessionPermission>>;
+  try {
+    identity = await checkSessionPermission(credential, "system:config");
+  } catch {
+    return json({ error: "Identity service unavailable" }, 503);
+  }
+  if (!identity) return json({ error: "Operator permission required" }, 401);
+  if (!identity.allowed) return json({ error: "Operator permission required" }, 403);
+
+  if (action === "clear") {
+    return clearMaintenance(subjectId, identity.user.id) ? json({ ok: true }) : notFound();
+  }
+
+  const raw = await request.text();
+  let body: unknown = {};
+  try {
+    body = raw.trim() ? JSON.parse(raw) : {};
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return badRequest("Invalid maintenance request");
+  }
+  const input = body as Record<string, unknown>;
+  const part =
+    typeof input.part === "string" && input.part.trim() ? input.part.trim() : subjectId;
+  const reason = typeof input.reason === "string" ? input.reason : undefined;
+  let expectedEndAt: string | undefined;
+  if (input.expectedEndAt !== undefined) {
+    if (typeof input.expectedEndAt !== "string" || Number.isNaN(Date.parse(input.expectedEndAt))) {
+      return badRequest("expectedEndAt must be an ISO timestamp");
+    }
+    expectedEndAt = new Date(input.expectedEndAt).toISOString();
+  }
+  const record = setMaintenance({
+    subjectId,
+    part,
+    setBy: identity.user.id,
+    ...(reason !== undefined ? { reason } : {}),
+    ...(expectedEndAt !== undefined ? { expectedEndAt } : {}),
+  });
+  return json({ maintenance: record });
+}
+
 function handleGuardianDecisionAction(pathname: string): Response {
   const suffix = pathname.slice("/api/v1/guardian/".length);
   const [scope, encodedSubjectId, action] = suffix.split("/");
@@ -1968,6 +2030,15 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return handleGuardianDecisions();
   if (request.method === "POST" && pathname.startsWith("/api/v1/guardian/"))
     return handleGuardianDecisionAction(pathname);
+  if (request.method === "GET" && pathname === "/api/v1/maintenance")
+    return handleMaintenanceList();
+  if (pathname.startsWith("/api/v1/maintenance/")) {
+    const subjectId = decodeURIComponent(pathname.slice("/api/v1/maintenance/".length));
+    if (!subjectId) return notFound();
+    if (request.method === "POST") return handleMaintenanceWrite(request, subjectId, "set");
+    if (request.method === "DELETE") return handleMaintenanceWrite(request, subjectId, "clear");
+    return notFound();
+  }
   if (request.method === "GET" && pathname === "/api/v1/audit") return handleAuditQuery(url);
   if (request.method === "GET" && pathname.startsWith("/api/v1/audit/")) {
     const subjectId = decodeURIComponent(pathname.slice("/api/v1/audit/".length));

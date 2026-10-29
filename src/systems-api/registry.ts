@@ -1333,5 +1333,22 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
     });
   }
 
-  return routes;
+  // Annotate any route whose part (matched by domain or tool id) an operator
+  // has put in maintenance, so the proxy can serve the maintenance page.
+  if (state.maintenance.length === 0) return routes;
+  return routes.map((route) => {
+    const m = state.maintenance.find(
+      (r) => r.subjectId === route.domain || r.subjectId === route.toolId,
+    );
+    if (!m) return route;
+    return {
+      ...route,
+      maintenance: {
+        part: m.part,
+        startedAt: m.startedAt,
+        ...(m.reason !== undefined ? { reason: m.reason } : {}),
+        ...(m.expectedEndAt !== undefined ? { expectedEndAt: m.expectedEndAt } : {}),
+      },
+    };
+  });
 }

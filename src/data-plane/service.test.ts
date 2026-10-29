@@ -37,6 +37,7 @@ function seedState(runtime: "container" | "function" = "container"): void {
     units: [],
     healthChecks: [],
     guardianDecisions: [],
+    maintenance: [],
   };
   resetPlatformStateForTests(seeded);
 }

@@ -40,6 +40,7 @@ describe("startupSummary", () => {
       units: [],
       healthChecks: [],
       guardianDecisions: [],
+      maintenance: [],
     };
 
     const summary = startupSummary(snapshot);
