@@ -15,7 +15,7 @@ import {
 	setCatalogSeedVersion,
 } from "../systems-api/registry";
 
-export const CATALOG_SEED_VERSION = 3;
+export const CATALOG_SEED_VERSION = 4;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;
@@ -49,7 +49,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["calendar", "scheduling"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-chat": {
 		primaryShelf: "work",
@@ -67,7 +67,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["projects", "tasks"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-design": {
 		primaryShelf: "create",
@@ -112,7 +112,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["canvas", "whiteboard"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-forge": {
 		primaryShelf: "develop",

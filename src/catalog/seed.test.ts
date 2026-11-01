@@ -54,14 +54,14 @@ describe("core catalog seed", () => {
 		});
 		expect(registry.records["nexus-calendar"]).toMatchObject({
 			surface: "user-app",
-			releaseState: "staged",
+			releaseState: "released",
 		});
 		expect(registry.records["nexus-calendar"]?.secondaryShelves).toContain(
 			"personal",
 		);
 	});
 
-	test("classifies every first-wave tool and stages unreleased user apps", () => {
+	test("releases the first verified user-app wave", () => {
 		const ids = Object.keys(CORE_CATALOG_SEED);
 		const registry = registryWithTools(ids);
 		expect(applyCoreCatalogSeed(registry).applied).toHaveLength(ids.length);
@@ -72,7 +72,9 @@ describe("core catalog seed", () => {
 			expect(registry.records[id]).toMatchObject({ surface: "developer-tool", releaseState: "released" });
 		for (const id of ["nexus-email", "nexus-hosting", "nexus-chat"])
 			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "released" });
-		for (const id of ["nexus-calendar", "nexus-project", "nexus-design", "nexus-graphic", "nexus-photos", "nexus-video", "nexus-draw", "nexus-deploy"])
+		for (const id of ["nexus-calendar", "nexus-project", "nexus-draw"])
+			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "released" });
+		for (const id of ["nexus-design", "nexus-graphic", "nexus-photos", "nexus-video", "nexus-deploy"])
 			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "staged" });
 	});
 
