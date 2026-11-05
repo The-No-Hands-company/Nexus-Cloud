@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { architecture } from "../architecture";
+import { listRegistered, registerDid, resolveDid } from "../phantom/registry";
 import { type AuditFilter, queryAuditLog } from "../audit";
 import { NodeCatalogOverlayStore, resolveNodeOverlay } from "../catalog/node-overlay";
 import { TenantCatalogEntitlementsStore, resolveTenantEntitlements } from "../catalog/tenant-entitlements";
@@ -1010,6 +1011,33 @@ async function handleSystemsStatus(request: Request, url: URL): Promise<Response
     systemsApiService.listSystemsApiDomainBindings(),
   );
   return jsonWithConditionalEtag(request, body);
+}
+
+// ── Phantom DID Registry ───────────────────────────────────────────────────
+
+async function handlePhantomRegistryPost(request: Request): Promise<Response> {
+  let body: unknown;
+  try { body = await request.json(); } catch { return json({ error: "invalid JSON" }, 400); }
+  const b = body as Record<string, unknown>;
+  if (typeof b.did !== "string" || typeof b.signingPublicKey !== "string" || typeof b.kemPublicKey !== "string" || typeof b.appName !== "string") {
+    return json({ error: "did, appName, signingPublicKey, kemPublicKey required" }, 400);
+  }
+  if (!/^did:phantom:[A-Za-z0-9_:-]+$/.test(b.did)) {
+    return json({ error: "malformed DID" }, 400);
+  }
+  registerDid({ did: b.did, appName: b.appName, signingPublicKey: b.signingPublicKey, kemPublicKey: b.kemPublicKey });
+  return json({ registered: true, did: b.did });
+}
+
+function handlePhantomRegistryGet(pathname: string): Response {
+  const prefix = "/api/v1/phantom/registry/";
+  if (pathname === "/api/v1/phantom/registry") {
+    return json({ entries: listRegistered(), count: listRegistered().length });
+  }
+  const did = decodeURIComponent(pathname.slice(prefix.length));
+  const entry = resolveDid(did);
+  if (!entry) return json({ error: "DID not found" }, 404);
+  return json(entry);
 }
 
 function handleSystemsPhantomCompliance(url: URL): Response {
@@ -2023,6 +2051,10 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return handleSystemsPhantomCompliance(url);
   if (request.method === "GET" && pathname === "/api/v1/compliance/phantom/summary")
     return handleSystemsPhantomComplianceSummary(request);
+  if (request.method === "POST" && pathname === "/api/v1/phantom/registry")
+    return handlePhantomRegistryPost(request);
+  if (request.method === "GET" && (pathname === "/api/v1/phantom/registry" || pathname.startsWith("/api/v1/phantom/registry/")))
+    return handlePhantomRegistryGet(pathname);
   if (request.method === "GET" && pathname === "/api/v1/trust/summary")
     return handleSystemsTrustSummary(request);
   if (request.method === "GET" && pathname === "/api/v1/routes") return handleSystemsRoutes();

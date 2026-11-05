@@ -2,9 +2,11 @@ import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 
 export const phantomApp = new PhantomApp("nexus-cloud");
-phantomApp.start().catch((err: unknown) => {
-  console.error("[nexus-cloud] Phantom startup failed:", err instanceof Error ? err.message : err);
-});
+phantomApp.start()
+  .then(() => phantomApp.registerWithCloud(`http://127.0.0.1:${process.env.PORT ?? "8787"}`))
+  .catch((err: unknown) => {
+    console.error("[nexus-cloud] Phantom startup failed:", err instanceof Error ? err.message : err);
+  });
 import { handleRequest } from "./api/router";
 import { controlPlaneService } from "./control-plane";
 import { federationService } from "./federation";
@@ -41,6 +43,11 @@ const nexusClient = new NexusClient(
     ],
   }),
 );
+
+// Attach Phantom signer so outbound heartbeats and registrations carry post-quantum auth headers
+phantomApp.start().then(() => {
+  nexusClient.setPhantomSigner((body) => phantomApp.signHeaders(body));
+}).catch(() => { /* non-fatal — heartbeats still work without signing */ });
 
 // Start heartbeats after creating the client
 const _stopNexusHeartbeat = nexusClient.startCloudHeartbeat();
