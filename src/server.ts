@@ -1,4 +1,10 @@
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
+import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
+
+export const phantomApp = new PhantomApp("nexus-cloud");
+phantomApp.start().catch((err: unknown) => {
+  console.error("[nexus-cloud] Phantom startup failed:", err instanceof Error ? err.message : err);
+});
 import { handleRequest } from "./api/router";
 import { controlPlaneService } from "./control-plane";
 import { federationService } from "./federation";

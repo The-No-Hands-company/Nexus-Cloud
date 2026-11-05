@@ -58,6 +58,17 @@ export type ApiRoute = {
   description: string;
 };
 
+export type PhantomStatus =
+  | { bound: false }
+  | {
+      bound: true;
+      did: string;
+      protocol: string;
+      algorithms: string;
+      cryptography: "real" | "mock";
+      sdkVersion: string;
+    };
+
 export type HealthResponse = {
   ok: true;
   project: string;
@@ -68,6 +79,7 @@ export type HealthResponse = {
     observability: ObservabilitySummary;
     storage: readonly string[];
   };
+  phantom?: PhantomStatus;
 };
 
 export type ArchitectureResponse = {

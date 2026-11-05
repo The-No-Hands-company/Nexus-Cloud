@@ -129,6 +129,7 @@ import {
   toSystemsApiExposureStatusResponseDTO,
 } from "./exposure-dto";
 import { apiRoutes } from "./index";
+import { phantomApp } from "../server";
 
 function corsHeaders(): Record<string, string> {
   return {
@@ -481,6 +482,7 @@ function handleHealth(): Response {
       observability: observabilityService.describeObservability(),
       storage: storage.classes.map((item) => item.name),
     },
+    phantom: phantomApp.status() as import("./dto").PhantomStatus,
   };
   return json(body);
 }
