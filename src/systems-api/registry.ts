@@ -722,8 +722,6 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
       : previous.requiresAuth !== undefined
         ? { requiresAuth: previous.requiresAuth }
         : {}),
-    // Carried, never patched: a metadata edit must not drop the isolation flag.
-    ...(previous.userDeployed !== undefined ? { userDeployed: previous.userDeployed } : {}),
     updatedAt: now(),
   };
 
