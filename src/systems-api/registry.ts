@@ -486,6 +486,8 @@ function buildTool(
     // — the same way an omitted publicUrl once clobbered a live route. Only
     // setToolRequiresAuth changes it.
     ...(previous?.requiresAuth !== undefined ? { requiresAuth: previous.requiresAuth } : {}),
+    // Same rule: carried, never read from `input`. Only publishUserApp sets it.
+    ...(previous?.userDeployed !== undefined ? { userDeployed: previous.userDeployed } : {}),
     ...(lastHeartbeatAt !== undefined ? { lastHeartbeatAt } : {}),
     heartbeatCount: previous?.heartbeatCount ?? 0,
     registeredAt: previous?.registeredAt ?? now(),
@@ -584,7 +586,26 @@ export function listToolHistory(toolId: string): readonly SystemsApiToolHistoryE
   return registry.history.filter((entry) => entry.toolId === toolId);
 }
 
+/** Tool ids that belong to apps members deployed through Nexus Deploy. */
+export const USER_APP_ID_PREFIX = "deploy-";
+
+export function userAppToolId(slug: string): string {
+  return `${USER_APP_ID_PREFIX}${slug}`;
+}
+
+/**
+ * The node API key is shared by every ecosystem service, so it must not be able
+ * to mint, or take over, a member's app: those carry the user-site isolation the
+ * proxy applies, and are published only through publishUserApp.
+ */
 export function registerSystemsApiTool(input: SystemsApiToolRegistrationInput): SystemsApiTool {
+  if (input.id.startsWith(USER_APP_ID_PREFIX) || getTool(input.id)?.userDeployed === true) {
+    throw new Error(`tool ids starting with "${USER_APP_ID_PREFIX}" are reserved for deployed apps`);
+  }
+  return registerToolRecord(input);
+}
+
+function registerToolRecord(input: SystemsApiToolRegistrationInput): SystemsApiTool {
   if (input.catalogProposal !== undefined && !validateCatalogProposal(input.catalogProposal)) {
     throw new Error("Invalid catalog proposal");
   }
@@ -701,6 +722,8 @@ export function updateTool(toolId: string, patch: SystemsApiToolPatchInput): Sys
       : previous.requiresAuth !== undefined
         ? { requiresAuth: previous.requiresAuth }
         : {}),
+    // Carried, never patched: a metadata edit must not drop the isolation flag.
+    ...(previous.userDeployed !== undefined ? { userDeployed: previous.userDeployed } : {}),
     updatedAt: now(),
   };
 
@@ -1282,6 +1305,7 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
       securityTag: phantomSecurityTag(tool.phantomSecurityProfile),
       phantomProtectionLevel: phantomProtectionLevel(tool.phantomSecurityProfile),
       requiresAuth: tool.requiresAuth === true,
+      userDeployed: tool.userDeployed === true,
       status: "active",
     });
   }
@@ -1306,6 +1330,7 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
       securityTag: phantomSecurityTag(tool.phantomSecurityProfile),
       phantomProtectionLevel: phantomProtectionLevel(tool.phantomSecurityProfile),
       requiresAuth: tool.requiresAuth === true,
+      userDeployed: tool.userDeployed === true,
       status: "active",
     });
   }
@@ -1329,6 +1354,7 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
       securityTag: phantomSecurityTag(tool.phantomSecurityProfile),
       phantomProtectionLevel: phantomProtectionLevel(tool.phantomSecurityProfile),
       requiresAuth: tool.requiresAuth === true,
+      userDeployed: tool.userDeployed === true,
       status: "active",
     });
   }
@@ -1351,4 +1377,99 @@ export function listActiveRoutes(): readonly SystemsApiRoute[] {
       },
     };
   });
+}
+
+
+// ── Apps deployed by members ─────────────────────────────────────────────────
+
+export type UserAppPublishInput = {
+  slug: string;
+  /** Where the app listens, e.g. http://127.0.0.1:20017. */
+  upstreamUrl: string;
+  /** The public hostname, e.g. my-app.tnhc.dev. */
+  host: string;
+};
+
+export type UserAppPublishResult =
+  | { ok: true; tool: SystemsApiTool }
+  | { ok: false; reason: "conflict" | "denied" };
+
+function hostOf(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
+}
+
+/**
+ * Whether anything other than `exceptToolId` already answers for `host`: a
+ * tool's public URL, an exposure, an address or a bound domain. Revoked
+ * records do not count.
+ */
+export function isHostInUse(host: string, exceptToolId?: string): boolean {
+  const wanted = host.toLowerCase();
+  const other = (toolId: string) => toolId !== exceptToolId;
+  if (registry.tools.some((t) => other(t.id) && t.publicUrl && hostOf(t.publicUrl) === wanted)) {
+    return true;
+  }
+  if (
+    registry.exposures.some(
+      (e) => other(e.toolId) && e.status !== "revoked" && hostOf(e.publicUrl) === wanted,
+    )
+  ) {
+    return true;
+  }
+  if (
+    registry.addresses.some(
+      (a) => other(a.toolId) && a.status !== "revoked" && hostOf(a.publicAddress) === wanted,
+    )
+  ) {
+    return true;
+  }
+  return registry.domains.some(
+    (d) => other(d.toolId) && d.status !== "revoked" && d.domain.toLowerCase() === wanted,
+  );
+}
+
+/**
+ * Register (or move) a member's app and make its host route to `upstreamUrl`.
+ * Idempotent: calling it again with a new port is how a blue/green switch
+ * reaches the proxy, and calling it on a timer is the heartbeat.
+ */
+export function publishUserApp(input: UserAppPublishInput): UserAppPublishResult {
+  const toolId = userAppToolId(input.slug);
+  const existing = getTool(toolId);
+  if (existing && existing.userDeployed !== true) return { ok: false, reason: "conflict" };
+  if (isHostInUse(input.host, toolId)) return { ok: false, reason: "conflict" };
+
+  registerToolRecord({
+    id: toolId,
+    name: input.slug,
+    description: "An app deployed with Nexus Deploy",
+    exposed: false,
+    health: "healthy",
+    delivery: "proxied-app",
+    upstreamUrl: input.upstreamUrl,
+    capabilities: [],
+  });
+  // Flagged before it is exposed, so no route is ever emitted without isolation.
+  updateToolRecord(toolId, (current) => ({ ...current, userDeployed: true }));
+
+  const active = registry.exposures.find((e) => e.toolId === toolId && e.status === "active");
+  if (!active || hostOf(active.publicUrl) !== input.host.toLowerCase()) {
+    const exposure = requestExposure({ toolId, desiredHost: input.host });
+    if (!exposure || exposure.status !== "active") {
+      deregisterTool(toolId);
+      return { ok: false, reason: "denied" };
+    }
+  }
+  const tool = recordToolHeartbeat(toolId, { upstreamUrl: input.upstreamUrl, health: "healthy" });
+  if (!tool) return { ok: false, reason: "denied" };
+  return { ok: true, tool };
+}
+
+/** Remove a member's app. Refuses (null) anything that is not one. */
+export function unpublishUserApp(slug: string): SystemsApiTool | null {
+  const toolId = userAppToolId(slug);
+  const tool = getTool(toolId);
+  if (!tool || tool.userDeployed !== true) return null;
+  revokeSystemsApiExposure(toolId);
+  return deregisterTool(toolId);
 }

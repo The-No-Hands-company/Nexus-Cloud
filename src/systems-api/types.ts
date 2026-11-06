@@ -76,6 +76,15 @@ export type SystemsApiTool = {
    * reachable exactly as it is today.
    */
   requiresAuth?: boolean;
+  /**
+   * True for an app a member deployed through Nexus Deploy. The proxy gives such
+   * a route user-site isolation (no cookies, no credentials, no visitor tag).
+   *
+   * Set only by publishUserApp, which is reachable only with the user-apps key.
+   * Never read from a registration payload or a patch, so an app cannot choose
+   * its own treatment and a registrant cannot clear it.
+   */
+  userDeployed?: boolean;
   lastHeartbeatAt?: string;
   heartbeatCount: number;
   registeredAt: string;
@@ -343,6 +352,8 @@ export type SystemsApiRoute = {
   phantomProtectionLevel: SystemsApiPhantomProtectionLevel;
   /** Mirrors the tool's flag; the proxy reads this to decide whether to gate. */
   requiresAuth: boolean;
+  /** Mirrors the tool's flag; the proxy isolates the route as a member's app. */
+  userDeployed: boolean;
   status: "active";
   /** Present when an operator has this part in maintenance; the proxy serves
    *  the maintenance page instead of proxying. */

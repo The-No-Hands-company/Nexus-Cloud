@@ -4,6 +4,9 @@ import { systemsApiDeployIntegration as deployIntegration } from "./deploy";
 import {
   canSubmitCatalogProposal,
   deregisterTool,
+  isHostInUse,
+  publishUserApp,
+  unpublishUserApp,
   describeStatus,
   disableSystemsApiTool as disableTool,
   enableSystemsApiTool as enableTool,
@@ -588,4 +591,7 @@ export const systemsApiService = {
   applyHeartbeatExpiry,
   probeExposedToolsHealth,
   getCloudDomain,
+  isHostInUse,
+  publishUserApp,
+  unpublishUserApp,
 };

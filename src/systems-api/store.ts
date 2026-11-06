@@ -218,6 +218,9 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
   // anywhere reported a change. A security switch that resets itself and says
   // nothing is worse than not having one.
   const requiresAuth = typeof value.requiresAuth === "boolean" ? value.requiresAuth : undefined;
+  // Read for the same reason as requiresAuth: dropping it on load would turn a
+  // member's app into an ordinary, un-isolated route at the next restart.
+  const userDeployed = typeof value.userDeployed === "boolean" ? value.userDeployed : undefined;
   const toolResult = {
     id,
     name,
@@ -244,6 +247,7 @@ function sanitizeTool(value: unknown): SystemsApiTool | null {
     ...(upstreamUrl !== undefined ? { upstreamUrl } : {}),
     ...(lastHeartbeatAt !== undefined ? { lastHeartbeatAt } : {}),
     ...(requiresAuth !== undefined ? { requiresAuth } : {}),
+    ...(userDeployed !== undefined ? { userDeployed } : {}),
   };
 }
 
