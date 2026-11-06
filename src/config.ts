@@ -8,6 +8,17 @@ export const cloudConfig = {
   get apiKey(): string {
     return process.env.NEXUS_CLOUD_API_KEY ?? "";
   },
+  // Credential for the apps-deployed-by-members endpoints. Deliberately not the
+  // node API key: that one is held by every ecosystem service and must not be
+  // able to publish a route that carries user-site isolation, or to clear it.
+  get userAppsKey(): string {
+    return process.env.NEXUS_CLOUD_USER_APPS_KEY?.trim() ?? "";
+  },
+  // Loopback ports a deployed app may be routed to. A leaked credential must not
+  // be able to aim a public hostname at Auth, Cloud or a database.
+  get userAppsPortRange(): string {
+    return process.env.NEXUS_CLOUD_USER_APPS_PORTS?.trim() || "20000-29999";
+  },
   get corsOrigin(): string {
     return process.env.CORS_ORIGIN ?? "*";
   },

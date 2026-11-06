@@ -11,6 +11,7 @@ import {
   tunnelTarget,
 } from "../cloudflare-dns";
 import { cloudConfig, isValidApiKey, requiresApiKey } from "../config";
+import { handleUserAppsRequest } from "./user-apps";
 import { buildCloudControlContract } from "./cloud-control-contract";
 import { exploreFallbackCatalog, validateCatalogProposal, validateApprovedCatalog } from "../systems-api/catalog";
 import { controlPlane, controlPlaneService } from "../control-plane";
@@ -1904,6 +1905,11 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     if (authErr) return authErr;
     return handleStoragePoolDelete(pathname);
   }
+
+  // Apps members deploy through Nexus Deploy. Guarded by their own credential,
+  // so it must run before the node-API-key gate further down.
+  const userApps = await handleUserAppsRequest(request, pathname);
+  if (userApps) return userApps;
 
   // Subdomain proxy: *.cloudDomain requests are routed to the registered upstream.
   // This runs before CORS and auth so the upstream handles its own CORS/auth headers.

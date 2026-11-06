@@ -6,7 +6,8 @@ export type CloudContractAccess =
   | "cloud-api-key"
   | "platform-permission"
   | "session-or-bearer"
-  | "deploy-token";
+  | "deploy-token"
+  | "user-apps-key";
 
 export type CloudContractRoute = ApiRoute & {
   access: CloudContractAccess;
@@ -50,6 +51,7 @@ const PUBLIC_GET_PATHS = new Set([
 
 function accessForRoute(route: ApiRoute): CloudContractAccess {
   if (route.path === "/api/v1/contract") return "public";
+  if (route.path.startsWith("/api/v1/user-apps/")) return "user-apps-key";
   if (route.path.includes("/catalog/:toolId/") && route.method === "POST") {
     return "platform-permission";
   }

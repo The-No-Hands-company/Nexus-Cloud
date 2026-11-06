@@ -327,6 +327,21 @@ describe("API route manifest", () => {
         path: "/api/v1/auth/me",
         description: "Validate a portal session token and return the authenticated user",
       },
+      {
+        method: "PUT",
+        path: "/api/v1/user-apps/:slug",
+        description: "Publish or move an app a member deployed (user-apps key only)",
+      },
+      {
+        method: "DELETE",
+        path: "/api/v1/user-apps/:slug",
+        description: "Remove an app a member deployed (user-apps key only)",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/user-apps/:slug/availability",
+        description: "Whether a name is already used on this node (user-apps key only)",
+      },
     ];
     const actual = apiRouteManifest.map((route) => ({ ...route })) as any[];
     expect(actual).toEqual(expected as any[]);
