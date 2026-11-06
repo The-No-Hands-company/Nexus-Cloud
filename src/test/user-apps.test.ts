@@ -185,4 +185,21 @@ describe("user-deployed apps", () => {
       h.cleanup();
     }
   });
+
+  test("a metadata patch keeps the isolation flag", async () => {
+    const h = await harness();
+    try {
+      h.systemsApiService.publishUserApp({
+        slug: "patched",
+        upstreamUrl: "http://127.0.0.1:20006",
+        host: "patched.nexus.local",
+      });
+      h.systemsApiService.updateSystemsApiTool("deploy-patched", { name: "Renamed" } as never);
+      expect(h.systemsApiService.getSystemsApiTool("deploy-patched")?.name).toBe("Renamed");
+      expect(h.systemsApiService.getSystemsApiTool("deploy-patched")?.userDeployed).toBe(true);
+      expect(routeFor(h, "patched.nexus.local")?.userDeployed).toBe(true);
+    } finally {
+      h.cleanup();
+    }
+  });
 });
