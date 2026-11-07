@@ -133,8 +133,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		releaseState: "released",
 	},
 	"nexus-deploy": {
-		primaryShelf: "operate",
-		secondaryShelves: ["develop"],
+		primaryShelf: "create",
+		secondaryShelves: ["operate", "develop", "work"],
 		audiences: operations,
 		capabilities: ["deployment", "ci-cd"],
 		maturity: "stable",
