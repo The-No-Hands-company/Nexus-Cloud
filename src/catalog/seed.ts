@@ -15,7 +15,7 @@ import {
 	setCatalogSeedVersion,
 } from "../systems-api/registry";
 
-export const CATALOG_SEED_VERSION = 5;
+export const CATALOG_SEED_VERSION = 6;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;
@@ -135,7 +135,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 	"nexus-deploy": {
 		primaryShelf: "create",
 		secondaryShelves: ["operate", "develop", "work"],
-		audiences: operations,
+		audiences: ["developer", "power-user", "operations"],
 		capabilities: ["deployment", "ci-cd"],
 		maturity: "stable",
 		surface: "user-app",
