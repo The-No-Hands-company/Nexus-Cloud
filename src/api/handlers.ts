@@ -133,11 +133,13 @@ import {
 import { apiRoutes } from "./index";
 import { phantomApp } from "../server";
 
-const TOPOLOGY_READ_PATHS: ReadonlySet<string> = new Set([
-  "/api/v1/routes",
-  "/api/v1/routes/caddy",
-  "/api/v1/routes/zone",
-]);
+function isTopologyReadPath(pathname: string): boolean {
+  return (
+    pathname === "/api/v1/routes" ||
+    pathname === "/api/v1/routes/caddy" ||
+    pathname === "/api/v1/routes/zone"
+  );
+}
 
 
 function corsHeaders(): Record<string, string> {
@@ -1962,7 +1964,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   // /api/v1/routes/tls-ask deliberately stays open: Caddy calls it during a TLS
   // handshake and cannot present a credential, and its answer only confirms
   // allow/deny for a name the caller already supplied.
-  if (request.method === "GET" && TOPOLOGY_READ_PATHS.has(pathname)) {
+  if (request.method === "GET" && isTopologyReadPath(pathname)) {
     const authErr = checkApiKey(request);
     if (authErr) return authErr;
   }

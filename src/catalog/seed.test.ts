@@ -88,7 +88,7 @@ describe("core catalog seed", () => {
 			releaseState: "released",
 			approvedAt: "2026-10-17T00:00:00.000Z",
 			approvedBy: "operator",
-			version: 9,
+			version: CATALOG_SEED_VERSION,
 		};
 		const registry = registryWithTools(["nexus-chat"], { "nexus-chat": newer });
 		expect(applyCoreCatalogSeed(registry)).toMatchObject({
