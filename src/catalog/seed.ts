@@ -15,7 +15,7 @@ import {
 	setCatalogSeedVersion,
 } from "../systems-api/registry";
 
-export const CATALOG_SEED_VERSION = 8;
+export const CATALOG_SEED_VERSION = 9;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;
@@ -101,6 +101,33 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		secondaryShelves: [],
 		audiences: ["creator", "general"],
 		capabilities: ["video", "media"],
+		maturity: "stable",
+		surface: "user-app",
+		releaseState: "released",
+	},
+	"nexus-notes": {
+		primaryShelf: "work",
+		secondaryShelves: ["everyday", "personal"],
+		audiences: general,
+		capabilities: ["notes", "notebooks", "knowledge-base"],
+		maturity: "stable",
+		surface: "user-app",
+		releaseState: "released",
+	},
+	"nexus-docs": {
+		primaryShelf: "work",
+		secondaryShelves: ["everyday"],
+		audiences: ["general", "business"] as CatalogAudience[],
+		capabilities: ["docs", "documents", "collaboration"],
+		maturity: "stable",
+		surface: "user-app",
+		releaseState: "released",
+	},
+	"nexus-wiki": {
+		primaryShelf: "work",
+		secondaryShelves: ["develop"],
+		audiences: general,
+		capabilities: ["wiki", "knowledge-base", "documentation"],
 		maturity: "stable",
 		surface: "user-app",
 		releaseState: "released",
