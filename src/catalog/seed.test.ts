@@ -75,7 +75,7 @@ describe("core catalog seed", () => {
 		for (const id of ["nexus-calendar", "nexus-project", "nexus-draw", "nexus-deploy"])
 			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "released" });
 		for (const id of ["nexus-design", "nexus-graphic", "nexus-photos", "nexus-video"])
-			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "staged" });
+			expect(registry.records[id]).toMatchObject({ surface: "user-app", releaseState: "released" });
 	});
 
 	test("does not overwrite newer approvals and is idempotent", () => {

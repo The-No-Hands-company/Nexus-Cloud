@@ -15,7 +15,7 @@ import {
 	setCatalogSeedVersion,
 } from "../systems-api/registry";
 
-export const CATALOG_SEED_VERSION = 7;
+export const CATALOG_SEED_VERSION = 8;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;
@@ -76,7 +76,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["design", "ui"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-graphic": {
 		primaryShelf: "create",
@@ -85,7 +85,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["graphics", "illustration"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-photos": {
 		primaryShelf: "create",
@@ -94,7 +94,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["photos", "media"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-video": {
 		primaryShelf: "create",
@@ -103,7 +103,7 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		capabilities: ["video", "media"],
 		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 	},
 	"nexus-draw": {
 		primaryShelf: "create",
