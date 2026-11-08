@@ -15,7 +15,7 @@ import {
 	setCatalogSeedVersion,
 } from "../systems-api/registry";
 
-export const CATALOG_SEED_VERSION = 6;
+export const CATALOG_SEED_VERSION = 7;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;

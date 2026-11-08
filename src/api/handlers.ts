@@ -133,6 +133,13 @@ import {
 import { apiRoutes } from "./index";
 import { phantomApp } from "../server";
 
+const TOPOLOGY_READ_PATHS: ReadonlySet<string> = new Set([
+  "/api/v1/routes",
+  "/api/v1/routes/caddy",
+  "/api/v1/routes/zone",
+]);
+
+
 function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": cloudConfig.corsOrigin,
@@ -249,16 +256,6 @@ function notFound(): Response {
   return json({ error: "Not found" }, 404);
 }
 
-/**
- * GET endpoints that disclose internal topology and therefore require the API
- * key, even though they only read. `tls-ask` is intentionally absent — Caddy
- * cannot authenticate during a handshake. See the gate in `handleApiRequest`.
- */
-const TOPOLOGY_READ_PATHS: ReadonlySet<string> = new Set([
-  "/api/v1/routes",
-  "/api/v1/routes/caddy",
-  "/api/v1/routes/zone",
-]);
 
 /**
  * True when the caller has proved identity — a valid API key, or a dashboard
