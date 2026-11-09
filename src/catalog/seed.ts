@@ -17,7 +17,7 @@ import {
 } from "../systems-api/registry";
 import type { SystemsApiDelivery, SystemsApiToolRegistrationInput } from "../systems-api/types";
 
-export const CATALOG_SEED_VERSION = 12;
+export const CATALOG_SEED_VERSION = 13;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;
@@ -645,8 +645,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: developer,
 		capabilities: ["database", "nexusdb", "storage"],
 		maturity: "stable",
-		surface: "user-app",
-		releaseState: "released",
+		surface: "platform-service",
+		releaseState: "staged",
 		name: "Nexus Database",
 		publicUrl: "https://database.tnhc.dev",
 		path: "/database",
@@ -723,8 +723,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: operations,
 		capabilities: ["edge", "cdn", "regional"],
 		maturity: "stable",
-		surface: "user-app",
-		releaseState: "released",
+		surface: "platform-service",
+		releaseState: "staged",
 		name: "Nexus Edge",
 		publicUrl: "https://edge.tnhc.dev",
 		path: "/edge",
@@ -762,8 +762,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: operations,
 		capabilities: ["guardian", "security", "threats"],
 		maturity: "stable",
-		surface: "user-app",
-		releaseState: "released",
+		surface: "platform-service",
+		releaseState: "staged",
 		name: "Nexus Guardian",
 		publicUrl: "https://guardian.tnhc.dev",
 		path: "/guardian",
@@ -1126,8 +1126,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: general,
 		capabilities: ["ai", "models", "intelligence"],
 		maturity: "stable",
-		surface: "user-app",
-		releaseState: "released",
+		surface: "platform-service",
+		releaseState: "staged",
 		name: "Nexus AI",
 		publicUrl: "https://ai.tnhc.dev",
 		path: "/ai",
@@ -1282,8 +1282,8 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		audiences: general,
 		capabilities: ["portal", "homepage", "tnhc"],
 		maturity: "stable",
-		surface: "user-app",
-		releaseState: "released",
+		surface: "platform-service",
+		releaseState: "staged",
 		name: "Nexus Portal",
 		publicUrl: "https://tnhc.dev",
 		path: "/portal",
