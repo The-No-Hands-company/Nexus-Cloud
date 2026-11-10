@@ -80,4 +80,35 @@ describe("Systems API topology surface", () => {
     expect(hasEmbedded).toBe(true);
     expect(hasSecures).toBe(true);
   });
+
+  test("POST /api/v1/services/restart processes operator service restart signal", async () => {
+    const response = await handleRequest(
+      new Request("http://localhost/api/v1/services/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceId: "nexus-network" }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.service).toBe("nexus-network");
+  });
+
+  test("GET and POST /api/v1/backups orchestrate atomic snapshot backups", async () => {
+    const listRes = await handleRequest(
+      new Request("http://localhost/api/v1/backups", { method: "GET" }),
+    );
+    expect(listRes.status).toBe(200);
+    const listBody = await listRes.json();
+    expect(Array.isArray(listBody.backups)).toBe(true);
+
+    const createRes = await handleRequest(
+      new Request("http://localhost/api/v1/backups/create", { method: "POST" }),
+    );
+    expect(createRes.status).toBe(200);
+    const createBody = await createRes.json();
+    expect(createBody.success).toBe(true);
+    expect(createBody.backup.status).toBe("verified");
+  });
 });

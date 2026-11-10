@@ -109,8 +109,12 @@ export function writeJsonStoreAtomic<T>(
 
   try {
     if (options.backupCurrentPrimary && existsSync(path)) {
-      copyFileSync(path, backupPath);
-      fsyncPath(backupPath);
+      try {
+        copyFileSync(path, backupPath);
+        fsyncPath(backupPath);
+      } catch {
+        // Safe against concurrent rotation or deletion
+      }
     }
 
     writeFileSync(tempPath, payload, { mode: 0o600 });

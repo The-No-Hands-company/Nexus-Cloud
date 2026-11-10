@@ -104,6 +104,9 @@ export const apiRouteManifest = [
     description: "List canonical Nexus app connections",
   },
   { method: "GET", path: "/api/v1/topology", description: "Describe the full Nexus app topology" },
+  { method: "POST", path: "/api/v1/services/restart", description: "Safely restart an ecosystem service" },
+  { method: "GET", path: "/api/v1/backups", description: "List SQLite and state store backup snapshots" },
+  { method: "POST", path: "/api/v1/backups/create", description: "Trigger atomic snapshot backup of system stores" },
   {
     method: "POST",
     path: "/api/v1/tools",

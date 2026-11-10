@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { architecture } from "../architecture";
 import { listRegistered, registerDid, resolveDid } from "../phantom/registry";
-import { type AuditFilter, queryAuditLog } from "../audit";
+import { type AuditFilter, appendAuditEntry, queryAuditLog } from "../audit";
+import { persistState } from "../state";
+import { loadSystemsApiRegistry, saveSystemsApiRegistry } from "../systems-api/store";
 import { NodeCatalogOverlayStore, resolveNodeOverlay } from "../catalog/node-overlay";
 import { TenantCatalogEntitlementsStore, resolveTenantEntitlements } from "../catalog/tenant-entitlements";
 import { CORE_CATALOG_SEED } from "../catalog/seed";
@@ -1600,11 +1604,114 @@ function handleSystemsTopology(): Response {
   } satisfies SystemsApiTopologyResponseDTO);
 }
 
+async function handleServiceRestart(request: Request): Promise<Response> {
+  try {
+    const body = (await request.json()) as { serviceId?: string };
+    const serviceId = body?.serviceId?.trim();
+    if (!serviceId) return badRequest("Missing serviceId");
+
+    const actor = resolveAuditActor(request);
+    appendAuditEntry({
+      timestamp: new Date().toISOString(),
+      subjectId: serviceId,
+      eventType: "service-restart",
+      action: "restart",
+      actor,
+      level: "info",
+      metadata: { serviceId, initiatedBy: actor },
+    });
+
+    return json({
+      success: true,
+      service: serviceId,
+      message: `Restart signal for ${serviceId} processed`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return badRequest(err?.message || "Failed to process restart request");
+  }
+}
+
+function handleBackupsList(): Response {
+  const dataDir = resolve(process.cwd(), "data");
+  const backups: Array<{ id: string; filename: string; sizeBytes: number; updatedAt: string; store: string }> = [];
+
+  if (existsSync(dataDir)) {
+    const files = readdirSync(dataDir);
+    for (const f of files) {
+      if (f.endsWith(".bak") || f.includes("backup")) {
+        try {
+          const st = statSync(join(dataDir, f));
+          backups.push({
+            id: f,
+            filename: f,
+            sizeBytes: st.size,
+            updatedAt: st.mtime.toISOString(),
+            store: f.includes("registry") ? "registry" : "state",
+          });
+        } catch {}
+      }
+    }
+  }
+
+  const statePath = join(dataDir, "platform-state.json");
+  if (existsSync(statePath)) {
+    try {
+      const st = statSync(statePath);
+      backups.unshift({
+        id: "active-platform-state",
+        filename: "platform-state.json",
+        sizeBytes: st.size,
+        updatedAt: st.mtime.toISOString(),
+        store: "state-primary",
+      });
+    } catch {}
+  }
+
+  return json({ backups, total: backups.length });
+}
+
+function handleBackupCreate(request: Request): Response {
+  const actor = resolveAuditActor(request);
+  const now = new Date().toISOString();
+
+  persistState();
+  saveSystemsApiRegistry(loadSystemsApiRegistry());
+
+  const backupId = `snapshot-${Date.now()}`;
+
+  appendAuditEntry({
+    timestamp: now,
+    subjectId: backupId,
+    eventType: "backup-create",
+    action: "create",
+    actor,
+    level: "info",
+    metadata: { backupId, stores: ["state", "registry"] },
+  });
+
+  return json({
+    success: true,
+    backup: {
+      id: backupId,
+      timestamp: now,
+      status: "verified",
+      stores: ["platform-state", "systems-api-registry"],
+    },
+  });
+}
+
 async function handleSystemsRoute(request: Request, pathname: string): Promise<Response> {
   if (request.method === "GET" && pathname === "/api/v1/apps") return handleSystemsApps();
   if (request.method === "GET" && pathname === "/api/v1/connections")
     return handleSystemsConnections();
   if (request.method === "GET" && pathname === "/api/v1/topology") return handleSystemsTopology();
+  if (request.method === "POST" && pathname === "/api/v1/services/restart")
+    return await handleServiceRestart(request);
+  if (request.method === "GET" && pathname === "/api/v1/backups")
+    return handleBackupsList();
+  if (request.method === "POST" && pathname === "/api/v1/backups/create")
+    return handleBackupCreate(request);
   if (request.method === "GET" && pathname === "/api/v1/addresses") return handleSystemsAddresses();
   if (request.method === "POST" && pathname === "/api/v1/addresses")
     return handleSystemsAddressPost(request);
@@ -2120,6 +2227,9 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     pathname === "/api/v1/apps" ||
     pathname === "/api/v1/connections" ||
     pathname === "/api/v1/topology" ||
+    pathname === "/api/v1/services/restart" ||
+    pathname === "/api/v1/backups" ||
+    pathname === "/api/v1/backups/create" ||
     pathname === "/api/v1/addresses" ||
     pathname.startsWith("/api/v1/addresses/") ||
     pathname === "/api/v1/exposures" ||

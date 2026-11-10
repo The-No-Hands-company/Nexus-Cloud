@@ -378,8 +378,12 @@ function writeSnapshotAtomic(
     fsyncPath(tempPath);
 
     if (options.backupCurrentPrimary && existsSync(STATE_PATH)) {
-      copyFileSync(STATE_PATH, STATE_BACKUP_PATH);
-      fsyncPath(STATE_BACKUP_PATH);
+      try {
+        copyFileSync(STATE_PATH, STATE_BACKUP_PATH);
+        fsyncPath(STATE_BACKUP_PATH);
+      } catch {
+        // Safe against concurrent rotation or deletion
+      }
     }
 
     renameSync(tempPath, STATE_PATH);

@@ -114,6 +114,21 @@ describe("API route manifest", () => {
       },
       {
         method: "POST",
+        path: "/api/v1/services/restart",
+        description: "Safely restart an ecosystem service",
+      },
+      {
+        method: "GET",
+        path: "/api/v1/backups",
+        description: "List SQLite and state store backup snapshots",
+      },
+      {
+        method: "POST",
+        path: "/api/v1/backups/create",
+        description: "Trigger atomic snapshot backup of system stores",
+      },
+      {
+        method: "POST",
         path: "/api/v1/tools",
         description: "Register or upsert a tool with Nexus Cloud",
       },
