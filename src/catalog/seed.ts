@@ -14,10 +14,11 @@ import {
 	registerSystemsApiTool,
 	saveApprovedCatalog,
 	setCatalogSeedVersion,
+	type SystemsApiToolRegistrationInput,
 } from "../systems-api/registry";
-import type { SystemsApiDelivery, SystemsApiToolRegistrationInput } from "../systems-api/types";
+import type { SystemsApiDelivery } from "../systems-api/types";
 
-export const CATALOG_SEED_VERSION = 13;
+export const CATALOG_SEED_VERSION = 14;
 
 export type CoreCatalogSeed = {
 	primaryShelf: CatalogShelf;
@@ -319,12 +320,25 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		secondaryShelves: ["everyday"],
 		audiences: general,
 		capabilities: ["tasks", "tracking", "kanban"],
-		maturity: "preview",
+		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 		name: "Nexus Tasks",
 		publicUrl: "https://tasks.tnhc.dev",
 		path: "/tasks",
+		delivery: "external",
+	},
+	"nexus-finance": {
+		primaryShelf: "work",
+		secondaryShelves: ["everyday"],
+		audiences: business,
+		capabilities: ["finance", "accounting", "invoices"],
+		maturity: "stable",
+		surface: "user-app",
+		releaseState: "released",
+		name: "Nexus Finance",
+		publicUrl: "https://finance.tnhc.dev",
+		path: "/finance",
 		delivery: "external",
 	},
 	"nexus-planner": {
@@ -501,9 +515,9 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		secondaryShelves: ["personal"],
 		audiences: creator,
 		capabilities: ["music", "daw", "synthesis"],
-		maturity: "preview",
+		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 		name: "Nexus Music",
 		publicUrl: "https://music.tnhc.dev",
 		path: "/music",
@@ -917,9 +931,9 @@ export const CORE_CATALOG_SEED: Readonly<Record<string, CoreCatalogSeed>> = {
 		secondaryShelves: ["personal", "work"],
 		audiences: general,
 		capabilities: ["files", "storage", "cloud-drive"],
-		maturity: "preview",
+		maturity: "stable",
 		surface: "user-app",
-		releaseState: "staged",
+		releaseState: "released",
 		name: "Nexus Files",
 		publicUrl: "https://files.tnhc.dev",
 		path: "/files",
