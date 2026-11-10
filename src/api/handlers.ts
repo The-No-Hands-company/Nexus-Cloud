@@ -4,6 +4,7 @@ import { listRegistered, registerDid, resolveDid } from "../phantom/registry";
 import { type AuditFilter, queryAuditLog } from "../audit";
 import { NodeCatalogOverlayStore, resolveNodeOverlay } from "../catalog/node-overlay";
 import { TenantCatalogEntitlementsStore, resolveTenantEntitlements } from "../catalog/tenant-entitlements";
+import { CORE_CATALOG_SEED } from "../catalog/seed";
 import {
   bootstrapDns,
   ensureCustomDomainDns,
@@ -829,9 +830,25 @@ async function handleSystemsCatalogList(request: Request): Promise<Response> {
     .map((tool) => {
       const catalog = catalogForTool(tool.id);
       const placement = catalog.approved ?? exploreFallbackCatalog(catalog.reviewStatus);
+      const seed = CORE_CATALOG_SEED[tool.id];
       const { primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility } = placement;
-      return { ...tool, primaryShelf, secondaryShelves, audiences, capabilities, maturity, visibility, reviewStatus: catalog.reviewStatus,
-        ...(catalog.approved ? { surface: catalog.approved.surface, releaseState: catalog.approved.releaseState } : {}) };
+      const path = tool.path || seed?.path;
+      const publicUrl = tool.publicUrl || seed?.publicUrl;
+      const delivery = tool.delivery || seed?.delivery;
+      return {
+        ...tool,
+        ...(path ? { path } : {}),
+        ...(publicUrl ? { publicUrl } : {}),
+        ...(delivery ? { delivery } : {}),
+        primaryShelf,
+        secondaryShelves,
+        audiences,
+        capabilities,
+        maturity,
+        visibility,
+        reviewStatus: catalog.reviewStatus,
+        ...(catalog.approved ? { surface: catalog.approved.surface, releaseState: catalog.approved.releaseState } : {}),
+      };
     })
     .filter((app) => canReadHidden || app.visibility !== "hidden")
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
