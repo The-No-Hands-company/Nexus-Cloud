@@ -13,3 +13,6 @@
 !/docs/**
 !/src/
 !/src/**
+!/bunfig.toml
+!/tests/
+!/tests/**
